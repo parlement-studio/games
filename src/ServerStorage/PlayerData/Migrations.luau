@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage.Shared.Types)
 local CaptureConfig = require(ReplicatedStorage.Shared.Config.CaptureConfig)
+local PersistenceConfig = require(ReplicatedStorage.Shared.Config.PersistenceConfig)
 local Schema = require(script.Parent.Schema)
 
 type PlayerData = Types.PlayerData
@@ -80,8 +81,106 @@ local function backfill(data: any)
     data.raidsWon = data.raidsWon or 0
     data.raidsDefended = data.raidsDefended or 0
 
-    data.txLog = data.txLog or {}
     data.nextSeq = data.nextSeq or 1
+
+    -- txLog is now a MAP { [key]: storedResult } with a parallel insertion-order
+    -- list (ADR-001 C2). Defensively normalize any legacy ARRAY form (a plain
+    -- list of idempotency-key strings) into the map: each key maps to `true`
+    -- (no prior stored result is recoverable), preserving order. Then trim the
+    -- ring to the configured bound by oldest-first eviction.
+    if type(data.txLog) ~= "table" then
+        data.txLog = {}
+    end
+    if type(data.txLogOrder) ~= "table" then
+        data.txLogOrder = {}
+    end
+    if #data.txLog > 0 then
+        -- Array form detected: rebuild as map + order list.
+        local legacyKeys = data.txLog
+        data.txLog = {}
+        data.txLogOrder = {}
+        for _, key in ipairs(legacyKeys) do
+            if type(key) == "string" and data.txLog[key] == nil then
+                data.txLog[key] = true
+                table.insert(data.txLogOrder, key)
+            end
+        end
+    else
+        -- Map form (or empty): rebuild a clean order list, dropping any stale
+        -- order entries whose key no longer exists in the map.
+        local rebuilt = {}
+        local seen: { [string]: boolean } = {}
+        for _, key in ipairs(data.txLogOrder) do
+            if type(key) == "string" and data.txLog[key] ~= nil and not seen[key] then
+                table.insert(rebuilt, key)
+                seen[key] = true
+            end
+        end
+        -- Any map keys missing from the order list (corruption) get appended so
+        -- they remain trimmable rather than leaking unboundedly.
+        for key in pairs(data.txLog) do
+            if not seen[key] then
+                table.insert(rebuilt, key)
+                seen[key] = true
+            end
+        end
+        data.txLogOrder = rebuilt
+    end
+    while #data.txLogOrder > PersistenceConfig.txLogMaxEntries do
+        local oldest = table.remove(data.txLogOrder, 1)
+        if oldest ~= nil then
+            data.txLog[oldest] = nil
+        end
+    end
+
+    -- Durable ProcessReceipt dedupe markers (ADR-002 H-2). `consumedReceipts` is
+    -- now a TIMESTAMP map purchaseId -> consumedAt (os.time()), TIME-bounded by
+    -- consumedReceiptHorizonSec. DEFENSIVE BACKFILL: convert any legacy presence
+    -- marker (boolean `true`, the old ADR-001 shape) to a numeric stamp so it is
+    -- NOT immediately pruned. We are pre-launch with no real-money data, so this
+    -- is a no-op in practice, but it keeps the code honest. Use os.time() as a
+    -- conservative "consumed recently" stamp (the wrapper savedAt is not passed
+    -- into migrate; os.time() is the safe, non-prunable choice).
+    if type(data.consumedReceipts) ~= "table" then
+        data.consumedReceipts = {}
+    end
+    if type(data.consumedReceiptsOrder) ~= "table" then
+        data.consumedReceiptsOrder = {}
+    end
+    do
+        local nowStamp = os.time()
+        for key, value in pairs(data.consumedReceipts) do
+            -- Legacy boolean-true presence marker -> conservative numeric stamp.
+            -- Any non-number value (true, or stray garbage) is normalized.
+            if type(value) ~= "number" then
+                data.consumedReceipts[key] = nowStamp
+            end
+        end
+        local rebuilt = {}
+        local seen: { [string]: boolean } = {}
+        for _, key in ipairs(data.consumedReceiptsOrder) do
+            if type(key) == "string" and data.consumedReceipts[key] ~= nil and not seen[key] then
+                table.insert(rebuilt, key)
+                seen[key] = true
+            end
+        end
+        for key in pairs(data.consumedReceipts) do
+            if not seen[key] then
+                table.insert(rebuilt, key)
+                seen[key] = true
+            end
+        end
+        data.consumedReceiptsOrder = rebuilt
+    end
+    -- Overflow safety only here (ADR-002 H-2): time-pruning is owned by the live
+    -- markReceiptConsumed path; migrate just guarantees the map cannot exceed the
+    -- hard cap on load (oldest-first trim).
+    while #data.consumedReceiptsOrder > PersistenceConfig.consumedReceiptHardCap do
+        local oldest = table.remove(data.consumedReceiptsOrder, 1)
+        if oldest ~= nil then
+            data.consumedReceipts[oldest] = nil
+        end
+    end
 
     data.stats = data.stats or {}
     data.stats.totalCoinsEarned = data.stats.totalCoinsEarned or 0

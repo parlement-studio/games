@@ -15,6 +15,7 @@ local HttpService = game:GetService("HttpService")
 
 local Types = require(ReplicatedStorage.Shared.Types)
 local CaptureConfig = require(ReplicatedStorage.Shared.Config.CaptureConfig)
+local PersistenceConfig = require(ReplicatedStorage.Shared.Config.PersistenceConfig)
 
 type PlayerData = Types.PlayerData
 type BrainrotEntry = Types.BrainrotEntry
@@ -105,7 +106,13 @@ function Schema.default(): PlayerData
         raidsDefended = 0,
 
         nextSeq = 1,
+        -- txLog is a MAP idempotencyKey -> small storedResult (ADR-001 C2); the
+        -- parallel txLogOrder array preserves insertion order for ring-trim.
         txLog = {},
+        txLogOrder = {},
+        -- Durable ProcessReceipt dedupe markers (ADR-001 §3); bounded ring.
+        consumedReceipts = {},
+        consumedReceiptsOrder = {},
 
         stats = {
             totalCoinsEarned = 0,
@@ -146,13 +153,62 @@ end
 -- Backwards-compatible alias (GDD prose references both names).
 Schema.defaultBrainrot = Schema.newBrainrot
 
--- Wraps a profile for durable storage (what SetAsync writes).
-function Schema.wrap(data: PlayerData): Types.StoredWrapper
+-- Wraps a profile for durable storage (what SetAsync writes). Embeds the FENCE
+-- STAMP (ADR-002 M-2): the owning server's JobId + lock generation, for forensic
+-- detection/audit of a backward-generation write. The primary save fence is the
+-- pre-write ownershipMatches read; these fields are belt-and-suspenders. Both
+-- are optional so a caller with no lock context can still wrap (lockGen = nil).
+function Schema.wrap(data: PlayerData, lockJobId: string?, lockGen: number?): Types.StoredWrapper
     return {
         version = Schema.CURRENT_SCHEMA_VERSION,
         data = data,
         savedAt = os.time(),
+        lockJobId = lockJobId,
+        lockGen = lockGen,
     }
+end
+
+-- ── Pure roster mutation helpers (ADR-001 C1, C5) ──────────────────────────
+--
+-- These operate ONLY on the `data` table handed to them (the deep copy inside
+-- an `update()` transaction). They do NOT touch the cache, bump `nextSeq`, or
+-- mark dirty — that happens exactly once, in PlayerDataService.update(). The
+-- cap check lives HERE (C5), so the rejection is part of the transaction and a
+-- caller composing debit+add never debits on a "roster_full" outcome.
+
+-- Adds a Brainrot entry to `data.roster` IFF below the cap. Maintains the O(1)
+-- `data.rosterCount` cache. Returns:
+--   (true, entry)            on success
+--   (false, "roster_full")   at the cap (E6, C5)
+--   (false, "duplicate_id")  GUID collision (effectively impossible)
+function Schema.addToRoster(data: PlayerData, entry: BrainrotEntry): (boolean, any)
+    if data.rosterCount >= PersistenceConfig.rosterCap then
+        return false, "roster_full"
+    end
+    if data.roster[entry.id] ~= nil then
+        return false, "duplicate_id"
+    end
+    data.roster[entry.id] = entry
+    data.rosterCount += 1
+    return true, entry
+end
+
+-- Removes a Brainrot by id from `data.roster`. Maintains `data.rosterCount`.
+-- Refuses to remove a fav-locked entry unless `force` is true (E6). Returns:
+--   (true, removedEntry)     on success
+--   (false, "not_found")     no such id
+--   (false, "favorited")     fav-locked and not forced
+function Schema.removeFromRoster(data: PlayerData, id: string, force: boolean?): (boolean, any)
+    local entry = data.roster[id]
+    if entry == nil then
+        return false, "not_found"
+    end
+    if entry.fav and not force then
+        return false, "favorited"
+    end
+    data.roster[id] = nil
+    data.rosterCount -= 1
+    return true, entry
 end
 
 -- ── Validators (used by tests + the migrate repair pass) ───────────────────

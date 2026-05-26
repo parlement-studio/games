@@ -95,7 +95,10 @@ export type PlayerData = {
     raidsDefended: number, -- lifetime successful defenses (player-level)
 
     nextSeq: number, -- monotonic mutation counter; ++ per committed mutation
-    txLog: { string }, -- ring buffer of last txLogMaxEntries idempotency keys
+    txLog: { [string]: any }, -- map idempotencyKey -> small JSON-safe storedResult; bounded to txLogMaxEntries (ADR-001 C2)
+    txLogOrder: { string }, -- insertion-order list of txLog keys; drives the ring-trim eviction (oldest first)
+    consumedReceipts: { [string]: number }, -- durable ProcessReceipt dedupe markers: purchaseId -> consumedAt (os.time() server clock). TIME-bounded by consumedReceiptHorizonSec, with a consumedReceiptHardCap overflow safety (ADR-002 H-2)
+    consumedReceiptsOrder: { string }, -- insertion-order list of consumedReceipts keys; drives the front-of-list age prune + overflow trim (oldest first)
 
     stats: PlayerStats,
 
@@ -105,10 +108,32 @@ export type PlayerData = {
 }
 
 -- What actually goes into DataStore (the stored wrapper).
+--
+-- lockJobId / lockGen are FORENSIC fence stamps (ADR-002 M-2): the JobId and
+-- monotonic lock generation that authored this write. The PRIMARY save fence is
+-- the pre-write SessionLock.ownershipMatches read; these embedded fields let a
+-- forensic / future load path detect or audit a backward-generation write. Both
+-- are optional (a wrapper written before the fence shipped, or by a path with no
+-- lock context, carries nil).
 export type StoredWrapper = {
     version: number, -- schema version of `data`
     data: PlayerData, -- the payload above
     savedAt: number, -- os.time() at write
+    lockJobId: string?, -- JobId of the server that owned the lock at write time
+    lockGen: number?, -- the lock generation this server held when it wrote
+}
+
+-- The durable SESSION LOCK value (DataStore "SessionLocks" key). Documented here
+-- for reference; SessionLock owns its read/write. Shape (ADR-002 M-2):
+--   { jobId: string, time: number, gen: number }
+-- `gen` is a monotonic generation that increments on EVERY ownership transfer
+-- (fresh acquire / stale-steal / mine-reacquire), and is PRESERVED unchanged by
+-- heartbeat (which only refreshes `time`). A save proves it still owns the lock
+-- by re-reading and matching both jobId AND gen before SetAsync.
+export type SessionLockValue = {
+    jobId: string, -- the owning server's JobId
+    time: number, -- os.time() of the last acquire/heartbeat (staleness clock)
+    gen: number, -- monotonic ownership generation (fence token)
 }
 
 -- Arguments to mint a new Brainrot (Capture supplies these; id is minted).
