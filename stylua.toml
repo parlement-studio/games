@@ -1,0 +1,18 @@
+# stylua.toml — Luau formatter config for Brainrot Inc.
+#
+# Roblox/Luau conventions: 4-space indent, double quotes, 120 column width.
+# syntax = "Luau" enables formatting of Luau-specific syntax (type
+# annotations, string interpolation, etc.) used throughout src/.
+
+syntax = "Luau"
+
+column_width = 120
+line_endings = "Unix"
+indent_type = "Spaces"
+indent_width = 4
+quote_style = "AutoPreferDouble"
+call_parentheses = "Always"
+collapse_simple_statement = "Never"
+
+[sort_requires]
+enabled = false

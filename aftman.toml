@@ -1,0 +1,24 @@
+# aftman.toml — toolchain manifest for Brainrot Inc.
+#
+# This machine already has `aftman` (rokit's predecessor) installed, with
+# rojo/selene/stylua present. We use aftman to avoid installing a second
+# version manager. Run `aftman install` in this directory to fetch the tools
+# below (aftman links shims into ~/.aftman/bin).
+#
+# Versions VERIFIED against upstream GitHub releases on 2026-05-26.
+# (A parallel rokit.toml is kept as a reference for a future migration to rokit;
+#  aftman ignores rokit.toml and vice versa.)
+
+[tools]
+# Code sync — Argon, TWO-WAY sync (disk <-> Studio). Needs its OWN Studio plugin
+# (`argon plugin install`); the existing Rojo plugin does NOT drive Argon.
+argon = "argon-rbx/argon@2.0.29"
+
+# Package manager (reads wally.toml -> Packages/ + DevPackages/).
+wally = "UpliftGames/wally@0.3.2"
+
+# Luau linter (config: selene.toml).
+selene = "Kampfkarren/selene@0.31.0"
+
+# Luau formatter (config: stylua.toml).
+stylua = "JohnnyMorganz/StyLua@2.5.2"

@@ -1,0 +1,35 @@
+# selene.toml — Luau linter config for Brainrot Inc.
+#
+# Uses the Roblox standard library so Roblox globals/services are recognized.
+# Aligns with .claude/rules conventions: no deprecated wait/spawn/delay,
+# type annotations encouraged, no undefined globals.
+
+std = "roblox"
+
+# Exclude generated / vendored code from linting.
+exclude = [
+    "Packages/**",
+    "DevPackages/**",
+]
+
+[rules]
+# Flag deprecated APIs. The rules forbid wait()/spawn()/delay() — use task.*.
+# selene's `roblox` std already marks these; keep incorrect_standard_library
+# and deprecated usage loud.
+deprecated = "warn"
+
+# Catch shadowing that often hides bugs.
+shadowing = "warn"
+
+# Unused variables are usually mistakes; allow underscore-prefixed.
+unused_variable = "warn"
+
+# Empty if branches / loops are almost always errors.
+empty_if = "warn"
+empty_loop = "warn"
+
+# Multiple statements on one line hurt readability.
+multiple_statements = "warn"
+
+# Comparing against nan or constant conditions.
+constant_table_comparison = "warn"

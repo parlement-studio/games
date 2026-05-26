@@ -1,0 +1,31 @@
+# rokit.toml — toolchain manifest for Brainrot Inc.
+#
+# rokit is the successor to aftman. It pins exact tool versions so every
+# machine (and CI) uses the same toolchain. Run `rokit install` after cloning
+# to download every tool listed below.
+#
+# Versions below VERIFIED against upstream GitHub releases on 2026-05-26.
+# Bump deliberately; do not float. If a version does not resolve, check the
+# upstream GitHub releases page for the latest tag and update here (see SETUP.md).
+
+[tools]
+# Code sync (Rojo-compatible project format). Drives `argon serve` (TWO-WAY
+# sync: disk <-> Studio) and `argon build`. Chosen over Rojo for two-way sync —
+# edits made in Studio (UI, hub map, properties) flow back to disk.
+# NOTE: Argon needs its OWN Studio plugin (`argon plugin install`); the existing
+# Rojo plugin does NOT drive Argon. See SETUP.md step 3.
+argon = "argon-rbx/argon@2.0.29"
+
+# Package manager. Reads wally.toml, writes to Packages/ and DevPackages/.
+wally = "UpliftGames/wally@0.3.2"
+
+# Luau linter. Catches deprecated APIs (wait/spawn/delay), undefined globals,
+# style issues. Config: selene.toml.
+selene = "Kampfkarren/selene@0.31.0"
+
+# Luau code formatter. Config: stylua.toml.
+stylua = "JohnnyMorganz/StyLua@2.5.2"
+
+# Optional: Luau-to-Lua transpiler / bundler / minifier. Useful for build
+# pipelines and stripping types. Not required for day-to-day sync.
+darklua = "seaofvoices/darklua@0.18.0"

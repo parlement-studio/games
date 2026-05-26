@@ -1,0 +1,50 @@
+{
+  "name": "BrainrotInc",
+  "tree": {
+    "$className": "DataModel",
+
+    "ServerScriptService": {
+      "$path": "src/ServerScriptService"
+    },
+
+    "ServerStorage": {
+      "$path": "src/ServerStorage"
+    },
+
+    "ReplicatedStorage": {
+      "$path": "src/ReplicatedStorage",
+      "Packages": {
+        "$path": "Packages"
+      }
+    },
+
+    "ReplicatedFirst": {
+      "$path": "src/ReplicatedFirst"
+    },
+
+    "StarterGui": {
+      "$path": "src/StarterGui"
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$path": "src/StarterPlayer/StarterPlayerScripts"
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "FilteringEnabled": true
+      }
+    },
+
+    "SoundService": {
+      "$className": "SoundService",
+      "$properties": {
+        "RespectFilteringEnabled": true
+      }
+    }
+  }
+}

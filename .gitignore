@@ -1,0 +1,36 @@
+# --- Wally packages (re-downloaded via `wally install`) ---
+/Packages/
+/DevPackages/
+# Keep the placeholders so the Packages mount points exist before first install.
+!/Packages/.gitkeep
+!/DevPackages/.gitkeep
+# Wally lockfile metadata folder (if present)
+wally.lock.json
+
+# --- Roblox place / model build artifacts ---
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+*.rbxm
+*.rbxmx
+
+# --- Argon / Rojo generated ---
+sourcemap.json
+/build/
+*.zip
+
+# --- Secrets / local environment ---
+.env
+.env.*
+*.apikey
+
+# --- Claude Code local (machine-specific) settings ---
+.claude/settings.local.json
+
+# --- Editor / OS noise ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

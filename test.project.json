@@ -1,0 +1,42 @@
+{
+  "name": "BrainrotInc-Test",
+  "tree": {
+    "$className": "DataModel",
+
+    "ServerScriptService": {
+      "$path": "src/ServerScriptService"
+    },
+
+    "ServerStorage": {
+      "$path": "src/ServerStorage"
+    },
+
+    "ReplicatedStorage": {
+      "$path": "src/ReplicatedStorage",
+      "Packages": {
+        "$path": "Packages"
+      },
+      "DevPackages": {
+        "$path": "DevPackages"
+      },
+      "Tests": {
+        "$path": "tests"
+      }
+    },
+
+    "ReplicatedFirst": {
+      "$path": "src/ReplicatedFirst"
+    },
+
+    "StarterGui": {
+      "$path": "src/StarterGui"
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$path": "src/StarterPlayer/StarterPlayerScripts"
+      }
+    }
+  }
+}
