@@ -1,0 +1,12 @@
+# Tests-local selene config. Layers a TestEZ std (testez.yml) on top of the
+# Roblox std so spec files recognize describe/it/expect/beforeEach/etc.
+std = "testez"
+
+[rules]
+deprecated = "warn"
+shadowing = "warn"
+unused_variable = "warn"
+empty_if = "warn"
+empty_loop = "warn"
+multiple_statements = "warn"
+constant_table_comparison = "warn"
