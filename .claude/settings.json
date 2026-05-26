@@ -1,12 +1,15 @@
 {
   "enabledPlugins": {
-    "lua-lsp@claude-plugins-official": true
+    "lua-lsp@claude-plugins-official": true,
+    "github@claude-plugins-official": true
   },
   "dangerouslySkipPermissions": true,
   "mcpServers": {
     "blender": {
       "command": "uvx",
-      "args": ["blender-mcp"]
+      "args": [
+        "blender-mcp"
+      ]
     }
   }
 }
