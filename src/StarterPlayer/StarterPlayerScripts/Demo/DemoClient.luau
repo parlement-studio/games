@@ -26,9 +26,22 @@ local DemoFolder = Shared:WaitForChild("Demo")
 local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 
 -- ── Types (the contract the UI builds against) ───────────────────────────
+-- PROGRESSION: each item carries its roster `id` (the SUMMON target) and the
+-- Brainrot's current `level`; the UI builds the display label itself (no `name`).
+-- STAT SHEET: the server also derives the per-monster stat fields (xp/xpToNext for
+-- the XP bar, hp/power combat stats, wins/coinsMade lifetime flavor) so the detail
+-- modal renders entirely from this payload. All fields are server-authoritative;
+-- the client only displays them (it never computes game state).
 export type InventoryItem = {
-    name: string, -- display name, e.g. "HYPER Brainrot"
+    id: string, -- roster GUID; passed to DemoClient.summon to send out THIS Brainrot
     personality: string, -- "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
+    level: number, -- current progression level (>= 1)
+    xp: number, -- XP banked toward the next level
+    xpToNext: number, -- XP needed for the next level
+    hp: number, -- derived combat Max HP at this level
+    power: number, -- derived per-tick combat damage at this level + personality
+    wins: number, -- lifetime battles won
+    coinsMade: number, -- lifetime coins this Brainrot produced (floored)
 }
 
 export type Inventory = { InventoryItem }
@@ -40,13 +53,18 @@ export type CoinState = {
     rate: number,
 }
 
--- COMBAT (Tahap 2): server -> client combat feedback. `kind` is "win" (the
--- fighter defeated a wild, `coins` = coins awarded) or "ko" (the fighter fainted /
--- timed out and returned to the bag). Presentation only; the server owns coins.
+-- COMBAT (Tahap 2 + PROGRESSION): server -> client combat feedback. `kind` is
+-- "win" (the fighter defeated a wild, `coins` = coins awarded) or "ko" (the
+-- fighter fainted / timed out and returned to the bag). On a WIN, `leveledTo` is
+-- set IFF the fighter's Brainrot leveled up (show a "Level Up!" banner instead of
+-- coins); `level` is its current level for display. Presentation only; the server
+-- owns coins, xp, and levels.
 export type BattlePayload = {
     kind: string,
     personality: string,
     coins: number?,
+    leveledTo: number?,
+    level: number?,
 }
 
 -- ── Module ─────────────────────────────────────────────────────────────────
@@ -132,7 +150,13 @@ function DemoClient.init()
         local upper = string.upper(tostring(payload.personality or "?"))
         local text: string
         if payload.kind == "win" then
-            text = string.format("⚔ %s won the fight! +%d coins", upper, payload.coins or 0)
+            -- PROGRESSION: a level-up takes priority in the banner (it is the
+            -- rarer, more exciting event); otherwise show the coin reward.
+            if type(payload.leveledTo) == "number" then
+                text = string.format("⭐ %s Level Up! → Lv%d", upper, payload.leveledTo)
+            else
+                text = string.format("⚔ %s won the fight! +%d coins", upper, payload.coins or 0)
+            end
         else
             text = string.format("⚔ %s returned to your bag", upper)
         end
@@ -150,11 +174,13 @@ function DemoClient.deployToStand(standIndex: number, personality: string)
     DemoRemotes.DeployToStand:FireServer(standIndex, personality)
 end
 
--- COMBAT (Tahap 2): summon an OWNED Brainrot of `personality` as a temporary field
--- fighter that auto-battles the nearest wild. The server validates ownership +
--- rate-limits; the bag is NOT consumed (summoning is ephemeral).
-function DemoClient.summon(personality: string)
-    DemoRemotes.SummonFighter:FireServer(personality)
+-- COMBAT (Tahap 2 + PROGRESSION): summon a SPECIFIC owned Brainrot (by its roster
+-- `brainrotId`) as a temporary field fighter that auto-battles the nearest wild.
+-- Summoning by explicit id so XP/levels attach to the exact individual. The server
+-- validates ownership (in roster, not deployed, not already fighting) + rate-limits;
+-- the roster entry is NOT consumed (summoning is ephemeral).
+function DemoClient.summon(brainrotId: string)
+    DemoRemotes.SummonFighter:FireServer(brainrotId)
 end
 
 -- AUTO-COLLECT: the live coin total to display RIGHT NOW. Extrapolates from the

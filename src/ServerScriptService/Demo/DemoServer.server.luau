@@ -60,14 +60,24 @@ for index, key in DemoConfig.personalityOrder do
 end
 
 -- ── Types ────────────────────────────────────────────────────────────────
--- One caught creature in a player's inventory. `id` is the PERSISTED roster GUID
--- (server-internal: it ties this bag item back to its data.roster entry so deploy
--- can write the deployment map). The CLIENT contract is unchanged — pushInventory
--- strips `id` and sends only { name, personality }.
+-- One bag item pushed to the client. PROGRESSION: the inventory is now DERIVED
+-- FRESH from the authoritative roster on every push (not a drifting local list),
+-- so level-ups show immediately. Each item carries the roster GUID (`id`, used by
+-- SUMMON to target a SPECIFIC Brainrot), the personality, the entry's current
+-- `level`, and the STAT-SHEET fields the client renders (xp/xpToNext for the bar,
+-- hp/power derived combat stats, wins/coinsMade lifetime flavor). All fields are
+-- derived SERVER-SIDE from the authoritative roster entry — the client never
+-- computes game state, it only displays these.
 type InventoryItem = {
-    id: string, -- persisted roster GUID (server-internal; stripped before the client push)
-    name: string, -- display name, e.g. "HYPER Brainrot"
+    id: string, -- persisted roster GUID (also the SUMMON target)
     personality: string, -- canonical key: "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
+    level: number, -- current progression level of this Brainrot (>= 1)
+    xp: number, -- XP banked toward the next level
+    xpToNext: number, -- XP needed for the next level (xpCurveBase * level)
+    hp: number, -- derived combat Max HP at this level
+    power: number, -- derived per-tick combat damage at this level + personality
+    wins: number, -- lifetime battles won (history.rwon)
+    coinsMade: number, -- lifetime coins this Brainrot has produced (floored)
 }
 
 -- One occupied Showroom pedestal: which personality stands there + its clone +
@@ -85,8 +95,15 @@ type DeployedSlot = {
 -- gates so we tick damage at combatTickSec and re-target at seekRetargetSec;
 -- `despawnAt` is the auto-cleanup deadline; `engaged` is the wild it is currently
 -- fighting (so we can clear that wild's InCombat flag if the fighter dies/despawns).
+-- PROGRESSION: `brainrotId` links this fighter back to the SPECIFIC roster entry
+-- that was summoned, so a win awards XP to the right individual. `level` is the
+-- level SNAPSHOT taken at summon time (used to derive this fighter's HP/damage);
+-- a mid-fight level-up does NOT re-derive the active fighter — the next summon
+-- picks up the new level. Kept simple.
 type FighterRecord = {
     personality: string,
+    brainrotId: string,
+    level: number,
     model: Model,
     nextCombatAt: number,
     nextSeekAt: number,
@@ -95,12 +112,19 @@ type FighterRecord = {
 }
 
 type PlayerState = {
-    inventory: { InventoryItem },
+    -- NOTE (PROGRESSION): there is no persistent `inventory` list on the state
+    -- anymore. The bag is DERIVED FRESH from PlayerDataService.getData(player).roster
+    -- on every pushInventory (excluding deployed + actively-fighting ids), so it
+    -- always reflects the authoritative roster (levels included).
     -- ── Showroom / idle-production (server-authoritative) ────────────────
     coins: number, -- live coin total (AUTO-COLLECT: production adds here directly)
     pending: number, -- UNUSED (kept = 0 for back-compat; auto-collect removed the bank step)
     slots: { [number]: DeployedSlot }, -- standIndex (1..showroomStandCount) -> slot
     rateBuckets: { [string]: { count: number, windowStart: number } },
+    -- COINS-MADE (per-Brainrot flavor tally): os.clock() of the last flush at which
+    -- we attributed idle production to the producing Brainrots. The delta since this
+    -- stamp is split across the currently-deployed slots on each flush.
+    lastCoinAttributeAt: number,
     -- ── Combat (Tahap 2) ─────────────────────────────────────────────────
     fighters: { FighterRecord }, -- active summoned fighters (capped at maxActiveFighters)
 }
@@ -173,6 +197,18 @@ local function prodMult(personality: string): number
     return (def and def.prodMult) or 1
 end
 
+-- ── PROGRESSION (LEVEL / XP — battle-gdd v1.2 F2) ──────────────────────────
+local PROGRESSION = DemoConfig.progression
+
+-- Combat-stat multiplier for a given level (battle-gdd F2):
+--   1 + statGrowthPerLevel * (level - 1)
+-- `level` is clamped to [1, maxLevel] so an out-of-range value can never under-
+-- or over-scale a stat. Lv1 = 1.0 (base), Lv2 = 1.08, … LvN = 1 + 0.08*(N-1).
+local function levelScale(level: number): number
+    local clamped = math.clamp(level, 1, PROGRESSION.maxLevel)
+    return 1 + PROGRESSION.statGrowthPerLevel * (clamped - 1)
+end
+
 -- Current AUTO-COLLECT production rate (coins/sec) for a player: the sum over
 -- every deployed slot of baseRatePerSlot * prodMult(personality). 0 if nothing
 -- is deployed. Shipped alongside the live total so the client can interpolate.
@@ -235,11 +271,6 @@ local function findAnchorPart(model: Instance): BasePart?
     return model:FindFirstChildWhichIsA("BasePart", true)
 end
 
--- Display name for a caught creature. Keep it simple: "<UPPER> Brainrot".
-local function displayName(personality: string): string
-    return string.format("%s Brainrot", string.upper(personality))
-end
-
 -- Build + attach a "Hold F to Catch" ProximityPrompt to a creature's anchor part.
 -- Registers it in promptToRecord. Returns false if the model has no usable part.
 local function addCatchPrompt(model: Instance, record: CreatureRecord): boolean
@@ -263,19 +294,66 @@ local function addCatchPrompt(model: Instance, record: CreatureRecord): boolean
     return true
 end
 
--- ── Inventory ──────────────────────────────────────────────────────────────
+-- ── Inventory (DERIVED FRESH from the authoritative roster) ────────────────
+-- PROGRESSION: rebuild the client bag list from PlayerDataService.getData().roster
+-- on EVERY push, rather than from a drifting local list, so a level-up (which
+-- mutates the roster entry) is reflected immediately. An entry is included ONLY
+-- if it is NOT currently deployed (not a value in b1.deployment) AND NOT an active
+-- fighter (its id is not linked to a live FighterRecord). Each client item carries
+-- the full STAT-SHEET payload { id, personality, level, xp, xpToNext, hp, power,
+-- wins, coinsMade } — all derived here from the authoritative entry; the client
+-- builds the display label + sheet from it (it never computes game state).
 local function pushInventory(player: Player)
     local state = states[player]
     if not state then
         warn("[Inv][server] pushInventory: NO STATE for " .. player.Name)
         return
     end
-    -- CLIENT CONTRACT (unchanged): the client only ever sees { name, personality }.
-    -- We STRIP the server-internal roster `id` here so DemoClient/DemoUI need no
-    -- changes. Build a fresh display list each push (do not leak the id field).
-    local payload: { { name: string, personality: string } } = {}
-    for _, item in state.inventory do
-        table.insert(payload, { name = item.name, personality = item.personality })
+    local data = PlayerDataService.getData(player)
+    if not data then
+        return -- profile not loaded yet; a later push will carry the bag
+    end
+
+    -- BUSY ids: deployed (on a stand) OR currently an active fighter — excluded.
+    local busy: { [string]: boolean } = {}
+    local b1 = data.base.buildings[BUILDING_ID]
+    if b1 then
+        for _, deployedId in b1.deployment do
+            if deployedId ~= nil then
+                busy[deployedId] = true
+            end
+        end
+    end
+    for _, record in state.fighters do
+        busy[record.brainrotId] = true
+    end
+
+    local combat = DemoConfig.combat
+    local payload: { InventoryItem } = {}
+    for id, entry in data.roster do
+        if not busy[id] then
+            -- Derive the stat-sheet fields from the authoritative entry. hp/power
+            -- mirror the COMBAT derivation used at summon time (fighterMaxHP /
+            -- fighterDamage), inlined here because those helpers are defined later
+            -- in the file; the formulas are kept identical on purpose.
+            local scale = levelScale(entry.level)
+            local powerMult = if combat.personalityDamageScales then prodMult(entry.personality) else 1
+            local hp = math.round(combat.fighterBaseHP * scale)
+            local power = math.round(combat.fighterBaseDamagePerTick * scale * powerMult)
+            local wins = (entry.history and entry.history.rwon) or 0
+            local coinsMade = math.floor((entry.history and entry.history.coins) or 0)
+            table.insert(payload, {
+                id = id,
+                personality = entry.personality,
+                level = entry.level,
+                xp = entry.xp,
+                xpToNext = PROGRESSION.xpCurveBase * entry.level,
+                hp = hp,
+                power = power,
+                wins = wins,
+                coinsMade = coinsMade,
+            })
+        end
     end
     print(("[Inv][server] push -> %s count=%d"):format(player.Name, #payload))
     DemoRemotes.InventoryUpdate:FireClient(player, payload)
@@ -310,8 +388,32 @@ local function flushCoins(player: Player, clearOffline: boolean)
     if not state then
         return
     end
+    -- COINS-MADE attribution (best-effort flavor): split the production accrued
+    -- since the last flush across the currently-deployed slots, weighted by each
+    -- slot's instantaneous rate (baseRatePerSlot * prodMult(personality)), and add
+    -- it to that slot's roster entry's history.coins. Approximate by design — it
+    -- attributes the WHOLE elapsed window at the CURRENT deployment (a slot placed
+    -- mid-window gets the full window), which is fine for a lifetime flavor stat.
+    -- Computed here so it commits inside the SAME atomic update() as data.coins.
+    local now = os.clock()
+    local elapsed = now - state.lastCoinAttributeAt
+    state.lastCoinAttributeAt = now
+    -- Snapshot (slot id -> coins delta) so the mutator stays pure + non-yielding.
+    local deltas: { [string]: number } = {}
+    if elapsed > 0 then
+        for _, slot in state.slots do
+            local slotRate = DemoConfig.baseRatePerSlot * prodMult(slot.personality)
+            deltas[slot.id] = (deltas[slot.id] or 0) + slotRate * elapsed
+        end
+    end
     PlayerDataService.update(player, function(data)
         data.coins = math.floor(state.coins)
+        for id, delta in deltas do
+            local entry = data.roster[id]
+            if entry then
+                entry.history.coins += delta
+            end
+        end
         if clearOffline then
             data.pendingOffline = { coins = 0, from = 0, to = 0 }
         end
@@ -477,11 +579,13 @@ local function buildFighterTemplates(): number
                     desc:Destroy()
                 end
             end
-            -- Full Health on the template so every clone starts fresh.
+            -- Full Health on the template at the Lv1 BASE so every clone starts
+            -- fresh; the actual per-summon HP is derived from the Brainrot's level
+            -- (levelScale) in handleSummon, which overrides MaxHealth/Health there.
             local humanoid = template:FindFirstChildWhichIsA("Humanoid")
             if humanoid then
-                humanoid.MaxHealth = DemoConfig.combat.fighterMaxHP
-                humanoid.Health = DemoConfig.combat.fighterMaxHP
+                humanoid.MaxHealth = DemoConfig.combat.fighterBaseHP
+                humanoid.Health = DemoConfig.combat.fighterBaseHP
             end
             template.Name = personality -- canonical key, e.g. "Hyper"
             template.Parent = folder
@@ -608,18 +712,35 @@ local function handleDeployToStand(player: Player, standIndex: unknown, personal
         return
     end
 
-    -- Find a matching caught item.
-    local itemIndex: number? = nil
-    for i, item in state.inventory do
-        if item.personality == personality then
-            itemIndex = i
+    -- DEPLOY stays personality-keyed (production is personality-only). Pick ANY
+    -- non-deployed, non-fighting roster entry of that personality and use its id
+    -- for the deployment map. Derived fresh from the authoritative roster.
+    local data = PlayerDataService.getData(player)
+    if not data then
+        return -- profile not loaded yet
+    end
+    local busy: { [string]: boolean } = {}
+    local b1Now = data.base.buildings[BUILDING_ID]
+    if b1Now then
+        for _, deployedId in b1Now.deployment do
+            if deployedId ~= nil then
+                busy[deployedId] = true
+            end
+        end
+    end
+    for _, record in state.fighters do
+        busy[record.brainrotId] = true
+    end
+    local itemId: string? = nil
+    for id, entry in data.roster do
+        if entry.personality == personality and not busy[id] then
+            itemId = id
             break
         end
     end
-    if not itemIndex then
-        return -- nothing of that personality to deploy
+    if not itemId then
+        return -- nothing of that personality free to deploy
     end
-    local itemId = state.inventory[itemIndex].id
 
     local stand = findStand(standIndex)
     if not stand then
@@ -635,13 +756,13 @@ local function handleDeployToStand(player: Player, standIndex: unknown, personal
     -- this stand's slot key + bump the cached deployedCount, atomically. If the
     -- transaction fails (profile not loaded / no building), destroy the just-spawned
     -- model and bail so the live world never diverges from the persisted profile.
-    local ok = PlayerDataService.update(player, function(data)
-        local b1 = data.base.buildings[BUILDING_ID]
+    local ok = PlayerDataService.update(player, function(profile)
+        local b1 = profile.base.buildings[BUILDING_ID]
         if not b1 then
             error("no_building", 0)
         end
         b1.deployment[tostring(standIndex)] = itemId
-        data.base.deployedCount = (data.base.deployedCount or 0) + 1
+        profile.base.deployedCount = (profile.base.deployedCount or 0) + 1
         return true
     end)
     if not ok then
@@ -649,7 +770,9 @@ local function handleDeployToStand(player: Player, standIndex: unknown, personal
         return -- persistence rejected; no desync
     end
 
-    table.remove(state.inventory, itemIndex)
+    -- The roster entry is now deployed (recorded in b1.deployment). The bag is
+    -- DERIVED from the roster minus deployed/fighting ids, so pushInventory below
+    -- drops it automatically — no local list to mutate.
     state.slots[standIndex] = { personality = personality, model = model, id = itemId }
     setStandLabel(stand, string.upper(personality), true)
 
@@ -744,12 +867,8 @@ local function handleCatch(prompt: ProximityPrompt, player: Player)
     modelToRecord[model] = nil -- no longer present/catchable (combat lookup)
     prompt:Destroy()
 
-    -- SERVER-AUTHORITATIVE inventory add (carries the persisted roster id).
-    table.insert(state.inventory, {
-        id = entry.id,
-        name = displayName(record.personality),
-        personality = record.personality,
-    })
+    -- The roster entry was just minted + persisted via addBrainrot; the bag is
+    -- DERIVED fresh from the roster, so a re-push now includes the new catch.
     pushInventory(player)
 
     -- Remove the shared creature from the world, then schedule its respawn.
@@ -764,13 +883,29 @@ end
 -- ════════════════════════════════════════════════════════════════════════════
 local COMBAT = DemoConfig.combat
 
--- Damage a combatant deals per tick, optionally scaled by its personality's
--- prodMult (Hyper ~1.3x, Lazy ~0.5x) when personalityDamageScales is on.
+-- PERSONALITY-only damage scale (no level): multiply `base` by the personality's
+-- prodMult (Hyper ~1.3x, Lazy ~0.5x) when personalityDamageScales is on. Used for
+-- the WILD's damage back (wilds are treated as level 1 for now).
 local function scaledDamage(base: number, personality: string): number
     if COMBAT.personalityDamageScales then
         return base * prodMult(personality)
     end
     return base
+end
+
+-- PROGRESSION: a FIGHTER's per-tick damage at a given level + personality
+-- (battle-gdd F2): fighterBaseDamagePerTick * levelScale(level) * personalityScale.
+-- LEVEL boosts combat damage; personality keeps its existing flavor multiplier.
+local function fighterDamage(level: number, personality: string): number
+    local personalityMult = if COMBAT.personalityDamageScales then prodMult(personality) else 1
+    return COMBAT.fighterBaseDamagePerTick * levelScale(level) * personalityMult
+end
+
+-- PROGRESSION: a FIGHTER's derived Max HP at a given level (battle-gdd F2):
+-- round(fighterBaseHP * levelScale(level)). LEVEL boosts HP; rounded to a whole
+-- HP so the built-in health bar reads cleanly.
+local function fighterMaxHP(level: number): number
+    return math.round(COMBAT.fighterBaseHP * levelScale(level))
 end
 
 -- Resolve a fighter's Humanoid + root, or nil if the model is gone/unrigged.
@@ -844,12 +979,44 @@ local function defeatWild(player: Player, state: PlayerState, wild: Model)
     respawnCreature(record, wild)
 end
 
--- Build + register a fighter for `player` from `personality`. The player must OWN
--- >=1 of that personality (NOT consumed) and be under the maxActiveFighters cap.
--- Validated + rate-limited. Spawns the rigged clone summonOffsetStuds in front of
--- the player's character, server-owned, with a ⚔ label. No-op (graceful) if the
--- player has no character / the template is missing.
-local function handleSummon(player: Player, personality: unknown)
+-- PROGRESSION: award XP to the SPECIFIC Brainrot (`brainrotId`) that won, atomically
+-- through the audited update() transaction (the mutator is NON-yielding). XP comes
+-- ONLY from a win; it may carry over multiple levels in one award. Returns
+-- (leveledTo, currentLevel): `leveledTo` is the new level IFF a level-up happened
+-- (else nil); `currentLevel` is the entry's level after the award (for display).
+-- Persistence handles saving (update marks dirty -> autosave/leave-save).
+local function awardWinXp(player: Player, brainrotId: string): (number?, number?)
+    local leveledTo: number? = nil
+    local currentLevel: number? = nil
+    PlayerDataService.update(player, function(data)
+        local e = data.roster[brainrotId]
+        if not e then
+            return
+        end
+        -- BATTLES-WON tally (repurposed history.rwon for the demo): bump it in the
+        -- SAME atomic mutator as the XP grant so the win count + XP move together.
+        e.history.rwon += 1
+        e.xp += PROGRESSION.xpPerWin
+        while e.level < PROGRESSION.maxLevel and e.xp >= PROGRESSION.xpCurveBase * e.level do
+            e.xp -= PROGRESSION.xpCurveBase * e.level
+            e.level += 1
+            leveledTo = e.level
+        end
+        currentLevel = e.level
+    end)
+    return leveledTo, currentLevel
+end
+
+-- PROGRESSION: build + register a fighter for `player` from a SPECIFIC roster
+-- `brainrotId` (so XP attaches to the exact individual). Validated + rate-limited:
+-- the id must be a string that is in the player's roster, NOT currently deployed
+-- (not a value in b1.deployment), and NOT already an active fighter; the player
+-- must also be under the maxActiveFighters cap. The roster entry is NOT consumed
+-- (summoning is ephemeral). HP + per-tick damage are DERIVED from the entry's
+-- `level` (levelScale, battle-gdd F2), and the level is snapshot on the record.
+-- Spawns the rigged clone summonOffsetStuds in front of the player, server-owned,
+-- with a ⚔ label. No-op (graceful) on a bad arg / no character / missing template.
+local function handleSummon(player: Player, brainrotId: unknown)
     local state = states[player]
     if not state then
         return
@@ -857,26 +1024,41 @@ local function handleSummon(player: Player, personality: unknown)
     if not allowAction(state, "summon", DemoConfig.rateLimits.summon) then
         return
     end
-    -- Validate the personality (attacker-controlled arg).
-    if type(personality) ~= "string" or not isValidPersonality[personality] then
+    -- Validate the id (attacker-controlled arg): must be a string.
+    if type(brainrotId) ~= "string" then
         return
     end
     -- Cap: bound active fighters per player.
     if #state.fighters >= COMBAT.maxActiveFighters then
         return
     end
-    -- OWNERSHIP: must hold >=1 of this personality in the bag (NOT consumed —
-    -- summoning is an ephemeral field action; the roster/bag is untouched).
-    local owns = false
-    for _, item in state.inventory do
-        if item.personality == personality then
-            owns = true
-            break
-        end
-    end
-    if not owns then
+    -- OWNERSHIP: the id must be in the player's authoritative roster.
+    local data = PlayerDataService.getData(player)
+    if not data then
         return
     end
+    local entry = data.roster[brainrotId]
+    if not entry then
+        return -- not owned; reject
+    end
+    -- NOT DEPLOYED: the id must not be a value in this building's deployment map.
+    local b1 = data.base.buildings[BUILDING_ID]
+    if b1 then
+        for _, deployedId in b1.deployment do
+            if deployedId == brainrotId then
+                return -- currently on a stand; reject
+            end
+        end
+    end
+    -- NOT ALREADY FIGHTING: the id must not be linked to a live fighter.
+    for _, record in state.fighters do
+        if record.brainrotId == brainrotId then
+            return -- already summoned; reject
+        end
+    end
+
+    local personality = entry.personality
+    local level = entry.level
 
     -- Place in front of the player's character. Bail gracefully if no character.
     local character = player.Character
@@ -903,15 +1085,17 @@ local function handleSummon(player: Player, personality: unknown)
         fighter:Destroy()
         return
     end
+    -- PROGRESSION: derive Max HP from the Brainrot's level (battle-gdd F2).
+    local maxHP = fighterMaxHP(level)
     humanoid.WalkSpeed = COMBAT.fighterWalkSpeed
-    humanoid.MaxHealth = COMBAT.fighterMaxHP
-    humanoid.Health = COMBAT.fighterMaxHP
+    humanoid.MaxHealth = maxHP
+    humanoid.Health = maxHP
 
     -- Spawn summonOffsetStuds in FRONT of the player (along their look vector).
     local spawnCFrame = charRoot.CFrame * CFrame.new(0, 0, -COMBAT.summonOffsetStuds)
     fighter:PivotTo(CFrame.new(spawnCFrame.Position))
 
-    -- A small ⚔ label so it reads as the player's fighter.
+    -- A small ⚔ label so it reads as the player's fighter (with its level).
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "FighterLabel"
     billboard.Size = UDim2.fromOffset(120, 28)
@@ -923,7 +1107,7 @@ local function handleSummon(player: Player, personality: unknown)
     labelText.Font = Enum.Font.GothamBold
     labelText.TextScaled = true
     labelText.TextColor3 = Color3.fromRGB(255, 206, 64)
-    labelText.Text = "⚔ " .. string.upper(personality)
+    labelText.Text = ("⚔ %s Lv%d"):format(string.upper(personality), level)
     labelText.Parent = billboard
     local labelAnchor = findAnchorPart(fighter)
     billboard.Parent = labelAnchor or root
@@ -938,6 +1122,8 @@ local function handleSummon(player: Player, personality: unknown)
     local now = os.clock()
     local record: FighterRecord = {
         personality = personality,
+        brainrotId = brainrotId,
+        level = level,
         model = fighter,
         nextCombatAt = 0,
         nextSeekAt = 0,
@@ -945,7 +1131,10 @@ local function handleSummon(player: Player, personality: unknown)
         engaged = nil,
     }
     table.insert(state.fighters, record)
-    print(("[Combat] %s summoned %s (%d active)"):format(player.Name, personality, #state.fighters))
+    -- The summoned Brainrot is now BUSY (an active fighter): re-derive the bag so
+    -- it drops out of the inventory list immediately.
+    pushInventory(player)
+    print(("[Combat] %s summoned %s Lv%d (%d active)"):format(player.Name, personality, level, #state.fighters))
 end
 
 -- Remove a fighter record at index `i` from `state.fighters`: destroy its model,
@@ -1035,27 +1224,47 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
 
                     local wildPersonality = personalityFromName(wild.Name) or record.personality
 
-                    -- Wild takes the fighter's (scaled) damage.
-                    wildHumanoid:TakeDamage(scaledDamage(COMBAT.fighterDamagePerTick, record.personality))
-                    -- Fighter takes the wild's (scaled) damage back.
+                    -- Wild takes the fighter's LEVEL+personality-scaled damage
+                    -- (battle-gdd F2: level boosts combat damage).
+                    wildHumanoid:TakeDamage(fighterDamage(record.level, record.personality))
+                    -- Fighter takes the wild's (personality-only) damage back; the
+                    -- wild is treated as level 1 for now.
                     humanoid:TakeDamage(scaledDamage(COMBAT.wildDamagePerTick, wildPersonality))
 
                     if wildHumanoid.Health <= 0 then
-                        -- WIN: award + faint + respawn the wild, notify the owner.
+                        -- WIN: faint + respawn the wild + award coins.
                         defeatWild(player, state, wild)
                         record.engaged = nil
+                        -- PROGRESSION: award XP to the WINNING Brainrot (atomic +
+                        -- persisted). May level it up one or more times.
+                        local leveledTo, currentLevel = awardWinXp(player, record.brainrotId)
+                        -- Re-derive the bag so the new level shows immediately (the
+                        -- active fighter stays excluded; recall/KO returns it later).
+                        pushInventory(player)
                         DemoRemotes.BattleEvent:FireClient(player, {
                             kind = "win",
                             personality = record.personality,
                             coins = COMBAT.winCoins,
+                            leveledTo = leveledTo,
+                            level = currentLevel,
                         })
-                        print(
-                            ("[Combat] %s's %s defeated a wild (+%d coins)"):format(
-                                player.Name,
-                                record.personality,
-                                COMBAT.winCoins
+                        if leveledTo then
+                            print(
+                                ("[Combat] %s's %s defeated a wild -> LEVEL UP Lv%d"):format(
+                                    player.Name,
+                                    record.personality,
+                                    leveledTo
+                                )
                             )
-                        )
+                        else
+                            print(
+                                ("[Combat] %s's %s defeated a wild (+%d coins)"):format(
+                                    player.Name,
+                                    record.personality,
+                                    COMBAT.winCoins
+                                )
+                            )
+                        end
                     elseif humanoid.Health <= 0 then
                         -- The fighter died on this exchange: clear engagement so the
                         -- wild resumes wandering; the removal pass handles the KO event.
@@ -1077,21 +1286,31 @@ local combatAccum = 0
 local function stepCombat()
     local now = os.clock()
     for player, state in states do
+        local removedAny = false
         local i = #state.fighters
         while i >= 1 do
             local record = state.fighters[i]
             if record and stepFighter(player, state, record, now) then
                 removeFighter(state, i)
+                removedAny = true
             end
             i -= 1
+        end
+        -- PROGRESSION: a removed fighter (KO/despawn) frees its Brainrot — it is no
+        -- longer BUSY, so re-derive the bag once per player so it reappears (with
+        -- any level it earned this run).
+        if removedAny then
+            pushInventory(player)
         end
     end
 end
 
 -- ── Recall (undeploy) ──────────────────────────────────────────────────────
 -- Take a DEPLOYED display creature back into the owner's inventory: destroy the
--- model, free its slot, reset the pedestal label, re-add the personality to the
--- inventory, and push fresh InventoryUpdate + CoinUpdate. Owner-only.
+-- model, free its slot, reset the pedestal label, clear the persisted deployment
+-- entry, and push fresh InventoryUpdate + CoinUpdate. The bag is DERIVED from the
+-- roster minus deployed/fighting ids, so clearing deployment makes it reappear.
+-- Owner-only.
 local function handleRecall(prompt: ProximityPrompt, player: Player)
     local target = deployedPromptToSlot[prompt]
     if not target then
@@ -1121,7 +1340,6 @@ local function handleRecall(prompt: ProximityPrompt, player: Player)
     deployedPromptToSlot[prompt] = nil
 
     local personality = slot.personality
-    local itemId = slot.id
     if slot.model then
         slot.model:Destroy() -- destroys the prompt with it
     end
@@ -1147,14 +1365,8 @@ local function handleRecall(prompt: ProximityPrompt, player: Player)
     -- The stand is empty again: restore its Place prompt so it can be filled.
     addPlacePrompt(index)
 
-    -- SERVER-AUTHORITATIVE inventory add (the creature returns to the bag, still
-    -- carrying its persisted roster id so it can be re-deployed later).
-    table.insert(state.inventory, {
-        id = itemId,
-        name = displayName(personality),
-        personality = personality,
-    })
-
+    -- The roster entry is no longer deployed (deployment cleared above); the bag is
+    -- DERIVED from the roster, so a re-push returns it to the inventory list.
     pushInventory(player)
     pushCoins(player)
     print("[Recall] " .. player.Name .. " recalled " .. personality .. " from slot " .. index)
@@ -1202,12 +1414,15 @@ local function hydrate(player: Player, data: Types_PlayerData)
     end
 
     local state: PlayerState = {
-        inventory = {},
         coins = data.coins, -- live float seeded from the persisted whole-coin total
         pending = 0,
         slots = {},
         rateBuckets = {},
         fighters = {}, -- no active fighters on join (ephemeral, not persisted)
+        -- COINS-MADE: start the attribution window now so the first flush only
+        -- credits production that happens AFTER hydrate (no offline double-count;
+        -- offline coins are handled separately via pendingOffline).
+        lastCoinAttributeAt = os.clock(),
     }
     states[player] = state
 
@@ -1224,16 +1439,8 @@ local function hydrate(player: Player, data: Types_PlayerData)
         end
     end
 
-    -- BAG: every owned roster entry that is NOT currently on a stand.
-    for id, entry in data.roster do
-        if not deployedIds[id] then
-            table.insert(state.inventory, {
-                id = id,
-                name = displayName(entry.personality),
-                personality = entry.personality,
-            })
-        end
-    end
+    -- BAG: the inventory is DERIVED FRESH from the roster (minus deployed/fighting
+    -- ids) by pushInventory below — there is no local bag list to seed here.
 
     -- DEPLOYED: re-spawn each deployed creature onto its saved stand + re-attach
     -- the recall prompt. A missing stand/template is skipped gracefully (the

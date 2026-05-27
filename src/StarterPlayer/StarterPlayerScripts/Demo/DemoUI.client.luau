@@ -36,7 +36,13 @@ local Packages = ReplicatedStorage:WaitForChild("Packages")
 local Trove = require(Packages:WaitForChild("Trove"))
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local DemoRemotes = require(Shared:WaitForChild("Demo"):WaitForChild("DemoRemotes"))
+local DemoFolder = Shared:WaitForChild("Demo")
+local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
+-- DemoConfig is replicated read-only: the stat sheet reads the personality blurb /
+-- prodMult to build the EFFECT one-liner client-side, and the showroom stand count
+-- to drive the deploy-from-sheet sweep. Display/tuning values only — the server
+-- stays authoritative for all game state.
+local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
 
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
 local DemoClient = require(script.Parent:WaitForChild("DemoClient"))
@@ -52,16 +58,37 @@ local Font = UITheme.Font
 local TOGGLE_KEY = Enum.KeyCode.B
 local PANEL_WIDTH = 360
 local PANEL_HEIGHT = 460
-local ROW_HEIGHT = 56
-local ROW_BADGE_WIDTH = 78
-local ROW_BADGE_GAP = 6 -- gap between the name and the right-edge badge
--- COMBAT (Tahap 2): a per-row "⚔ Summon" button on the inventory panel rows.
-local ROW_SUMMON_WIDTH = 96 -- width of the Summon button
-local ROW_SUMMON_GAP = 6 -- gap between the Summon button and the badge
--- MOBILE: comfortable finger target for the row Summon button (>=44px tall).
-local ROW_SUMMON_HEIGHT = 44
+-- INVENTORY GRID: finger-sized cards laid out by a UIGridLayout that reflows.
+-- A card is a square personality-color tile (emoji + short name + ⭐ Lv badge);
+-- tapping it opens the stat sheet. >=72px keeps a comfortable tap target.
+local CARD_SIZE = 84 -- square card edge (>=72px finger target)
+local CARD_GAP = 8 -- spacing between cards in the grid
+local CARD_EMOJI_HEIGHT = 40 -- height of the big emoji block at the card top
+local CARD_NAME_HEIGHT = 16 -- personality short-name line under the emoji
+local CARD_BADGE_HEIGHT = 18 -- ⭐ Lv N badge line at the card bottom
 -- Inventory panel ✕ close button (bumped to a >=44px touch target for mobile).
 local PANEL_CLOSE_SIZE = 44
+
+-- ── STAT SHEET (per-monster detail modal) ──────────────────────────────────
+-- A centered, closeable modal opened by tapping an inventory card. Minimalist:
+-- header (emoji + name + ⭐ Lv + ✕), an XP bar, an HP/Power stat row, the effect
+-- one-liner + lifetime flavor (wins / coins made), then the action buttons.
+local SHEET_WIDTH = 380
+local SHEET_HEIGHT = 360
+local SHEET_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
+local SHEET_HEADER_HEIGHT = 44
+local SHEET_XP_TOP = 56 -- y of the XP bar block
+local SHEET_XP_HEIGHT = 28 -- XP bar block height
+local SHEET_XP_FILL_HEIGHT = 14 -- the filled track inside the XP block
+local SHEET_STATS_TOP = 100 -- y of the HP/Power stat row
+local SHEET_STATS_HEIGHT = 40
+local SHEET_EFFECT_TOP = 152 -- y of the effect one-liner
+local SHEET_EFFECT_HEIGHT = 28
+local SHEET_FLAVOR_TOP = 184 -- y of the wins / coins-made line
+local SHEET_FLAVOR_HEIGHT = 26
+local SHEET_ACTIONS_HEIGHT = 52 -- height of the bottom action-button row (>=44px)
+local SHEET_ACTION_GAP = 12 -- gap between the two action buttons
+local SHEET_DIVIDER_HEIGHT = 2 -- thin divider rule between sections
 
 -- MOBILE BAG TOGGLE: an on-screen button that opens/closes the inventory panel
 -- (same path as the B key). Anchored bottom-RIGHT but offset UP so it clears
@@ -247,7 +274,8 @@ local panel = apply(Instance.new("Frame"), {
     Parent = screen,
 }, { corner(20), stroke(Color.Stroke, 3), padding(14) })
 
-apply(Instance.new("TextLabel"), {
+-- Title doubles as the count header: "🎒 Brainrots (N/cap)".
+local titleLabel = apply(Instance.new("TextLabel"), {
     Name = "Title",
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(0, 0),
@@ -256,21 +284,7 @@ apply(Instance.new("TextLabel"), {
     TextColor3 = Color.Text,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "INVENTORY",
-    ZIndex = 21,
-    Parent = panel,
-})
-
-local countLabel = apply(Instance.new("TextLabel"), {
-    Name = "Count",
-    BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(0, 44),
-    Size = UDim2.new(1, 0, 0, 24),
-    FontFace = Font.Bold,
-    TextColor3 = Color.TextDim,
-    TextScaled = true,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "0 caught",
+    Text = "🎒 Brainrots (0)",
     ZIndex = 21,
     Parent = panel,
 })
@@ -303,78 +317,148 @@ local list = apply(Instance.new("ScrollingFrame"), {
     Parent = panel,
 }, { corner(12), padding(8) })
 
-apply(Instance.new("UIListLayout"), {
-    FillDirection = Enum.FillDirection.Vertical,
+-- GRID: cards reflow across the panel width and wrap to new rows; the scroll +
+-- AutomaticCanvasSize handle many monsters. Centered horizontally so a partial
+-- last row stays balanced.
+apply(Instance.new("UIGridLayout"), {
+    CellSize = UDim2.fromOffset(CARD_SIZE, CARD_SIZE),
+    CellPadding = UDim2.fromOffset(CARD_GAP, CARD_GAP),
+    FillDirection = Enum.FillDirection.Horizontal,
+    HorizontalAlignment = Enum.HorizontalAlignment.Center,
     SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 6),
     Parent = list,
 })
 
+-- Empty-state label is a SIBLING of the grid (parented to the panel, not `list`)
+-- so the UIGridLayout never tries to size it into an 84px cell. Centered over the
+-- scroll area; shown only when the bag is empty.
 local emptyLabel = apply(Instance.new("TextLabel"), {
     Name = "Empty",
     BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 0, 40),
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.new(0.5, 0, 0, 92),
+    Size = UDim2.new(1, -16, 0, 40),
     FontFace = Font.Bold,
     TextColor3 = Color.TextDim,
     TextScaled = true,
     Text = "Empty — go catch some!",
     Visible = false,
-    ZIndex = 21,
-    Parent = list,
+    ZIndex = 22,
+    Parent = panel,
 })
 
--- A reusable trove for the rendered rows so we cleanly clear + rebuild each update.
-local rowsTrove = rootTrove:Extend()
+-- A reusable trove for the rendered cards so we cleanly clear + rebuild each update.
+local cardsTrove = rootTrove:Extend()
 
--- Build one creature row into `parent`: emoji + name + color-coded personality
--- badge. Shared by the read-only INVENTORY panel and the tappable PLACE MENU.
---   * `trove` owns the row (so the caller controls its lifetime).
---   * `zBase` is the row's ZIndex (children sit at zBase+1).
---   * `onTap` (optional) makes the whole row a TextButton; tapping calls it. When
---     nil, the row is a plain Frame (read-only inventory view).
---   * `onSummon` (optional) adds a small "⚔ Summon" button before the badge
---     (used only by the read-only INVENTORY panel rows). Tapping it calls onSummon.
+-- Build one tappable GRID CARD into `parent` (the inventory grid): a square,
+-- personality-COLOR tile with the personality EMOJI, its short name, and a ⭐ Lv N
+-- badge. The whole card is a TextButton; tapping it calls `onTap` (which opens the
+-- stat sheet for this item). `trove` owns the card so the caller controls lifetime;
+-- `zBase` is the card's ZIndex (children sit at zBase+1). Cards are display-only —
+-- the actual Summon/Deploy actions live in the stat sheet.
+local function buildCard(
+    parent: Instance,
+    trove: typeof(rootTrove),
+    item: DemoClient.InventoryItem,
+    order: number,
+    zBase: number,
+    onTap: () -> ()
+)
+    local theme = UITheme.personality(item.personality)
+    local childZ = zBase + 1
+
+    local card = trove:Add(apply(Instance.new("TextButton"), {
+        Name = "Card",
+        LayoutOrder = order,
+        AutoButtonColor = true,
+        Text = "",
+        BackgroundColor3 = theme.color,
+        BorderSizePixel = 0,
+        ZIndex = zBase,
+        Parent = parent,
+    }, { corner(12), stroke(Color.Stroke, 2), padding(4) }))
+    trove:Add(card.Activated:Connect(onTap))
+
+    -- Big personality emoji at the top of the card.
+    apply(Instance.new("TextLabel"), {
+        Name = "Emoji",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.new(1, 0, 0, CARD_EMOJI_HEIGHT),
+        FontFace = Font.Regular,
+        TextColor3 = Color.TextOnBright,
+        TextScaled = true,
+        Text = theme.emoji,
+        ZIndex = childZ,
+        Parent = card,
+    })
+
+    -- Personality short name under the emoji.
+    apply(Instance.new("TextLabel"), {
+        Name = "Name",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, CARD_EMOJI_HEIGHT),
+        Size = UDim2.new(1, 0, 0, CARD_NAME_HEIGHT),
+        FontFace = Font.Heavy,
+        TextColor3 = Color.TextOnBright,
+        TextScaled = true,
+        Text = string.upper(item.personality),
+        ZIndex = childZ,
+        Parent = card,
+    })
+
+    -- ⭐ Lv N badge pinned to the card bottom.
+    apply(Instance.new("TextLabel"), {
+        Name = "Level",
+        AnchorPoint = Vector2.new(0.5, 1),
+        Position = UDim2.fromScale(0.5, 1),
+        Size = UDim2.new(1, 0, 0, CARD_BADGE_HEIGHT),
+        BackgroundColor3 = Color.Panel,
+        BackgroundTransparency = 0.15,
+        FontFace = Font.Bold,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        Text = string.format("⭐ Lv%d", item.level),
+        ZIndex = childZ,
+        Parent = card,
+    }, { corner(6) })
+end
+
+-- Build one creature ROW into `parent` (used by the PLACE MENU, which keeps its
+-- list style): emoji + name + color-coded personality badge. Tappable; `onTap`
+-- fires on tap. `trove` owns the row; `zBase` is the row ZIndex (children +1).
+local PLACE_ROW_HEIGHT = 56
+local PLACE_ROW_BADGE_WIDTH = 78
+local PLACE_ROW_BADGE_GAP = 6
 local function buildRow(
     parent: Instance,
     trove: typeof(rootTrove),
     item: DemoClient.InventoryItem,
     order: number,
     zBase: number,
-    onTap: (() -> ())?,
-    onSummon: (() -> ())?
+    onTap: () -> ()
 )
     local theme = UITheme.personality(item.personality)
     local childZ = zBase + 1
-    -- Reserve horizontal space for the Summon button when present so the Name
-    -- never overlaps it.
-    local summonReserve = if onSummon then ROW_SUMMON_WIDTH + ROW_SUMMON_GAP else 0
 
-    local rowProps = {
+    local row = trove:Add(apply(Instance.new("TextButton"), {
         Name = "Row",
         LayoutOrder = order,
-        Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
+        AutoButtonColor = true,
+        Text = "",
+        Size = UDim2.new(1, 0, 0, PLACE_ROW_HEIGHT),
         BackgroundColor3 = Color.PanelLight,
         BorderSizePixel = 0,
         ZIndex = zBase,
         Parent = parent,
-    }
-
-    local row: Instance
-    if onTap then
-        rowProps.AutoButtonColor = true
-        local button = trove:Add(apply(Instance.new("TextButton"), rowProps, { corner(10), padding(6) }))
-        button.Text = ""
-        trove:Add(button.Activated:Connect(onTap))
-        row = button
-    else
-        row = trove:Add(apply(Instance.new("Frame"), rowProps, { corner(10), padding(6) }))
-    end
+    }, { corner(10), padding(6) }))
+    trove:Add(row.Activated:Connect(onTap))
 
     apply(Instance.new("TextLabel"), {
         Name = "Emoji",
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(0, ROW_HEIGHT - 12, 1, 0),
+        Size = UDim2.new(0, PLACE_ROW_HEIGHT - 12, 1, 0),
         FontFace = Font.Regular,
         TextColor3 = Color.Text,
         TextScaled = true,
@@ -387,45 +471,22 @@ local function buildRow(
         Name = "Name",
         BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.new(0, ROW_HEIGHT, 0.5, 0),
-        Size = UDim2.new(1, -ROW_HEIGHT - ROW_BADGE_WIDTH - ROW_BADGE_GAP - summonReserve, 1, -12),
+        Position = UDim2.new(0, PLACE_ROW_HEIGHT, 0.5, 0),
+        Size = UDim2.new(1, -PLACE_ROW_HEIGHT - PLACE_ROW_BADGE_WIDTH - PLACE_ROW_BADGE_GAP, 1, -12),
         FontFace = Font.Bold,
         TextColor3 = Color.Text,
         TextScaled = true,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Text = item.name,
+        Text = string.format("%s Brainrot  ⭐ Lv%d", string.upper(item.personality), item.level),
         ZIndex = childZ,
         Parent = row,
     })
 
-    -- COMBAT (Tahap 2): the "⚔ Summon" button (inventory rows only). Sits just to
-    -- the LEFT of the right-edge badge. Tapping it summons this Brainrot as a
-    -- temporary fighter (the server validates ownership; the bag is NOT consumed).
-    if onSummon then
-        local summonButton = trove:Add(apply(Instance.new("TextButton"), {
-            Name = "Summon",
-            AnchorPoint = Vector2.new(1, 0.5),
-            Position = UDim2.new(1, -(ROW_BADGE_WIDTH + ROW_SUMMON_GAP), 0.5, 0),
-            Size = UDim2.fromOffset(ROW_SUMMON_WIDTH, ROW_SUMMON_HEIGHT),
-            AutoButtonColor = true,
-            BackgroundColor3 = Color.Collect,
-            BorderSizePixel = 0,
-            FontFace = Font.Heavy,
-            TextColor3 = Color.TextOnBright,
-            TextScaled = true,
-            Text = "⚔ Summon",
-            ZIndex = childZ,
-            Parent = row,
-        }, { corner(8), padding(6) }))
-        trove:Add(summonButton.Activated:Connect(onSummon))
-    end
-
-    -- Personality badge sits at the right edge.
     apply(Instance.new("TextLabel"), {
         Name = "Badge",
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.fromScale(1, 0.5),
-        Size = UDim2.fromOffset(ROW_BADGE_WIDTH, ROW_HEIGHT - 18),
+        Size = UDim2.fromOffset(PLACE_ROW_BADGE_WIDTH, PLACE_ROW_HEIGHT - 18),
         BackgroundColor3 = theme.color,
         BorderSizePixel = 0,
         FontFace = Font.Heavy,
@@ -438,25 +499,348 @@ local function buildRow(
 end
 
 -- ════════════════════════════════════════════════════════════════════════════
--- RENDER
+-- STAT SHEET (per-monster detail modal) — opened by tapping an inventory card.
+-- Minimalist: header (emoji + name + ⭐ Lv + ✕), XP bar, HP/Power row, the effect
+-- one-liner + lifetime flavor (wins / coins made), then ⚔ Summon / ▶ Deploy.
+-- All data comes from the item payload; the effect text comes from DemoConfig.
+-- ════════════════════════════════════════════════════════════════════════════
+local ROSTER_CAP = DemoConfig.rosterCap
+local STAND_COUNT = DemoConfig.showroom.showroomStandCount
+local MAX_LEVEL = DemoConfig.progression.maxLevel
+
+-- Build the one-line EFFECT string for a personality, client-side from DemoConfig:
+-- a short coin/combat hint derived from prodMult, plus the flavor blurb. Kept to
+-- one line. Display-only — the server owns the actual multipliers.
+local function effectLine(personality: string): string
+    local def = DemoConfig.personalities[personality]
+    if not def then
+        return "A mysterious Brainrot."
+    end
+    local mult = def.prodMult or 1
+    local pct = math.floor((mult - 1) * 100 + 0.5)
+    local hint: string
+    if pct > 0 then
+        hint = string.format("+%d%% coins, hits ~%.1f×", pct, mult)
+    elseif pct < 0 then
+        hint = string.format("%d%% coins, hits ~%.1f×", pct, mult)
+    else
+        hint = "steady coins & damage"
+    end
+    return string.format("%s — %s", hint, def.blurb or "")
+end
+
+-- Full-screen backdrop: dims the scene + closes the sheet when tapped outside.
+local sheetBackdrop = apply(Instance.new("TextButton"), {
+    Name = "SheetBackdrop",
+    Visible = false,
+    Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = Color.Backdrop,
+    BackgroundTransparency = 0.4,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Text = "",
+    ZIndex = 50,
+    Parent = screen,
+})
+
+-- The sheet panel itself (a TextButton so taps on it are absorbed and do NOT fall
+-- through to the backdrop, which would close it). The no-op handler is intentional.
+local sheetPanel = apply(Instance.new("TextButton"), {
+    Name = "StatSheet",
+    AutoButtonColor = false,
+    Text = "",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(SHEET_WIDTH, SHEET_HEIGHT),
+    BackgroundColor3 = Color.Panel,
+    BorderSizePixel = 0,
+    ZIndex = 51,
+    Parent = sheetBackdrop,
+}, { corner(20), stroke(Color.Stroke, 3), padding(14) })
+
+-- Header: emoji + name on the left, ⭐ Lv badge, then the ✕ close button.
+local sheetHeader = apply(Instance.new("TextLabel"), {
+    Name = "Header",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, 0),
+    Size = UDim2.new(1, -(SHEET_CLOSE_SIZE + 8), 0, SHEET_HEADER_HEIGHT),
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "🔥 HYPER  ⭐ Lv1",
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+local sheetClose = apply(Instance.new("TextButton"), {
+    Name = "Close",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.fromScale(1, 0),
+    Size = UDim2.fromOffset(SHEET_CLOSE_SIZE, SHEET_CLOSE_SIZE),
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "✕",
+    ZIndex = 53,
+    Parent = sheetPanel,
+}, { corner(10), padding(8) })
+
+-- XP bar: a track with a filled portion = xp / xpToNext, plus the fraction label.
+local sheetXpTrack = apply(Instance.new("Frame"), {
+    Name = "XpTrack",
+    AnchorPoint = Vector2.new(0, 0.5),
+    Position = UDim2.fromOffset(0, SHEET_XP_TOP + SHEET_XP_HEIGHT / 2),
+    Size = UDim2.new(0.55, 0, 0, SHEET_XP_FILL_HEIGHT),
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    ZIndex = 52,
+    Parent = sheetPanel,
+}, { corner(8) })
+
+local sheetXpFill = apply(Instance.new("Frame"), {
+    Name = "XpFill",
+    Position = UDim2.fromScale(0, 0),
+    Size = UDim2.fromScale(0, 1),
+    BackgroundColor3 = Color.Collect,
+    BorderSizePixel = 0,
+    ZIndex = 53,
+    Parent = sheetXpTrack,
+}, { corner(8) })
+
+local sheetXpLabel = apply(Instance.new("TextLabel"), {
+    Name = "XpLabel",
+    BackgroundTransparency = 1,
+    AnchorPoint = Vector2.new(1, 0.5),
+    Position = UDim2.new(1, 0, 0, SHEET_XP_TOP + SHEET_XP_HEIGHT / 2),
+    Size = UDim2.new(0.4, 0, 0, SHEET_XP_HEIGHT),
+    FontFace = Font.Bold,
+    TextColor3 = Color.TextDim,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Right,
+    Text = "XP 0 / 100",
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+-- Divider above the stat row.
+apply(Instance.new("Frame"), {
+    Name = "Divider1",
+    Position = UDim2.fromOffset(0, SHEET_STATS_TOP - 8),
+    Size = UDim2.new(1, 0, 0, SHEET_DIVIDER_HEIGHT),
+    BackgroundColor3 = Color.Stroke,
+    BorderSizePixel = 0,
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+-- HP / Power stat row (two halves).
+local sheetHp = apply(Instance.new("TextLabel"), {
+    Name = "Hp",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, SHEET_STATS_TOP),
+    Size = UDim2.new(0.5, 0, 0, SHEET_STATS_HEIGHT),
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "❤️ HP 100",
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+local sheetPower = apply(Instance.new("TextLabel"), {
+    Name = "Power",
+    BackgroundTransparency = 1,
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, 0, 0, SHEET_STATS_TOP),
+    Size = UDim2.new(0.5, 0, 0, SHEET_STATS_HEIGHT),
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Right,
+    Text = "⚔️ Power 12",
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+-- Effect one-liner.
+local sheetEffect = apply(Instance.new("TextLabel"), {
+    Name = "Effect",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, SHEET_EFFECT_TOP),
+    Size = UDim2.new(1, 0, 0, SHEET_EFFECT_HEIGHT),
+    FontFace = Font.Bold,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "😜 Hyper — +30% coins, hits ~1.3×",
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+-- Lifetime flavor: wins (left) + coins made (right).
+local sheetWins = apply(Instance.new("TextLabel"), {
+    Name = "Wins",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, SHEET_FLAVOR_TOP),
+    Size = UDim2.new(0.5, 0, 0, SHEET_FLAVOR_HEIGHT),
+    FontFace = Font.Bold,
+    TextColor3 = Color.TextDim,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "🏆 0 menang",
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+local sheetCoins = apply(Instance.new("TextLabel"), {
+    Name = "CoinsMade",
+    BackgroundTransparency = 1,
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, 0, 0, SHEET_FLAVOR_TOP),
+    Size = UDim2.new(0.5, 0, 0, SHEET_FLAVOR_HEIGHT),
+    FontFace = Font.Bold,
+    TextColor3 = Color.Coin,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Right,
+    Text = "🪙 0 dibuat",
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+-- Divider above the actions.
+apply(Instance.new("Frame"), {
+    Name = "Divider2",
+    AnchorPoint = Vector2.new(0, 1),
+    Position = UDim2.new(0, 0, 1, -(SHEET_ACTIONS_HEIGHT + 8)),
+    Size = UDim2.new(1, 0, 0, SHEET_DIVIDER_HEIGHT),
+    BackgroundColor3 = Color.Stroke,
+    BorderSizePixel = 0,
+    ZIndex = 52,
+    Parent = sheetPanel,
+})
+
+-- Action buttons (finger-sized, >=44px): ⚔ Summon (left) / ▶ Deploy (right).
+local sheetSummon = apply(Instance.new("TextButton"), {
+    Name = "SummonBtn",
+    AnchorPoint = Vector2.new(0, 1),
+    Position = UDim2.fromScale(0, 1),
+    Size = UDim2.new(0.5, -SHEET_ACTION_GAP / 2, 0, SHEET_ACTIONS_HEIGHT),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color.Collect,
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.TextOnBright,
+    TextScaled = true,
+    Text = "⚔ Summon",
+    ZIndex = 52,
+    Parent = sheetPanel,
+}, { corner(12), padding(8) })
+
+local sheetDeploy = apply(Instance.new("TextButton"), {
+    Name = "DeployBtn",
+    AnchorPoint = Vector2.new(1, 1),
+    Position = UDim2.fromScale(1, 1),
+    Size = UDim2.new(0.5, -SHEET_ACTION_GAP / 2, 0, SHEET_ACTIONS_HEIGHT),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color.CrateButton,
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "▶ Deploy",
+    ZIndex = 52,
+    Parent = sheetPanel,
+}, { corner(12), padding(8) })
+
+-- The item the sheet is currently showing (so the action buttons act on it).
+local sheetItem: DemoClient.InventoryItem? = nil
+
+local function closeSheet()
+    sheetBackdrop.Visible = false
+    sheetItem = nil
+end
+
+-- Paint the sheet for `item` and show it. Pure presentation from the payload +
+-- DemoConfig (effect text); no server reads.
+local function openSheet(item: DemoClient.InventoryItem)
+    sheetItem = item
+    local theme = UITheme.personality(item.personality)
+
+    sheetHeader.Text = string.format("%s %s  ⭐ Lv%d", theme.emoji, string.upper(item.personality), item.level)
+
+    -- XP bar: fill = xp / xpToNext clamped 0..1; "MAX" at the level ceiling.
+    if item.level >= MAX_LEVEL then
+        sheetXpFill.Size = UDim2.fromScale(1, 1)
+        sheetXpLabel.Text = "MAX"
+    else
+        local denom = if item.xpToNext > 0 then item.xpToNext else 1
+        local frac = math.clamp(item.xp / denom, 0, 1)
+        sheetXpFill.Size = UDim2.fromScale(frac, 1)
+        sheetXpLabel.Text = string.format("XP %d / %d", item.xp, item.xpToNext)
+    end
+
+    sheetHp.Text = string.format("❤️ HP %d", item.hp)
+    sheetPower.Text = string.format("⚔️ Power %d", item.power)
+    sheetEffect.Text = string.format("%s %s", theme.emoji, effectLine(item.personality))
+    sheetWins.Text = string.format("🏆 %d menang", item.wins)
+    sheetCoins.Text = string.format("🪙 %d dibuat", item.coinsMade)
+
+    sheetBackdrop.Visible = true
+end
+
+rootTrove:Add(sheetClose.Activated:Connect(closeSheet))
+rootTrove:Add(sheetBackdrop.Activated:Connect(closeSheet))
+
+-- ⚔ Summon: send THIS Brainrot (by roster id) out to auto-battle, then close.
+rootTrove:Add(sheetSummon.Activated:Connect(function()
+    local item = sheetItem
+    if not item then
+        return
+    end
+    print("[Combat][ui] summon " .. item.personality .. " id=" .. item.id)
+    DemoClient.summon(item.id)
+    closeSheet()
+end))
+
+-- ▶ Deploy: reuse the existing deploy path. The current flow deploys a personality
+-- onto a SPECIFIC stand index; from the sheet there is no chosen podium, so we
+-- sweep every stand index and let the SERVER place it on the first FREE one (it
+-- silently rejects occupied/duplicate stands + rate-limits, so this stays safe and
+-- server-authoritative — the client never tracks occupancy). Then close the sheet.
+rootTrove:Add(sheetDeploy.Activated:Connect(function()
+    local item = sheetItem
+    if not item then
+        return
+    end
+    print("[Deploy][ui] deploy-from-sheet " .. item.personality)
+    for standIndex = 1, STAND_COUNT do
+        DemoClient.deployToStand(standIndex, item.personality)
+    end
+    closeSheet()
+end))
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- RENDER (grid of cards)
 -- ════════════════════════════════════════════════════════════════════════════
 local function render(inventory: DemoClient.Inventory)
-    rowsTrove:Clean()
+    cardsTrove:Clean()
 
     local n = #inventory
     print(("[Inv][ui] render count=%d"):format(n))
     inventoryButton.Text = string.format("🎒 INVENTORY (%d)", n)
-    countLabel.Text = if n == 1 then "1 caught" else string.format("%d caught", n)
+    titleLabel.Text = string.format("🎒 Brainrots (%d/%d)", n, ROSTER_CAP)
 
     emptyLabel.Visible = n == 0
     for i, item in inventory do
-        -- Read-only inventory rows (no onTap): placement happens via the podium
-        -- Place (F) prompt -> place menu, not from this panel. The row DOES get a
-        -- "⚔ Summon" button (Tahap 2) to send this Brainrot out to auto-battle.
-        local personality = item.personality
-        buildRow(list, rowsTrove, item, i, 22, nil, function()
-            print("[Combat][ui] summon " .. personality)
-            DemoClient.summon(personality)
+        -- Each card is tap-to-open: tapping opens the STAT SHEET for this item,
+        -- where the Summon / Deploy actions live.
+        buildCard(list, cardsTrove, item, i, 22, function()
+            print("[Inv][ui] open sheet " .. item.personality .. " id=" .. item.id)
+            openSheet(item)
         end)
     end
 end

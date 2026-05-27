@@ -349,9 +349,15 @@ return {
         -- WalkSpeed applied to a summoned fighter (a touch faster than the wild
         -- walkSpeed=6 so it can close distance). Range: 1-24 | Default: 10
         fighterWalkSpeed = 10,
-        -- Fighter starting/Max HP (matches the wild MaxHealth of 100 so fights are
-        -- readable on the built-in health bar). Range: 1-1000 | Default: 100
-        fighterMaxHP = 100,
+        -- Fighter Lv1 BASE Max HP (the level-1 baseline; the actual summoned HP is
+        -- this scaled by progression.levelScale(level) — see PROGRESSION below).
+        -- Matches the wild MaxHealth of 100 so a Lv1 fight reads cleanly on the
+        -- built-in health bar. Range: 1-1000 | Default: 100
+        fighterBaseHP = 100,
+        -- Wild Brainrot Max HP (the wild Humanoid MaxHealth). Wilds are treated as
+        -- level 1 for now, so this is also their effective HP. Kept here for
+        -- symmetry with fighterBaseHP. Range: 1-1000 | Default: 100
+        wildBaseHP = 100,
         -- Distance (studs) at which a fighter stops chasing and starts dealing
         -- damage to the wild it is engaging. Range: 2-16 | Default: 6
         attackRangeStuds = 6,
@@ -359,9 +365,11 @@ return {
         -- engaged. Drives both the seek cadence and the damage cadence.
         -- Range: 0.1-2 | Default: 0.5
         combatTickSec = 0.5,
-        -- Damage the FIGHTER deals to the wild per combat tick (before any
-        -- personality scale). Range: 1-100 | Default: 12
-        fighterDamagePerTick = 12,
+        -- Fighter Lv1 BASE damage to the wild per combat tick (the level-1
+        -- baseline; the actual per-tick damage is this scaled by
+        -- progression.levelScale(level) and then by personality — see PROGRESSION).
+        -- Range: 1-100 | Default: 12
+        fighterBaseDamagePerTick = 12,
         -- Damage the WILD deals back to the fighter per combat tick (before any
         -- personality scale). Lower than the fighter's so summoning usually wins
         -- a 1v1 but is not free. Range: 1-100 | Default: 6
@@ -384,6 +392,27 @@ return {
         -- so a Hyper fighter hits ~1.3x and a Lazy one ~0.5x (reuses the existing
         -- production multiplier as a combat flavor knob). Boolean | Default: true
         personalityDamageScales = true,
+    },
+
+    -- ── PROGRESSION (LEVEL / XP — battle-gdd v1.2 F2) ────────────────────────
+    -- XP comes ONLY from WINNING battles; LEVEL boosts ONLY combat stats
+    -- (HP / ATK / damage), NEVER coin production (production stays personality-
+    -- only). XP + level persist on the individual roster entry (the data fields
+    -- already exist — see Schema.newBrainrot mints level=1, xp=0).
+    progression = {
+        -- XP a fighter's specific Brainrot gains each time it defeats a wild.
+        -- Range: 1-1000 | Default: 50
+        xpPerWin = 50,
+        -- XP curve base. xpToNext(level) = xpCurveBase * level, so Lv1->2 = 100,
+        -- Lv2->3 = 200, Lv3->4 = 300, … (linearly steeper). Range: 10-1000 | Default: 100
+        xpCurveBase = 100,
+        -- Per-level combat-stat growth (battle-gdd F2): a stat at `level` is
+        -- base * (1 + statGrowthPerLevel * (level - 1)). 0.08 = +8% per level.
+        -- Range: 0.0-1.0 | Default: 0.08
+        statGrowthPerLevel = 0.08,
+        -- Hard level ceiling (battle-gdd F2). A Brainrot never levels past this.
+        -- Range: 1-1000 | Default: 100
+        maxLevel = 100,
     },
 
     -- ── CLIENT-ONLY COSMETICS (display values; server never reads these) ─────
