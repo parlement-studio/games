@@ -109,6 +109,11 @@ type FighterRecord = {
     nextSeekAt: number,
     despawnAt: number,
     engaged: Model?,
+    -- FORMATION JITTER (follow liveliness): a small random horizontal offset
+    -- added to this fighter's formation slot, re-rolled every followJitterPeriodSec
+    -- (os.clock() deadline in `jitterAt`) so idle following shuffles subtly.
+    jitterOffset: Vector3,
+    jitterAt: number,
 }
 
 type PlayerState = {
@@ -908,6 +913,80 @@ local function fighterMaxHP(level: number): number
     return math.round(COMBAT.fighterBaseHP * levelScale(level))
 end
 
+-- FOLLOW FORMATION: a fighter is "living" (counts toward a formation slot) iff
+-- its model is still present AND its Humanoid is alive. Used to assign each active
+-- fighter a DISTINCT slot index (order) among its owner's currently-living squad.
+local function isLivingFighter(record: FighterRecord): boolean
+    local model = record.model
+    if not model or model.Parent == nil then
+        return false
+    end
+    local humanoid = model:FindFirstChildWhichIsA("Humanoid")
+    return humanoid ~= nil and humanoid.Health > 0
+end
+
+-- FOLLOW FORMATION: compute this fighter's (orderIndex, count) among the owner's
+-- currently-living fighters — orderIndex is 0-based (its position counting only
+-- living ones), count is the number of living fighters. Recomputed each follow
+-- tick; a reshuffle when one is removed is acceptable (slots simply re-pack).
+local function formationOrder(state: PlayerState, record: FighterRecord): (number, number)
+    local orderIndex = 0
+    local count = 0
+    local seenSelf = false
+    for _, other in state.fighters do
+        if isLivingFighter(other) then
+            if other == record then
+                orderIndex = count
+                seenSelf = true
+            end
+            count += 1
+        end
+    end
+    if not seenSelf then
+        -- This fighter is not (yet) counted living (e.g. mid-spawn): treat as the
+        -- last slot of a squad that includes it so it still fans out distinctly.
+        orderIndex = count
+        count += 1
+    end
+    return orderIndex, count
+end
+
+-- FOLLOW FORMATION: the BEHIND-the-player direction for slot `orderIndex` of `count`
+-- fighters, fanned evenly across COMBAT.followSpreadDegrees and centered behind the
+-- player. `behind` is the flattened (XZ) behind-vector (-LookVector); if it is zero
+-- (facing unavailable) a fixed world fallback is used so slots still spread. Returns
+-- a unit direction on the XZ plane.
+local FORMATION_FALLBACK_DIR = Vector3.new(0, 0, 1) -- world +Z when facing is unknown
+local function formationDir(behind: Vector3, orderIndex: number, count: number): Vector3
+    local baseDir = if behind.Magnitude > 1e-4 then behind.Unit else FORMATION_FALLBACK_DIR
+    -- angle_i = (i - (n-1)/2) * (spread / max(1, n-1)); n==1 -> 0 (straight behind).
+    local step = COMBAT.followSpreadDegrees / math.max(1, count - 1)
+    local angleDeg = (orderIndex - (count - 1) / 2) * step
+    local angleRad = math.rad(angleDeg)
+    -- Rotate baseDir around the Y axis by angleRad (XZ-plane rotation).
+    local cos = math.cos(angleRad)
+    local sin = math.sin(angleRad)
+    local x = baseDir.X * cos - baseDir.Z * sin
+    local z = baseDir.X * sin + baseDir.Z * cos
+    return Vector3.new(x, 0, z)
+end
+
+-- COMBAT RING: the per-fighter slot position on a ring AROUND a target wild, so
+-- 2+ fighters attacking the SAME wild spread out instead of stacking on its exact
+-- position. The owner's living fighters are distributed evenly across a FULL circle
+-- using their formation order (i of n): angle_i = (2*pi / max(1, n)) * i. The slot
+-- is flattened to the XZ plane around the target (target X/Z + ringDir * radius) and
+-- keeps the FIGHTER's own Y so MoveTo behaves normally. Because the ring radius is
+-- < attackRangeStuds, a fighter at its slot stays within attack range and keeps
+-- dealing damage. `targetPos` is the target wild's root position; `fighterY` is the
+-- fighter root's current Y.
+local function combatRingSlot(state: PlayerState, record: FighterRecord, targetPos: Vector3, fighterY: number): Vector3
+    local orderIndex, count = formationOrder(state, record)
+    local angle = (2 * math.pi / math.max(1, count)) * orderIndex
+    local ringDir = Vector3.new(math.cos(angle), 0, math.sin(angle))
+    return Vector3.new(targetPos.X, fighterY, targetPos.Z) + ringDir * COMBAT.combatRingRadiusStuds
+end
+
 -- Resolve a fighter's Humanoid + root, or nil if the model is gone/unrigged.
 local function fighterParts(model: Model): (Humanoid?, BasePart?)
     if not model or model.Parent == nil then
@@ -921,11 +1000,16 @@ local function fighterParts(model: Model): (Humanoid?, BasePart?)
     return humanoid, root :: BasePart?
 end
 
--- Find the NEAREST living, present, un-caught, un-engaged-by-others wild creature
--- to `fromPos`. Returns the model + its root, or nil if none is available. A wild
--- already InCombat is still a valid target only for the fighter already on it; we
--- let any fighter engage the nearest free OR same-target wild (combat is shared).
-local function nearestWild(fromPos: Vector3): (Model?, BasePart?)
+-- PET LEASH: find the NEAREST living, present, un-caught wild creature to
+-- `centerPos` that is WITHIN `maxRange` studs of it. The search is PLAYER-CENTERED
+-- + RANGE-LIMITED: callers pass the OWNER PLAYER's character root position as
+-- `centerPos` and `COMBAT.detectionRangeStuds` as `maxRange`, so a summoned fighter
+-- only ever considers wilds inside the player's radius — anything beyond it is
+-- IGNORED (returns nil so the fighter falls back to following the player). Returns
+-- the model + its root, or nil if no wild qualifies inside the radius. Distance is
+-- measured from `centerPos` (the player), NOT the fighter, so a wild that wanders
+-- out of the player's radius (or a player who walks away) naturally drops the target.
+local function nearestWild(centerPos: Vector3, maxRange: number): (Model?, BasePart?)
     local best: Model? = nil
     local bestRoot: BasePart? = nil
     local bestDist = math.huge
@@ -935,8 +1019,9 @@ local function nearestWild(fromPos: Vector3): (Model?, BasePart?)
             local humanoid = model:FindFirstChildWhichIsA("Humanoid")
             local root = model.PrimaryPart
             if humanoid and humanoid.Health > 0 and root then
-                local dist = (root.Position - fromPos).Magnitude
-                if dist < bestDist then
+                local dist = (root.Position - centerPos).Magnitude
+                -- RANGE GATE: reject anything beyond the player's detection radius.
+                if dist <= maxRange and dist < bestDist then
                     bestDist = dist
                     best = model
                     bestRoot = root
@@ -1129,6 +1214,10 @@ local function handleSummon(player: Player, brainrotId: unknown)
         nextSeekAt = 0,
         despawnAt = now + COMBAT.fighterLifetimeSec,
         engaged = nil,
+        -- Start with no jitter; re-rolled on the first follow tick (jitterAt = 0
+        -- forces an immediate roll) and every followJitterPeriodSec thereafter.
+        jitterOffset = Vector3.zero,
+        jitterAt = 0,
     }
     table.insert(state.fighters, record)
     -- The summoned Brainrot is now BUSY (an active fighter): re-derive the bag so
@@ -1179,39 +1268,93 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
         return true
     end
 
-    -- SEEK: (re)find the nearest wild on the seek cadence.
+    -- PET BEHAVIOR: resolve the OWNER PLAYER's character root. If the owner has no
+    -- character (respawning / just left), the fighter IDLES in place this tick — no
+    -- movement, no target, no engagement change (guard against a nil owner character).
+    local character = player.Character
+    local playerRootInst = character and character:FindFirstChild("HumanoidRootPart")
+    local playerRoot = if playerRootInst and playerRootInst:IsA("BasePart") then playerRootInst else nil
+    if not playerRoot then
+        return false -- owner mid-respawn / gone: idle this tick
+    end
+    local playerPos = playerRoot.Position
+
+    -- Helper: drop any current engagement (clear the engaged wild's InCombat so it
+    -- resumes wandering — never leave a wild stuck frozen) and FOLLOW the player in
+    -- FORMATION. Each fighter gets a DISTINCT slot fanned out BEHIND the player so
+    -- 2+ fighters do not stack on one follow point, plus a small re-rolling jitter
+    -- so idle following looks alive. If already within followStopStuds of its OWN
+    -- slot, do nothing (per-slot deadzone — avoids jitter/twitching).
+    local function disengageAndFollow()
+        if record.engaged and record.engaged.Parent ~= nil then
+            record.engaged:SetAttribute("InCombat", nil)
+        end
+        record.engaged = nil
+
+        -- This fighter's slot index among the owner's currently-living squad.
+        local orderIndex, count = formationOrder(state, record)
+
+        -- BEHIND the player = -LookVector flattened to the XZ plane. Fall back to a
+        -- fixed world direction (handled in formationDir) if facing is unavailable.
+        local look = playerRoot.CFrame.LookVector
+        local behind = Vector3.new(-look.X, 0, -look.Z)
+        local dir = formationDir(behind, orderIndex, count)
+
+        -- Slot position = player + fanned-out direction * followDistanceStuds.
+        local slotPos = playerPos + dir * COMBAT.followDistanceStuds
+
+        -- LIVELINESS: re-roll a small horizontal jitter offset every period so the
+        -- fighter shuffles subtly around its slot instead of standing frozen.
+        if now >= record.jitterAt then
+            record.jitterAt = now + COMBAT.followJitterPeriodSec
+            local jAngle = math.random() * 2 * math.pi
+            local jMag = math.random() * COMBAT.followJitterStuds
+            record.jitterOffset = Vector3.new(math.cos(jAngle) * jMag, 0, math.sin(jAngle) * jMag)
+        end
+        slotPos += record.jitterOffset
+
+        -- PER-SLOT DEADZONE: only move if not already at THIS slot (not the player).
+        if (slotPos - root.Position).Magnitude <= COMBAT.followStopStuds then
+            return -- already at its formation slot: idle (no new MoveTo)
+        end
+        humanoid:MoveTo(slotPos)
+    end
+
+    -- SEEK: (re)find the nearest wild on the seek cadence — PLAYER-CENTERED +
+    -- RANGE-LIMITED (only wilds within detectionRangeStuds of the player qualify).
     if now >= record.nextSeekAt then
         record.nextSeekAt = now + COMBAT.seekRetargetSec
-        local wild, wildRoot = nearestWild(root.Position)
+        local wild, wildRoot = nearestWild(playerPos, COMBAT.detectionRangeStuds)
         if wild and wildRoot then
             local dist = (wildRoot.Position - root.Position).Magnitude
             if dist > COMBAT.attackRangeStuds then
-                -- Out of range: clear any prior engagement + chase.
+                -- Valid target but out of attack range: clear a stale engagement +
+                -- chase the target. Move toward this fighter's DISTINCT ring slot
+                -- AROUND the wild (not its exact center) so 2+ fighters approaching
+                -- the same wild fan out instead of converging on one point.
                 if record.engaged and record.engaged ~= wild and record.engaged.Parent ~= nil then
                     record.engaged:SetAttribute("InCombat", nil)
                 end
                 record.engaged = nil
-                humanoid:MoveTo(wildRoot.Position)
+                local slotPos = combatRingSlot(state, record, wildRoot.Position, root.Position.Y)
+                humanoid:MoveTo(slotPos)
             end
         else
-            -- No wild available: idle near the player (gentle wander toward them).
-            if record.engaged and record.engaged.Parent ~= nil then
-                record.engaged:SetAttribute("InCombat", nil)
-            end
-            record.engaged = nil
-            local character = player.Character
-            local charRoot = character and character:FindFirstChild("HumanoidRootPart")
-            if charRoot and charRoot:IsA("BasePart") then
-                humanoid:MoveTo(charRoot.Position)
-            end
+            -- No valid wild in the player's radius: FOLLOW the player (leash).
+            disengageAndFollow()
         end
     end
 
-    -- ENGAGE + EXCHANGE DAMAGE on the combat cadence.
+    -- ENGAGE + EXCHANGE DAMAGE on the combat cadence. Re-evaluated PLAYER-CENTERED
+    -- every tick: a wild that wanders out of detectionRangeStuds (or a player who
+    -- walks away) yields no target here, so the fighter DISENGAGES + follows.
     if now >= record.nextCombatAt then
         record.nextCombatAt = now + COMBAT.combatTickSec
-        local wild, wildRoot = nearestWild(root.Position)
-        if wild and wildRoot then
+        local wild, wildRoot = nearestWild(playerPos, COMBAT.detectionRangeStuds)
+        if not wild or not wildRoot then
+            -- LEASH: nothing valid in range — disengage (clear InCombat) + follow.
+            disengageAndFollow()
+        else
             local dist = (wildRoot.Position - root.Position).Magnitude
             if dist <= COMBAT.attackRangeStuds then
                 local wildHumanoid = wild:FindFirstChildWhichIsA("Humanoid")
@@ -1221,6 +1364,17 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                     wild:SetAttribute("InCombat", true)
                     record.engaged = wild
                     wildHumanoid:MoveTo(wildRoot.Position)
+
+                    -- RING SLOT: settle at this fighter's DISTINCT slot beside the
+                    -- wild rather than stacking on its exact position. The deadzone
+                    -- (followStopStuds) avoids re-issuing MoveTo every tick once the
+                    -- fighter is basically at its slot. Damage below ALWAYS runs while
+                    -- within attackRangeStuds (ring radius < attackRangeStuds keeps it
+                    -- in range), independent of this movement.
+                    local slotPos = combatRingSlot(state, record, wildRoot.Position, root.Position.Y)
+                    if (slotPos - root.Position).Magnitude > COMBAT.followStopStuds then
+                        humanoid:MoveTo(slotPos)
+                    end
 
                     local wildPersonality = personalityFromName(wild.Name) or record.personality
 

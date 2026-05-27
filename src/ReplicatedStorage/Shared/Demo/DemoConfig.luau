@@ -361,6 +361,41 @@ return {
         -- Distance (studs) at which a fighter stops chasing and starts dealing
         -- damage to the wild it is engaging. Range: 2-16 | Default: 6
         attackRangeStuds = 6,
+        -- COMBAT RING: how far (studs) from the TARGET wild each attacking fighter
+        -- stands. When 2+ fighters engage the SAME wild they each take a DISTINCT
+        -- slot on a ring around it (angle from their formation order) instead of
+        -- piling onto the wild's exact position, so they do not stack/clip. MUST be
+        -- < attackRangeStuds so a fighter at its ring slot is still within attack
+        -- range and keeps dealing damage. Range: 1-attackRangeStuds | Default: 4
+        combatRingRadiusStuds = 4,
+        -- PET LEASH: a wild is only a valid target if it is within this distance
+        -- of the OWNER PLAYER's character (HumanoidRootPart) — NOT the fighter's
+        -- position, and NOT unbounded. A summoned Brainrot behaves like a pet: it
+        -- only engages wilds inside this radius centered on the player, and follows
+        -- the player otherwise. Range: 8-120 | Default: 30
+        detectionRangeStuds = 30,
+        -- FOLLOW: when no enemy is in the detection radius, the fighter walks to
+        -- roughly this far from the player so it TRAILS rather than stacking on
+        -- them (the follow point is this far from the player toward the fighter).
+        -- Range: 2-20 | Default: 8
+        followDistanceStuds = 8,
+        -- FOLLOW DEADZONE: if the fighter is already within this of its OWN
+        -- formation slot, it does NOT issue a new follow MoveTo (prevents
+        -- jitter/twitching when already at its slot). Range: 1-15 | Default: 5
+        followStopStuds = 5,
+        -- FORMATION SPREAD (degrees): total arc, centered BEHIND the player,
+        -- across which the active fighters fan out into a little squad so 2+ of
+        -- them do not stack on the same follow point. With 1 fighter the angle is
+        -- 0 (straight behind); with N they spread evenly across this arc.
+        -- Range: 0-180 | Default: 90
+        followSpreadDegrees = 90,
+        -- FORMATION JITTER (studs): magnitude of a small random horizontal offset
+        -- added to each fighter's formation slot so idle following looks organic
+        -- (fighters shuffle subtly instead of standing frozen). Range: 0-6 | Default: 1.5
+        followJitterStuds = 1.5,
+        -- FORMATION JITTER PERIOD (seconds): how often each fighter re-rolls its
+        -- jitter offset. Range: 0.5-10 | Default: 2.0
+        followJitterPeriodSec = 2.0,
         -- Combat tick interval (seconds): one exchange of damage per tick while
         -- engaged. Drives both the seek cadence and the damage cadence.
         -- Range: 0.1-2 | Default: 0.5
