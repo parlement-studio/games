@@ -1,118 +1,115 @@
 # Systems Index — Brainrot Inc.
 
-**Last Updated**: 2026-05-28
+**Version**: 3.0 (Vision Pivot rewrite)
+**Last Updated**: 2026-05-29
 **Author**: game-designer
-**Status**: Draft (pre-production system map)
+**Status**: Locked post-pivot
 
-> **Revision note (2026-05-28):** **Demo-driven scope reconciliation (Phase A + Phase B cross-GDD reconciliation pass complete).** Two MVP systems surfaced by the playable vertical slice (commits `e984677`, `36724cf`, `a71e545`) were added to the system map: **#25 Field Combat / Pet AI** (real-time field combat with summoned Brainrots vs. wild Brainrots — distinct from turn-based Raid Battle) and **#26 Base / Showroom Spatial Layer** (3D pedestal/stand UI wrapper over Idle Production deployment). Also: **#5 Battle scope clarified** as turn-based-Raid-only (field combat is #25); **#8 Evolution extended** with a parallel **Level/XP progression axis** (`xpPerWin`/`xpCurveBase`/`statGrowthPerLevel`/`maxLevel`, from demo `36724cf`) — Level/XP is **combat-only** (does NOT affect idle production rate, locked decision). Summary count 24→26, build order, dependency graphs updated. **Phase B (2026-05-28) reconciliation pass updated 7 existing GDDs** (persistence v1.4 → v1.4.1, personality v1.1 → v1.1.1, battle v1.2 → v1.3, raid unchanged, evolution v1.2 → v1.3, idle-production v1.2 → v1.3, capture v1.2 → v1.3, economy v1.1 → v1.2) with descriptive cross-references — no schema or formula changes outside the documented renames (`statGrowth` → `statGrowthPerLevel`). New GDDs `design/gdd/pet-combat-gdd.md` and `design/gdd/base-showroom-gdd.md` remain planned. **Capture #4 status correction:** demo's crate/encounter usage is **fallback scaffolding for downstream-system testing**, NOT a promotion of fallback to canonical MVP capture — explore-map remains the MVP target (capture-gdd v1.3 §10 status note); #4 status stays "Not started" for explore-map work.
+> **Anchor**: `design/decisions/2026-05-29-vision-pivot.md` — this systems index is the implementation map for the locked vision pivot.
+>
+> **What this index represents**: the **canonical current state** of the game system catalogue post-2026-05-29 vision pivot. Prior versions (v1/v2) tracked an idle-game + NPC-raid + future-PvP vision that has been **superseded**. See git history for prior content; see the Vision Pivot Doc for the audit trail of what changed and why.
 
-> **Revision note (2026-05-26):** Added **Daily Quests** as MVP system **#17** (retention/objective layer). Phase 2 systems renumbered #17–23 → **#18–24**. Summary, build order, dependency graphs, and all by-number cross-references updated.
-
-> **Revision note (2026-05-26):** **Raid Shield (#7) moved MVP → Phase 2** (Raid v1 is offense-only — there is nothing attacking you in v1, so a shield has no function until PvP #18). **System number #7 is retained as a stable identifier** to avoid churn in the many by-number cross-references across the GDDs — only its phase/priority changed (MVP/P2 → Phase 2/P3). Summary counts, build order, and both dependency graphs updated; Defense Rating display stays in Raid v1 (owned by Raid #6).
+> **Revision note (2026-05-29, v3.0 rewrite)**: **Game vision pivot**. New genre: multi-place creature hunter (Pokémon GO + Adopt Me DNA) with idle Kandang economy + 3-tier boss progression + peer-to-peer trade. **5 systems obsoleted** (Battle #5, Raid #6, Raid Shield #7, PvP Raid #18, Revenge #19 — see Cancelled Systems section). **7 new MVP systems** added (World Universe, Kandang, Boss System, Capture v2, Items+Token, Party+Matchmaking, Trade Marketplace). **System numbers retained for stable identifier integrity** — cancelled systems keep their slot with `(CANCELLED)` marker.
 
 ## Summary
 
-- Total systems: 26 (18 MVP, 8 Phase 2)
-- Not started: 22 (includes #4 Capture — demo only ships fallback scaffold, NOT canonical explore-map)
-- In design: 2 (#25 Pet AI — GDD v1.0 drafted 2026-05-29; #26 Showroom — demo-validated, formal GDD pending)
-- In implementation: 2 (#1 Persistence — shipped; #2 Personality — shipped)
-- Implemented: 0
-- Polished: 0
-- Live: 0
+- **Total active MVP systems**: 23 (after restructure)
+- **Active Phase 2 systems**: 3 (Fame, Visit Base, Brain Cells)
+- **Cancelled systems** (post-pivot): 5
+- **Implemented + shipped**: 3 (#1 Persistence, #2 Personality, #9 Economy)
+- **In design** (GDD shipped, code pending): 2 (#25 Pet AI, #26 Kandang/Showroom pending rename)
+- **Not started**: 18
 
-> **Phase B reconciliation (2026-05-28) completed for 7 existing GDDs**: persistence-gdd v1.4.1, personality-gdd v1.1.1, battle-gdd v1.3, evolution-gdd v1.3, idle-production-gdd v1.3, capture-gdd v1.3, economy-gdd v1.2 — all updated with descriptive cross-references to #25 and #26 + the Battle-scope clarification + the Level/XP Axis B documentation. No schema or formula changes outside the documented `statGrowth` → `statGrowthPerLevel` rename. Raid-gdd v1.1 unaffected (turn-based Raid scope unchanged by Pet AI #25 addition).
+**Legend** — Priority tiers: P0 = foundation/blocker, P1 = core MVP, P2 = MVP-supporting, P3 = Phase 2. Risk: L/M/H.
 
-**Legend** — Priority tiers: P0 = foundation/blocker, P1 = core MVP, P2 = MVP-supporting, P3 = Phase 2. Risk: L/M/H. Phase tag in each block.
-
-**World context**: Setting = "The Feed" (internet-as-place). Hub zone = "Downtown Scroll". Raid v1 targets = 4 NPC "Rival Startups" (Grind Corp, Chill Collective, The Glitch Gang, Pivot Ventures); boss-tier rival "Burnout Inc." deferred to Phase 2. See world-bible / Master GDD for narrative detail.
+**World context** (post-pivot): Setting = "The Feed" (internet-as-place). Hub = **Lobby place** (social square, shop, trade, leaderboard, party formation). Players teleport to **Areas** for hunting wild Brainrots + Colony Boss, to **Super Boss zones** for Tier-2 boss encounters, to **Raid Dungeons** for token-gated Tier-3 raids, and to their **Kandang** (private sub-place) for idle production.
 
 ---
 
-## Systems
+## Active Systems (MVP)
 
 ### 1. Data Persistence & Roster Core
-- **Status**: Not started
+- **Status**: ✅ **Shipped** (commit a71e545 + ADR-001/002)
 - **Phase**: MVP
 - **Priority**: P0 (foundation)
 - **Value**: 5 | **Effort**: 4 | **Risk**: H | **Monetization**: 3
-- **GDD**: `design/gdd/persistence-gdd.md` (planned)
+- **GDD**: `design/gdd/persistence-gdd.md` v1.4.1
 - **Depends On**: (none — foundation)
-- **Depended On By**: nearly everything (Personality, Idle Production, Capture, Battle, Raid, Evolution, Economy, Auto-Catch, Reroll, Leaderboard)
-- **Notes**: GUID per Brainrot; roster cap 200; DataStore for owned roster + currency + progression; MemoryStore for ephemeral cross-server state (raid shield, matchmaking pool, raid mailbox). Server-authoritative clock for all idle/shield timers (never trust client time). High risk: schema must be versioned/migratable on day one or every later system inherits debt. Config-driven: cap values, key names, retry/backoff in a Persistence config.
+- **Depended On By**: everything
+- **Notes**: GUID-keyed roster, session locking, schema v1 + migrations, atomic mutation path, txLog idempotency, 8h offline cap. **Vision-pivot extension needed (post-2026-05-29)**: cross-place `TeleportData` handoff design for multi-place architecture (see §27 World Universe). Code intact; documentation extension only.
 
 ### 2. Personality System (PILLAR)
-- **Status**: Not started
+- **Status**: ✅ **Shipped** (commit 6f5d4c6)
 - **Phase**: MVP
 - **Priority**: P0 (pillar — gates flavor of all other systems)
 - **Value**: 5 | **Effort**: 3 | **Risk**: M | **Monetization**: 4
-- **GDD**: `design/gdd/personality-gdd.md` (planned)
-- **Depends On**: Data Persistence (stores personality field per GUID)
-- **Depended On By**: Idle Production, Battle, Raid, Evolution, Moment System, Reroll, Drama Events (P2), Fame (P2)
-- **Notes**: 5 types: Hyper / Lazy / Chaotic / Loyal / Rebel. This is a shared modifier layer, not a self-contained feature — implement as a config-driven trait table (production multipliers, battle behavior hooks) that other systems read. Zero magic numbers: every multiplier (Hyper +30%, Lazy -50%, etc.) lives in a PersonalityConfig table. Build the data + trait-table first; behavior wiring lands as each consumer system is built.
+- **GDD**: `design/gdd/personality-gdd.md` v1.1.1
+- **Depends On**: Data Persistence
+- **Depended On By**: Idle/Kandang, Capture, Pet AI #25 (boss combat — battle behavior tags), Evolution, Reroll
+- **Notes**: 5 personalities (Hyper / Lazy / Chaotic / Loyal / Rebel). Trait table + behavior tag dispatch — survives pivot unchanged. Behavior tags now consumed exclusively by Pet AI #25 (Battle #5 cancelled).
 
-### 3. Idle Production (Online + Offline)
-- **Status**: Not started
-- **Phase**: MVP
-- **Priority**: P1 (core loop)
-- **Value**: 5 | **Effort**: 3 | **Risk**: M | **Monetization**: 4
-- **GDD**: `design/gdd/idle-production-gdd.md` (planned)
-- **Depends On**: Data Persistence, Personality, Economy (deposits Meme Coins)
-- **Depended On By**: Raid (steals uncollected production), Evolution (production milestones), Moment System
-- **Notes**: Online + offline accrual, offline cap 8 hours, server-clock only, pending-collect model (resources accrue into a pending pool, player taps to collect). Personality modifies rate (Hyper faster w/ random breaks, Lazy slower + morale aura, Chaotic 2x/0x per cycle, Loyal steady, Rebel strike risk). All rates/caps config-driven. AFK-safe by design (idle is the default state). Core revenue surface (collection-speed/cap GamePasses later).
-
-### 4. Capture (Explore + Manual Catch)
-- **Status**: Not started
-- **Phase**: MVP
-- **Priority**: P1 (core loop entry point)
-- **Value**: 5 | **Effort**: 5 | **Risk**: H | **Monetization**: 3
-- **GDD**: `design/gdd/capture-gdd.md` (planned)
-- **Depends On**: Data Persistence, Personality (capture assigns/reveals personality)
-- **Depended On By**: Roster growth feeds Idle Production, Battle, Raid, Evolution
-- **Notes**: Single hub zone ("Downtown Scroll") + config-driven spawn table + timing mini-game, server-authoritative resolution (client sends intent, server validates spawn ownership + timing window). **Scope risk (solo dev): exploration-map capture is the single highest-effort MVP item.** Fallback if behind schedule: replace free-roam capture with a "crate/encounter" UI (tap-to-encounter → same timing mini-game) — preserves the personality-reveal moment without map/streaming cost. Flag this decision early (lock by build step 5).
-
-### 5. Battle System (Auto, Turn-Based, Spectatable)
-- **Status**: Not started
-- **Phase**: MVP
-- **Priority**: P1 (core combat, blocks Raid)
-- **Value**: 5 | **Effort**: 4 | **Risk**: H | **Monetization**: 2
-- **GDD**: `design/gdd/battle-gdd.md` (planned)
-- **Depends On**: Data Persistence, Personality (battle modifiers), Roster (combatants)
-- **Depended On By**: Raid (raid uses battle resolution), Evolution (raid-survival milestones)
-- **Notes**: Auto turn-based; player spectates live. Personality drives behavior (Hyper attacks first / 20% mistarget, Lazy berserk-when-last, Chaotic random move, Loyal bodyguard <30% HP, Rebel double-damage counter). Server-authoritative resolution; client is a replay/viewer. All damage/turn formulas config-driven (explicit formula required in GDD, no "calculated appropriately"). Risk H: turn engine + personality hooks + deterministic replay is the most logic-heavy system. **Scope clarification (post-demo, 2026-05-28):** Battle in this GDD is **turn-based, designed for Raid (#6)** vs NPC Rival Startups (deterministic + spectatable replay). It is **NOT** the engine used for real-time hub-world combat against wild Brainrots — that is **Field Combat / Pet AI (#25)**, a separate combat layer with its own GDD. The two coexist: Battle owns Raid combat; Pet AI owns field combat. Both read personality + level + species stats from the same roster entry; only the resolution model (turn-based replay vs real-time tick) differs. Stat-scaling formula `levelScale(L)` is **shared** between both (defined here in Battle §2.1).
-
-### 6. Raid v1 (vs NPC Rival Startups)
-- **Status**: Not started
-- **Phase**: MVP
-- **Priority**: P1 (social engine surrogate at launch)
-- **Value**: 4 | **Effort**: 4 | **Risk**: M | **Monetization**: 3
-- **GDD**: `design/gdd/raid-gdd.md` (planned)
-- **Depends On**: Battle, Personality, Idle Production (loot = % of target's uncollected), Economy (raid cost), Data Persistence + MemoryStore (raid mailbox). *(Raid Shield is NOT an MVP dependency — Raid v1 is offense-only; shield is Phase 2, see #7.)*
-- **Depended On By**: Evolution (raid milestones), Revenge System (P2)
-- **Notes**: v1 targets are config-defined NPC "Rival Startups" (4 at launch: Grind Corp, Chill Collective, The Glitch Gang, Pivot Ventures) — no live PvP yet, which de-risks matchmaking and griefing for launch while still exercising the full battle + loot pipeline. **Raid v1 is offense-only** (you raid NPCs; nothing raids you), so the Raid Shield is deferred to Phase 2 (#7) — but the **Defense Rating display stays in v1** (owned here, Raid #6). Send team of 3, win = steal % of NPC pool (or apply to defense scoring). PvP + Revenge + boss-tier rival (Burnout Inc.) + Raid Shield deferred to Phase 2. Raid cost/loot %/team size config-driven.
-
-### 8. Work-Based Evolution + Level/XP Progression (MVP: 1 evolution stage/personality, level cap 100)
-- **Status**: Partial (Level/XP shipped in demo `36724cf`; work-based evolution not started)
-- **Phase**: MVP
-- **Priority**: P2 (long-term hook)
-- **Value**: 4 | **Effort**: 3 | **Risk**: M | **Monetization**: 2
-- **GDD**: `design/gdd/evolution-gdd.md` (planned — needs extension per 2026-05-28 reconciliation)
-- **Depends On**: Data Persistence (tracks lifetime stats + `level`/`xp` per GUID), Personality, Idle Production / Battle / Raid / Pet AI (milestone + XP sources)
-- **Depended On By**: Moment System (evolution as a moment), Fame (P2), Multi-Branch Evolution (P2)
-- **Notes**: This system now covers **two orthogonal progression axes** (post-demo reconciliation 2026-05-28):
-  - **Axis A — Work-Based Evolution (transformative milestone, one-shot):** single milestone → single evolved stage per personality (e.g., Hyper→Senior Hyper at lifetime production X; Rebel→Revolutionary at N raids survived; Loyal→Guardian at N defends). Flips identity once; visible model/name change. Multi-branch evolution → Phase 2 (#20). Requires lifetime-stat counters wired from day one (cheap now, expensive to backfill).
-  - **Axis B — Level/XP Progression (gradual combat power growth):** per-Brainrot Level/XP system, prototyped in demo `36724cf` (`DemoConfig.progression`: `xpPerWin=50`, `xpCurveBase=100`, `statGrowthPerLevel=0.08`, `maxLevel=100`). XP awarded on battle wins (Raid #6 + Pet AI #25); level-up triggers `levelScale(L) = 1 + statGrowthPerLevel*(L-1)` applied to HP/damage in **both** Battle (#5) and Pet AI (#25) — formula is shared. `level`/`xp` fields persist on `BrainrotEntry`.
-  - **Axes are orthogonal:** Level grows gradually with use (combat power); Evolution flips identity once at a milestone. A Lv50 Hyper that hasn't hit the lifetime-coins threshold is still base-form; a freshly-evolved Senior Hyper might still be Lv1. Both feed the Moment System (#12).
-  - All milestone thresholds + XP curve params config-driven (no magic numbers).
-
-### 9. Economy / Currency (Meme Coins)
-- **Status**: Not started
+### 3. Economy / Currency (Meme Coins)
+- **Status**: ✅ **Shipped** (commit ef5bd88, locked v1.3)
 - **Phase**: MVP
 - **Priority**: P1 (currency backbone)
 - **Value**: 4 | **Effort**: 2 | **Risk**: M | **Monetization**: 4
-- **GDD**: `design/gdd/economy-gdd.md` (planned) — delegate detailed sink/source model to economy-designer
+- **GDD**: `design/gdd/economy-gdd.md` v1.3 — **extension needed** for new sinks (Capture Items, Raid Token DevProduct)
 - **Depends On**: Data Persistence
-- **Depended On By**: Raid (cost), Reroll, Auto-Catch unlock, Shop/Upgrades, Moment System, Leaderboard
-- **Notes**: Single soft currency "Meme Coins" at launch. `gems` field provisioned in schema, default 0, unused at launch (forward-compat, no UI). Premium "Brain Cells" → Phase 2. All earn/spend values config-driven; server-authoritative balance mutations only. Delegate full source/sink tuning to economy-designer.
+- **Depended On By**: Capture v2, Boss System (loot), Reroll, Trade, Kandang upgrades, Auto-Catch, Daily Quests, Pet AI #25
+- **Notes**: Wallet API + faucet/sink discipline + DevProduct ladder + 3 GamePass SKUs all carry forward. **Post-pivot extensions**:
+  - **NEW faucets**: `boss_kill_drop` (item/Brainrot), Pokémon-GO-style `pokestop_reward` if introduced
+  - **NEW sinks**: `capture_item_purchase`, `raid_token_purchase` (DevProduct mirror), `trade_fee` (if Stardust analogue uses coins)
+  - **OBSOLETED**: `raid_loot` faucet + `raid_send` sink (replaced by boss kill drops + token consumption)
+  - **OBSOLETED lock**: `raidLootPct = 0.20` (cancelled — boss raid mechanic different)
+  - Anti-pattern telemetry + wallet pressure curve survive intact (mostly relevant in new context)
+
+### 4. Capture v2 (Item-based instant capture, area-tier)
+- **Status**: Not started (replaces old Capture #4 v1.3 — that GDD will be moved to archive)
+- **Phase**: MVP
+- **Priority**: P1 (core hunt loop)
+- **Value**: 5 | **Effort**: 3 (simpler than old explore-map design) | **Risk**: M | **Monetization**: 4
+- **GDD**: `design/gdd/capture-v2-gdd.md` (planned)
+- **Depends On**: World Universe (#27), Persistence (#1), Personality (#2), Economy (#3, for Capture Items shop)
+- **Depended On By**: Kandang (#26 deployment supply), Boss System (#6 roster combat), Evolution (#8)
+- **Notes**: **New mechanic**: player buys area-tier Capture Items (`Forest Item`, `Cave Item`, `Sky Item`, etc.) from Lobby shop. In an Area sub-place, approach wild Brainrot → use item → **instant capture** (success rate possibly scales with item tier vs Brainrot rarity). **No fight required for capture** — Pet AI is reserved for boss combat only (per Vision Pivot Doc Decision 4). Naming: each area has theme-specific item name. Roster cap = 200 (persistence-owned). Old "explore-map vs crate fallback" tension dissolved — Areas are the explore-map, item-based capture replaces timing minigame.
+- **Open**: capture item success rate formula (flat per-tier vs rarity-scaled); item tier pricing.
+
+### 5. Battle System (CANCELLED)
+- **Status**: ❌ **CANCELLED** (Vision Pivot 2026-05-29) — turn-based combat engine has no remaining use case
+- **GDD**: `design/gdd/battle-gdd.md` v1.3 → `design/gdd/archive/battle-gdd.md` (pending move)
+- **Reason**: All combat in new vision is real-time via Pet AI (#25). Vision Pivot Doc Decision 4 promotes Pet AI to pillar combat engine for all 3 boss tiers; turn-based has no remaining caller.
+- **Carried into Pet AI #25**: Battle's `levelScale(L)` formula, the 5 personality battle tags, knock-out vocabulary lock. These survive in `pet-combat-gdd.md` v1.0 §8.
+
+### 6. Boss System (3-tier, replaces old Raid v1)
+- **Status**: Not started (replaces old Raid #6 v1.2 — that GDD will be moved to archive)
+- **Phase**: MVP
+- **Priority**: P1 (post-capture progression spine)
+- **Value**: 5 | **Effort**: 4 | **Risk**: M | **Monetization**: 3
+- **GDD**: `design/gdd/boss-system-gdd.md` (planned)
+- **Depends On**: Pet AI (#25), World Universe (#27), Capture v2 (#4), Persistence (#1), Economy (#3, loot + tokens), Party System (#29, for co-op tiers)
+- **Depended On By**: Evolution (#8, win milestones), Daily Quests (#17), Moment System (#12), Leaderboard (#16)
+- **Notes**: **3-tier structure** (per Vision Pivot Decision 3):
+  - **Tier 1 — Colony Boss**: spawns in shared Area sub-place alongside regular Brainrots. **Solo-able** (Pet AI summons), co-op bonus rewards (Decision 5). Drops **Rare** Brainrot (chance per kill).
+  - **Tier 2 — Super Boss** (working name `CEO Brainrot` — confirm naming): standalone sub-place per Super Boss, no regular spawns. **Party-instanced** — enter solo or with party, dedicated instance (Decision 6). Drops **Epic** Brainrot (high chance / guaranteed per kill, weekly cooldown TBD).
+  - **Tier 3 — Raid Boss**: token-gated instanced Raid Dungeon. **Solo or party (player choice)**. Token consumed per attempt (Decision 7). Drops **Legendary** Brainrot (unique-to-this-source).
+- **Open**: Super Boss name lock; Colony HP scaling rule; spawn cadence (always-on / scheduled / cooldown); refund-on-fail for tokens.
+
+### 7. Raid Shield (CANCELLED)
+- **Status**: ❌ **CANCELLED** (Vision Pivot 2026-05-29)
+- **GDD**: not authored (was planned, never written)
+- **Reason**: PvP base-raid mechanic cancelled (Vision Pivot Doc Decision context). No defending vs other players → no shield function.
+
+### 8. Work-Based Evolution + Level/XP Progression
+- **Status**: Not started (GDD locked, no code yet)
+- **Phase**: MVP
+- **Priority**: P2 (long-term hook)
+- **Value**: 4 | **Effort**: 3 | **Risk**: M | **Monetization**: 2
+- **GDD**: `design/gdd/evolution-gdd.md` v1.3
+- **Depends On**: Persistence, Personality, **Pet AI #25** (XP source via boss-win), Kandang (lifetime coin milestones)
+- **Depended On By**: Moment System, Phase 2 Multi-Branch Evolution
+- **Notes**: Two orthogonal axes (Axis A work-based milestone + Axis B Level/XP) survive pivot. Level/XP source = boss kills (was raid wins + field combat wins, now both via Pet AI's boss engine). No GDD change needed; mostly just nominal source rename in §9.
+
+### 9. (Reserved — see Economy / Currency at slot #3)
 
 ### 10. Auto-Catch (Hybrid: free unlock + GamePass upgrade)
 - **Status**: Not started
@@ -120,8 +117,8 @@
 - **Priority**: P2 (convenience / monetization)
 - **Value**: 3 | **Effort**: 3 | **Risk**: M | **Monetization**: 4
 - **GDD**: `design/gdd/auto-catch-gdd.md` (planned)
-- **Depends On**: Capture, Data Persistence (catch counter), Monetization (GamePass tier), Economy
-- **Notes**: Hybrid — free basic auto-catch unlocks at ~50 manual captures (rewards engagement, not pay-to-skip); GamePass upgrades speed/quality. **Not default on day 1** — manual capture must be experienced first so personality-reveal lands and FTUE teaches the mini-game. Auto-catch still shows reveals (batched feed); rare pulls interrupt for a manual celebratory reveal. Unlock threshold + rates config-driven.
+- **Depends On**: Capture v2 (#4), Persistence, Monetization (#15), Economy (#3 for Capture Items)
+- **Notes**: **Adapted to new capture model**: Auto-Catch automates the item-use loop — player has Capture Items in inventory + Auto-Catch toggle, server auto-uses items on encountered wild Brainrots. Player still pays per item (no free auto-magic). Unlocks free at ~50 manual captures. GamePass upgrade speeds frequency/intelligence.
 
 ### 11. Reroll Personality
 - **Status**: Not started
@@ -129,324 +126,373 @@
 - **Priority**: P2 (depth + monetization)
 - **Value**: 3 | **Effort**: 2 | **Risk**: L | **Monetization**: 4
 - **GDD**: `design/gdd/reroll-gdd.md` (planned)
-- **Depends On**: Personality, Economy (Meme Coins cost), Monetization (optional Robux path), Data Persistence
-- **Notes**: Capped escalating Meme Coins cost curve (250/600/1200/2000 cap, resets after 24h) + optional Robux shortcut. **Odds must be displayed** (compliance + trust). Server rolls the result authoritatively (UpdateAsync atomic + idempotency key, anti-dupe). Cost curve, cap, and per-personality probabilities all config-driven and shown in UI.
+- **Depends On**: Personality, Economy, Persistence
+- **Notes**: Capped ladder {250/600/1200/2000} + 24h reset (LOCKED). Survives pivot unchanged. Robux shortcut (Reroll Pass) defers to Monetization #15.
 
-### 12. Moment System (Online burst events + Offline recap reel)
+### 12. Moment System (Online burst + Offline recap)
 - **Status**: Not started
 - **Phase**: MVP
-- **Priority**: P2 (the "personality is visible" payoff)
+- **Priority**: P2
 - **Value**: 4 | **Effort**: 3 | **Risk**: M | **Monetization**: 1
 - **GDD**: `design/gdd/moment-system-gdd.md` (planned)
-- **Depends On**: Personality, Idle Production, Battle/Raid + Evolution (moment sources), Data Persistence (logs moments for recap)
-- **Notes**: Online = periodic personality "burst" events surfaced in base (lightweight, event-driven, not per-frame sim — the viral/shareable hook). Offline = recap reel on return ("while you were gone..."). This is the surface that makes the pillar *felt* rather than just numerical — protect it from being cut, but it can ship minimal (text/icon pop-ups) and grow. One moment highlighted at a time (clarity for kids). Distinct from Drama Events (P2): Moments are display/notification; Drama is interactive choice. Event frequency/weighting config-driven.
+- **Depends On**: Personality, Pet AI #25 (boss win moments), Kandang (idle Walkout/Break), Evolution, Persistence
+- **Depended On By**: Visit Base (#24)
+- **Notes**: **Adapted post-pivot**: Moments now surface boss kill recaps, CEO encounter highlights, Legendary drops from Raid Dungeon — in addition to existing Kandang break/walkout/zoom flavor. The viral "Show me your evolved Brainrot" hook surfaces here on offline return + during co-op raid spectator.
 
 ### 13. UI / HUD
 - **Status**: Not started
 - **Phase**: MVP
-- **Priority**: P1 (every system needs a surface)
+- **Priority**: P1
 - **Value**: 4 | **Effort**: 4 | **Risk**: M | **Monetization**: 2
 - **GDD**: `design/gdd/ui-hud-gdd.md` (planned)
-- **Depends On**: Economy (currency display), Roster, most systems (each contributes a panel)
-- **Depended On By**: Capture, Battle (spectate view), Raid, Reroll, Daily Rewards, Codes, Shop, Settings, Leaderboard
-- **Notes**: HUD (currency, roster count, collect button), roster/management panel, battle spectate view, raid screen, moment pop-ups, leaderboard panel. Build incrementally alongside each consumer system rather than all at once. Mobile-first, pure presentation — reads state, fires intent Remotes.
+- **Depends On**: Economy (currency), Persistence (roster), most systems (each panel)
+- **Notes**: Mobile-first. **Adapted post-pivot**: lobby HUD (coin balance, party invite, shop button, trade button, leaderboard, portals to Areas/Bosses/Dungeon), area HUD (mini-map of wilds, capture item picker), Kandang HUD (idle ticker, deploy/recall), boss combat HUD (Pet AI summons + boss HP bar), trade UI (offer panel, confirmation).
 
 ### 14. Onboarding / FTUE
 - **Status**: Not started
 - **Phase**: MVP
-- **Priority**: P1 (Roblox first-5-minutes retention)
+- **Priority**: P1
 - **Value**: 5 | **Effort**: 3 | **Risk**: M | **Monetization**: 1
 - **GDD**: `design/gdd/onboarding-gdd.md` (planned)
-- **Depends On**: Capture, Personality, Idle Production, Economy, UI/HUD
-- **Notes**: Guided first capture → reveal personality → deploy → first collect → soft raid intro, with an immediate reward inside the first session. Guide character ("Incubator HQ mentor") gives one instruction at a time; exactly one glowing objective beacon at all times. Must teach the capture mini-game before Auto-Catch is available. Build after core loop systems are functional (it scripts a path *through* them). Step thresholds/rewards config-driven.
+- **Depends On**: Capture v2, Personality, Kandang, Economy, UI/HUD, World Universe
+- **Notes**: **Rewritten flow post-pivot**: spawn in Lobby → tour buttons → teleport to first Area → buy Forest Item from kiosk → capture first wild (instant reveal moment, personality pillar lands here) → teleport to private Kandang → deploy Brainrot for idle production → return to Lobby → teleport to Boss Zone → first Colony Boss (Pet AI summon tutorial) → reward. End of FTUE: player has 1-3 Brainrots captured, basic Kandang earning, first Colony Boss kill, awareness of shop + lobby social. Step thresholds/rewards config-driven.
 
 ### 15. Monetization (GamePass + DevProduct, zero P2W)
-- **Status**: SKU table LOCKED (`economy-gdd.md` v1.3 §10.4, 2026-05-29). Full system implementation: Not started.
+- **Status**: SKU table LOCKED (`economy-gdd.md` v1.3 §10.4 + 2026-05-29 lock); full system implementation Not started. **Post-pivot extension**: add Raid Token DevProduct ladder.
 - **Phase**: MVP
-- **Priority**: P1 (launch revenue, but non-blocking to core loop)
+- **Priority**: P1
 - **Value**: 3 | **Effort**: 3 | **Risk**: M | **Monetization**: 5
-- **GDD**: `design/gdd/monetization-gdd.md` (planned — will adopt the §10.4 SKU table from economy-gdd v1.3)
-- **Depends On**: Data Persistence, Economy, Auto-Catch, Reroll (the things being sold). *(Raid Shield #7 is Phase 2, so the extended-shield product is a Phase-2 SKU, not a launch SKU.)*
-- **Notes**: GamePasses + DevProducts, strict zero pay-to-win (critical: nothing that boosts raid combat power). **Launch SKU ladder LOCKED v1.3 (owner-approved 2026-05-29 per economy-designer circulation analysis — see `economy-gdd.md` §10.4 for full table + P2W audit):**
+- **GDD**: `design/gdd/monetization-gdd.md` (planned — adopt the §10.4 SKU table from economy-gdd v1.3 + new Token DevProduct)
+- **Depends On**: Persistence, Economy, Auto-Catch, Reroll, **Raid Boss (#6 Tier 3) tokens**
+- **Notes**: **Launch SKU ladder LOCKED v1.3** + Vision Pivot extension:
   - 3 GamePasses: **2x Offline Earnings @ 199 R**, **Extra Roster Slots +50 @ 299 R**, **Auto-Catch toggle @ 399 R**
-  - 4 DevProduct Meme Coins Packs: **Small 15K @ 49 R**, **Medium 50K @ 99 R**, **Large 150K @ 249 R**, **Mega 500K @ 599 R**
-  - Phase 2 SKU (forward-flag): **Offline Storage +4h @ 249 R** (raises `offlineCapSeconds` 8h→12h, separate from `upgrade_storage`)
-  - **Extended Raid Shield (capped)** moved to Phase 2 (Raid Shield #7 moved to Phase 2 — no shield function in offense-only Raid v1)
-  - **Anti-recommendation (DO NOT ship):** skip-reroll-cooldown, buy-specific-Brainrot, boost-raid-winrate, loot boxes / premium currency gacha
-  - Receipt processing must be idempotent + server-authoritative (ProcessReceipt → `processReceiptGrant` in persistence v1.4 §2.3a). Product IDs + grants config-driven. Wire after the underlying systems exist.
+  - 4 Meme Coins Packs: **15K/50K/150K/500K @ 49/99/249/599 R**
+  - **NEW: Raid Token DevProduct ladder** (per Vision Pivot Decision 7) — pricing TBD (e.g. 1 token @ 49 R, 5 tokens @ 199 R)
+  - **CANCELLED SKU**: Extended Raid Shield (no shield function in new vision)
+  - **Anti-recommendation (DO NOT ship)**: skip-reroll-cooldown, buy-specific-Brainrot, boost-raid-power, loot boxes / premium currency gacha. **Plus: tokens must not bypass content gating** — DevProduct tokens grant raid attempt FREQUENCY only, not combat power (zero-P2W check per Decision 7).
+  - Receipt processing must be idempotent + server-authoritative (persistence v1.4 §2.3a).
 
 ### 16. Leaderboard (Richest Manager)
-- **Status**: Not started
+- **Status**: Write side ✅ shipped (commit ef5bd88, `LeaderboardWriteBootstrap`); read side + UI Not started
 - **Phase**: MVP
-- **Priority**: P2 (light social competition + early retention)
+- **Priority**: P2
 - **Value**: 3 | **Effort**: 2 | **Risk**: L | **Monetization**: 1
 - **GDD**: `design/gdd/leaderboard-gdd.md` (planned)
-- **Depends On**: Data Persistence, Economy (net worth source)
-- **Depended On By**: (none in MVP); generalizes into Fame/Trending leaderboard infra (P2)
-- **Notes**: Single global leaderboard ranking players by total wealth ("Richest Manager"). Backed by OrderedDataStore; update on collect/save (debounced), not per-tick. Low effort, low risk — pulled forward from Phase 2 for early social hook without full Fame infra. Define "net worth" metric (lifetime coins earned vs current balance) in GDD. Top-N display config-driven. Lays the leaderboard plumbing that Fame/Trending (P2) reuses.
+- **Depends On**: Persistence, Economy
+- **Notes**: OrderedDataStore `Leaderboard_RichestManager_v1`, key per UserId, value = `stats.totalCoinsEarned`. Survives pivot unchanged. **Phase 2 extensions**: add Legendary-count leaderboard, Boss-kill leaderboard, Trader-volume leaderboard.
 
 ### 17. Daily Quests (Objectives)
 - **Status**: Not started
 - **Phase**: MVP
-- **Priority**: P2 (retention / objective layer)
+- **Priority**: P2 (retention)
 - **Value**: 3 | **Effort**: 3 | **Risk**: M | **Monetization**: 2
 - **GDD**: `design/gdd/daily-quests-gdd.md` (planned)
-- **Depends On**: Economy (#9, reward payout), Data Persistence (#1, progress tracking + daily reset state), and objective sources Capture (#4), Raid (#6), Idle Production (#3), Work-Based Evolution + Level/XP (#8), Field Combat / Pet AI (#25)
-- **Depended On By**: (none in MVP)
-- **Notes**: Gives players a short daily set of goals so a 15–30 min session has direction beyond pure idle. **3 daily quests** rolled at reset from a config-driven pool (examples: "tangkap N Brainrot", "menang M raid", "menang M field battle", "kumpulkan X coins", "evolve 1 Brainrot", "level-up 1 Brainrot"); progress accrues from the objective-source systems' events (event-driven, not polling). On completion of a quest, reward = Meme Coins via Economy faucet `quest_daily` (reward pool is per-quest config, not a flat magic number — see economy-gdd §3.1/§8.2). **Daily RESET on server-clock** (never trust client time): store `lastQuestReset` + the active quest set + per-quest progress in PlayerData (coordinate with Persistence schema; reset = re-roll the 3 quests + zero progress when server-clock day boundary crossed). Quest pool, count (3), per-quest targets, and reward ranges are all config-driven. Risk M: cross-server-consistent daily reset + multi-source progress tracking is the moving part; lean on Persistence's server-clock + atomic mutation path. **Scope note (solo dev MVP addition):** this is a late add to MVP scope — a **prune candidate** if launch schedule slips. Fallback if cut: a simple escalating daily-login reward (no objectives), which still feeds the `quest_daily` faucet. Needs its own GDD: `design/gdd/daily-quests-gdd.md` (planned).
+- **Depends On**: Economy, Persistence, **Boss System (#6)**, Capture v2 (#4), Kandang (#26), Pet AI (#25)
+- **Notes**: 3 daily quests rolled at server-clock reset. **Quest pool adapted post-pivot**: "tangkap N Brainrot di [area]", "menang M Colony Boss", "kalahkan 1 CEO Brainrot mingguan", "kumpulkan X coins di Kandang", "level-up 1 Brainrot", "complete 1 Raid Dungeon". Reward = Meme Coins + occasionally Capture Items / Raid Tokens (per Vision Pivot Decision 7 — quest as a token source). Reward pool per-quest config range.
 
-### 25. Field Combat / Summoned Pet AI
-- **Status**: In design (GDD v1.0 drafted 2026-05-29; demo `a71e545` shipped reference impl; production code graduation + personality battle-tag wiring pending)
-- **Phase**: MVP
-- **Priority**: P2 (field-world activity layer; not core loop blocker)
-- **Value**: 4 | **Effort**: 3 (much already built in demo) | **Risk**: M | **Monetization**: 2
-- **GDD**: `design/gdd/pet-combat-gdd.md` v1.0 (drafted 2026-05-29 — descriptive lock of demo reference impl)
-- **Depends On**: Personality (#2, damage multiplier + future battle tags), Data Persistence (#1, roster + `level`), Capture (#4, must own a Brainrot to summon it), Battle (#5, shares `levelScale(L)` stat-scaling formula from §2.1)
-- **Depended On By**: Moment System (#12, kill/summon as a moment), Daily Quests (#17, "win N field battles" objective), Evolution + Level/XP (#8, XP source on win)
-- **Notes**: **Real-time hub-world combat** — distinct from Battle #5 (turn-based, for Raid #6). Player taps a summon UI to spawn a caught Brainrot as a temporary field pet; the pet follows the player in a fan-out formation (`followSpreadDegrees`, `followJitterStuds`), detects wild Brainrots within `detectionRangeStuds` centered on the **owner player** (not the pet), engages in a combat ring (`combatRingRadiusStuds < attackRangeStuds`, no clipping) with periodic damage ticks (`combatTickSec`), and auto-despawns after `fighterLifetimeSec`. Wins award `winCoins` (Economy faucet). Server-authoritative: spawn, AI seek, damage tick, despawn, formation slot assignment all server-side. Personality currently scales damage via `prodMult`; **full battle behavior tags** (Hyper `act_first_mistarget`, Lazy `berserk_when_last`, etc., as defined in Personality #2) **to be wired** in the formal GDD. All ranges, timings, formation params, and reward values config-driven (currently in `DemoConfig` §combat; will graduate to `PetCombatConfig`). Wild Brainrot AI (wander/flee/engage) lives in `BrainrotAI.server.luau` (114 lines, demo). **Reference impl files:** `src/ReplicatedStorage/Shared/Demo/DemoConfig.luau` §combat (lines ~337–430); `src/ServerScriptService/Demo/DemoServer.server.luau` §fighter logic (lines ~900–1200); `src/ServerScriptService/Demo/BrainrotAI.server.luau`. **Open design questions** (deferred to GDD): leashing model (current = owner-centered detection); kill credit (current = owner only); multi-pet stacking cap; PvP collision (Phase 2).
+### 18. PvP Raids (CANCELLED)
+- **Status**: ❌ **CANCELLED** (Vision Pivot 2026-05-29)
+- **Reason**: Owner pivoted away from async open base-PvP. All raid mechanic re-targeted to PvE boss raid (System #6).
 
-### 26. Base / Showroom Spatial Layer
-- **Status**: In Implementation (demo `e984677` shipped reference impl; formal GDD pending)
-- **Phase**: MVP
-- **Priority**: P2 (UX wrapper over Idle Production deployment; not core loop blocker)
-- **Value**: 3 | **Effort**: 2 (much already built in demo) | **Risk**: L | **Monetization**: 1
-- **GDD**: `design/gdd/base-showroom-gdd.md` (planned) *— alternative: fold into `idle-production-gdd.md` §6 UI if Showroom stays a pure UX layer; decision deferred to GDD draft.*
-- **Depends On**: Idle Production (#3, owns `base.buildings.deployment` data + production math), UI/HUD (#13, shared UI primitives), Data Persistence (#1, slot map persists in `base.buildings[id].deployment`)
-- **Depended On By**: (none yet — visual upgrades for Building/Worker Slot tiers in Phase 2 will skin this layer)
-- **Notes**: **3D spatial UI** sitting on top of Idle Production's abstract `deployment` slot map. The factory's worker slots are rendered as **physical pedestals/stands** in the world; the player taps an empty stand's `ProximityPrompt("Place")` to open an inventory picker, picks a caught Brainrot id, and the deployed model walks onto the pedestal and stays there producing coins. A deployed model carries a `ProximityPrompt("Recall")` to un-deploy. Slot-to-Brainrot mapping persists in `base.buildings[BUILDING_ID].deployment` (Persistence #1 + Idle #3 schema — no new fields). **Pure presentation layer:** production math, rates, personality multipliers, and offline accrual remain owned by Idle Production #3; Showroom only owns spatial UI, model spawn/despawn, and place/recall UX. Idempotent deploy/recall remotes (validate roster ownership, slot bounds, no double-occupancy invariant). **Reference impl files:** `src/ReplicatedStorage/Shared/Demo/DemoConfig.luau` §showroom (lines ~202–314); `src/ServerScriptService/Demo/DemoServer.server.luau` §deploy/recall (lines ~429–800); `src/StarterPlayer/StarterPlayerScripts/Demo/DemoUI.client.luau` §placement UI. **Open design questions** (deferred to GDD): naming alignment (`showroom` → `base/factory` per Idle GDD?); pedestal-tier visuals for `factoryLevel`/`storageLevel`; mobile reachability of ProximityPrompts.
-
----
-
-### Phase 2 Systems
-
-### 7. Raid Shield
-*(number retained as stable identifier; phase moved to Phase 2)*
-- **Status**: Not started
-- **Phase**: Phase 2
-- **Priority**: P3 (anti-grief, paired with PvP)
-- **Value**: 3 | **Effort**: 2 | **Risk**: M | **Monetization**: 3
-- **GDD**: `design/gdd/raid-shield-gdd.md` (planned)
-- **Depends On**: Data Persistence + MemoryStore (shield expiry, cross-server), PvP Raids (#18)
-- **Depended On By**: PvP Raids (#18, checks shield before allowing), Monetization (extended-shield product)
-- **Notes**: **Deferred to Phase 2 alongside PvP Raids (#18)** — in Raid v1 (offense-only NPC raids) the shield has **no function** (nothing attacks you, so there is nothing to shield against). It slots in cleanly when live PvP arrives. **System number #7 is retained as a stable identifier** (used as a by-number cross-reference across the GDDs) — only its phase/priority moved. Free 4-hour shield baseline (sacred — never paywalled as the only option); server-clock expiry stored in MemoryStore so it holds across server hops. The **Defense Rating display** ships in Raid v1 already (owned by Raid #6); only the shield mechanic itself is Phase 2. Durations/cost config-driven.
-
-### 18. PvP Raids (Live Player Targets)
-- **Status**: Not started — **Phase**: Phase 2 — **Priority**: P3
-- **Value**: 5 | **Effort**: 5 | **Risk**: H | **Monetization**: 3
-- **Depends On**: Raid v1, Battle, MemoryStore matchmaking pool, Raid Shield (#7, Phase 2), Personality
-- **Notes**: Replaces/extends NPC targets with real player bases + boss-tier rival (Burnout Inc.). Highest social value, highest risk (matchmaking, fairness, griefing, offline-defense correctness). v1 NPC raids are the de-risking runway.
-
-### 19. Revenge System
-- **Status**: Not started — **Phase**: Phase 2 — **Priority**: P3
-- **Value**: 4 | **Effort**: 3 | **Risk**: M | **Monetization**: 2
-- **Depends On**: PvP Raids, MemoryStore (raid mailbox), Economy
-- **Notes**: 2x-reward counter-raid quest within 24h. Creates ping-pong retention loop. Requires PvP first.
+### 19. Revenge System (CANCELLED)
+- **Status**: ❌ **CANCELLED** (Vision Pivot 2026-05-29)
+- **Reason**: Coupled to PvP Raids #18 which is cancelled.
 
 ### 20. Multi-Branch Evolution
-- **Status**: Not started — **Phase**: Phase 2 — **Priority**: P3
+- **Status**: Not started — Phase 2
+- **Priority**: P3
 - **Value**: 4 | **Effort**: 3 | **Risk**: M | **Monetization**: 2
-- **Depends On**: Work-Based Evolution (MVP), lifetime-stat counters
-- **Notes**: Multiple evolution paths per personality based on play history. Cheap *if* lifetime counters were built in MVP (see systems 1 & 8).
+- **Depends On**: Evolution (#8)
+- **Notes**: Multiple evolution paths per personality based on play history. Survives pivot unchanged (still relevant for late-game).
 
-### 21. Premium Currency (Brain Cells)
-- **Status**: Not started — **Phase**: Phase 2 — **Priority**: P3
+### 21. Premium Currency (Brain Cells) — Phase 2
+- **Status**: Not started — Phase 2
+- **Priority**: P3
 - **Value**: 2 | **Effort**: 2 | **Risk**: M | **Monetization**: 5
-- **Depends On**: Economy, Monetization, Data Persistence
-- **Notes**: Second hard currency. Schema field pre-provisioned now (default 0). Maintain zero-P2W stance.
+- **Notes**: `gems` field pre-provisioned default 0. Phase 2 only. Survives pivot.
 
 ### 22. Fame / Trending System
-- **Status**: Not started — **Phase**: Phase 2 — **Priority**: P3
+- **Status**: Not started — Phase 2 (could promote to MVP if peer-trade social layer requires it; defer for now)
+- **Priority**: P3
 - **Value**: 4 | **Effort**: 4 | **Risk**: H | **Monetization**: 2
-- **Depends On**: Personality, Battle/Raid + Idle Production (fame sources), Base Visiting, Leaderboard infra (MVP), Data Persistence
-- **Notes**: Fame points → "Trending" status (+25% output, fan NPCs), cross-base Likes, global Trending leaderboard. Reuses MVP Leaderboard plumbing + requires base-visiting + cross-server aggregation — hence H risk.
+- **Depends On**: Personality, Visit Base (#24), Leaderboard, Trade Marketplace (#30)
+- **Notes**: Likes-based reputation + Trending leaderboard. Phase 2 post-launch addition.
 
-### 23. Drama Events (Interactive Choice Events)
-- **Status**: Not started — **Phase**: Phase 2 — **Priority**: P3
-- **Value**: 3 | **Effort**: 2 | **Risk**: L | **Monetization**: 2
-- **Depends On**: Personality, Idle Production, Economy (some choices cost coins), Moment System
-- **Notes**: Two-choice pop-ups triggered by personality combos. Low cost, high flavor. Distinct from MVP Moment System (interactive vs display-only). Event table config-driven.
+### 23. (Reserved)
 
-### 24. Base Visiting / Social Lobby
-- **Status**: Not started — **Phase**: Phase 2 — **Priority**: P3
+### 24. Visit Base (Read-Only Async Social) — Phase 2 candidate for MVP
+- **Status**: Not started — Phase 2 (consider MVP promotion)
+- **Priority**: P3 (currently)
 - **Value**: 3 | **Effort**: 4 | **Risk**: H | **Monetization**: 1
-- **Depends On**: Data Persistence (load another player's base read-only), MemoryStore, Roster
-- **Notes**: Prerequisite for Fame Likes. Loading/rendering another player's base safely (read-only, anti-exploit) is non-trivial — gates Fame.
+- **Depends On**: Persistence (read another player's Kandang), Kandang (#26), MemoryStore
+- **Notes**: Async social — Anda lihat Kandang player lain (read-only), give Like / star. **Post-pivot relevance**: directly serves "Show me your evolved Brainrot" pillar. **Consider promoting to MVP** if Fame (#22) lifts to MVP too. Pending decision.
+
+### 25. Pet AI (Pillar Combat Engine, 3-tier boss)
+- **Status**: ✅ GDD shipped v1.0 (commit 0ab4386); demo code reference impl shipped (a71e545); production graduation + 3-tier extension pending
+- **Phase**: MVP
+- **Priority**: **P1 (PILLAR — promoted from P2)** — post-pivot this is the combat engine for all boss encounters
+- **Value**: 5 (promoted) | **Effort**: 3 (much from demo + extension) | **Risk**: M | **Monetization**: 2
+- **GDD**: `design/gdd/pet-combat-gdd.md` v1.0 — **extension needed**: 3-tier boss combat scaling rules
+- **Depends On**: Personality (#2, behavior tags), Persistence (#1, roster + level/xp), Capture v2 (#4, must own Brainrot to summon), Evolution (#8, Level/XP curve)
+- **Depended On By**: Boss System (#6 all 3 tiers), Daily Quests (#17 boss-win objectives), Moment System (#12 win/KO moments)
+- **Notes**: Real-time combat engine. **Post-pivot promotion**: from "field combat layer" to **pillar combat engine** for Tier 1 Colony (solo + co-op bonus), Tier 2 CEO (party-instanced), Tier 3 Raid Dungeon (solo/party token-gated). Battle #5 cancelled — `levelScale(L)` formula + 5 personality battle tags + KnockedOut vocabulary now owned by Pet AI GDD §8. Demo code reference impl carries forward.
+
+### 26. Kandang (private base sub-place, replaces Showroom)
+- **Status**: GDD shipped name "Showroom" v1.0 awaiting rename rewrite per pivot; demo code reference impl shipped (e984677); production GDD pending
+- **Phase**: MVP
+- **Priority**: P1 (private base, idle progress helper)
+- **Value**: 3 | **Effort**: 3 | **Risk**: M | **Monetization**: 2
+- **GDD**: `design/gdd/kandang-gdd.md` (planned — replaces planned showroom GDD)
+- **Depends On**: Persistence (#1, `base.buildings.deployment`), Idle Production economy (#3), UI/HUD (#13), World Universe (#27, sub-place hosting)
+- **Depended On By**: Visit Base (#24, Phase 2 read-only)
+- **Notes**: **Renamed + simplified post-pivot**: from elaborate "Showroom" (display flex) → utilitarian "Kandang" (private cage/pen). Player's private sub-place. Layout: simple grid of pedestals/cages for deployed Brainrots, idle production accrual UI, collect button, storage gauge, upgrade panel. Visit Base #24 (Phase 2) makes it visit-able read-only. Capacity scales with persistence-owned upgrade levels (factoryLevel / workerSlotLevel / storageLevel — these survive). **Vibe shift**: no longer "showcase your evolved Brainrot in a museum" — more "your private working coop where Brainrots do their job".
+
+### 27. World Universe Architecture (NEW — FOUNDATION)
+- **Status**: Not started
+- **Phase**: MVP
+- **Priority**: **P0 (FOUNDATION — blocks all subsequent system work)**
+- **Value**: 5 | **Effort**: 4 | **Risk**: H | **Monetization**: 2
+- **GDD**: `design/gdd/world-universe-gdd.md` (planned — TIER 1 PRIORITY)
+- **Depends On**: (none — foundation infra)
+- **Depended On By**: **everything spatial** — Kandang (#26), Capture v2 (#4), Boss System (#6), Party (#29), Trade (#30), UI/HUD (#13), Onboarding (#14)
+- **Notes**: **NEW post-pivot foundation system** (Vision Pivot Doc Decision 1). Roblox Universe architecture: 1 Lobby place + N Area sub-places + M Super Boss sub-places + K Raid Dungeon sub-places + per-player private Kandang sub-place. **Required infrastructure**:
+  - Multi-place project layout (per-place project trees or shared modules)
+  - `TeleportService` + `TeleportData` protocol for cross-place state handoff
+  - `MemoryStoreService` for cross-server coordination (party formation, matchmaking, leaderboards)
+  - Persistence cross-place handoff design (persistence-gdd v1.4.1 extension §11)
+  - Area + Super Boss + Dungeon enumeration catalog (which areas exist, themes, unlock requirements)
+- **Open**: place count at launch (3 Areas? 5? 10?); area unlock progression (player level? quest completion?); super boss roster size; dungeon roster size.
+
+### 28. (Reserved — Boss System now at slot #6 to preserve narrative ordering with cancelled Raid #6)
+
+### 29. Party + Matchmaking (NEW — co-op coordination)
+- **Status**: Not started
+- **Phase**: MVP
+- **Priority**: P1 (gates CEO Tier 2 + Raid Dungeon Tier 3 co-op)
+- **Value**: 4 | **Effort**: 4 | **Risk**: M | **Monetization**: 2
+- **GDD**: `design/gdd/party-matchmaking-gdd.md` (planned)
+- **Depends On**: World Universe (#27, TeleportPartyAsync), Persistence (#1), UI/HUD (#13)
+- **Depended On By**: Boss System (#6 Tier 2 CEO, Tier 3 Raid)
+- **Notes**: **NEW post-pivot system** (per Vision Pivot Decision 6). Lobby UI: party formation (friend invite, public party finder optional), party leader, party teleport. Co-op gating for CEO + Raid Dungeon. Friend-only by default for kid safety; optional public matchmaking with strangers if owner approves.
+- **Open**: party max size (4 like Pokémon GO? more?); voice chat (no — Roblox kid game); public matchmaking on/off at launch.
+
+### 30. Trade Marketplace (Peer-to-Peer) (NEW)
+- **Status**: Not started
+- **Phase**: MVP
+- **Priority**: P1 (social pillar per Vision Pivot Decision 4)
+- **Value**: 5 | **Effort**: 5 | **Risk**: H | **Monetization**: 2
+- **GDD**: `design/gdd/trade-marketplace-gdd.md` (planned)
+- **Depends On**: Persistence (atomic transactional swap), Personality (item display), Economy (Stardust analogue if applicable), UI/HUD, World Universe (lobby trade kiosk / dedicated trade location)
+- **Notes**: **NEW post-pivot system** (Vision Pivot Decision 4). Pokémon GO-style **peer-to-peer trade**. Both players physically present in Lobby. Offer panel: each puts Brainrot + optional coin offer; both confirm; atomic swap via persistence (no partial state). **Friendship gating**: trade restricted by friendship level (mechanism TBD — daily play hours? mutual game time? trade history?). **Special trade limit**: rare Brainrot (Epic / Legendary) only via "Special Trade" — capped per day, possibly with cost (Stardust analogue). **Anti-scam**: confirmation screens, stat transparency, no hidden info. **Atomic mutation** via persistence path; double-layer idempotency.
+- **Open**: friendship gating mechanism specifics; Stardust analogue (new currency or use coins); per-day Special Trade cap; per-tier rarity rules (Common always free? Legendary requires highest friendship + premium cost?).
+
+### 31. Capture Items Shop + Token Economy (NEW — extends Economy)
+- **Status**: Not started
+- **Phase**: MVP
+- **Priority**: P1 (gates Capture v2 + Raid Boss Tier 3 access)
+- **Value**: 4 | **Effort**: 3 | **Risk**: M | **Monetization**: 4
+- **GDD**: `design/gdd/items-token-gdd.md` (planned — may fold into economy-gdd v2.0 as §11 + §12)
+- **Depends On**: Economy (#3 wallet), Persistence (inventory), UI/HUD, Daily Quests (#17, quest reward token source)
+- **Depended On By**: Capture v2 (#4), Boss System (#6 Tier 3), Auto-Catch (#10)
+- **Notes**: **NEW post-pivot system** (Vision Pivot Decisions 2 + 7). Two related sub-systems:
+  - **Capture Items**: area-tier (`Forest Item`, `Cave Item`, `Sky Item`, etc.). Purchased in Lobby shop with coins. Used in Areas for instant capture of wild Brainrots. Inventory cap (TBD). Tiered prices (TBD).
+  - **Raid Tokens**: gated entry for Raid Dungeon Tier 3 boss. **Sources (hybrid per Decision 7)**: (a) 1 daily free at server-clock reset, (b) quest rewards (Daily Quests #17 occasionally drop), (c) Robux DevProduct (Monetization #15). Per-player stack cap (TBD ~10).
+- **Open**: capture item success rate formula; capture item tier pricing; token cap; token consumption on fail (refund or no); token DevProduct ladder pricing.
 
 ---
 
-## Dependency Graph
+## Cancelled Systems (post-Vision Pivot 2026-05-29)
+
+These systems were **cancelled** by the Vision Pivot Doc. Their GDDs (if shipped) are moved to `design/gdd/archive/` with archive note. Reservation of system number preserves stable identifier integrity for prior cross-references.
+
+| System | Status | Why cancelled | Where to find old GDD |
+|---|---|---|---|
+| **#5 Battle System** | ❌ Cancelled | All combat now real-time via Pet AI #25 (Vision Pivot Decision 4); turn-based has no remaining use | `design/gdd/archive/battle-gdd.md` (pending move) |
+| **#6 Raid v1 (NPC Rival Startups)** | ❌ Re-purposed as Boss System | Replaced entirely by new Boss System (#6 slot retained, content rewritten) | `design/gdd/archive/raid-gdd.md` (pending move) |
+| **#7 Raid Shield** | ❌ Cancelled | No PvP base-raid → no shield function | (no GDD was authored) |
+| **#18 PvP Raids** | ❌ Cancelled | Owner pivoted away from async open PvP | (no GDD was authored) |
+| **#19 Revenge System** | ❌ Cancelled | Coupled to PvP Raids | (no GDD was authored) |
+
+**Also obsoleted (lore/lock):**
+- 4 NPC Rival Startups (Grind Corp / Chill Collective / The Glitch Gang / Pivot Ventures) — cancelled as raid targets
+- `raidLootPct = 0.20` lock (was locked 2026-05-29 before pivot, cancelled same day)
+
+---
+
+## Dependency Graph (post-pivot)
 
 ```
                     ┌─────────────────────────────┐
-                    │  Data Persistence & Roster  │  (P0 foundation)
+                    │ #1 Data Persistence (P0)    │  shipped ✅
                     └──────────────┬──────────────┘
                                    │
                     ┌──────────────▼──────────────┐
-                    │   Personality System (P0)   │  (pillar trait layer)
-                    └──┬────────┬────────┬─────┬──┘
-                       │        │        │     │
-          ┌────────────┘        │        │     └──────────────┐
-          ▼                     ▼        ▼                     ▼
-   ┌────────────┐        ┌──────────┐ ┌─────────┐      ┌────────────┐
-   │  Capture   │        │   Idle   │ │ Battle  │      │   Reroll   │
-   │ (explore)  │        │Production│ │(auto TB)│      │            │
-   └─────┬──────┘        └────┬─────┘ └────┬────┘      └─────┬──────┘
-         │                    │            │                 │
-         │   ┌────────────────┤            ▼                 │
-         │   │                │       ┌─────────┐            │
-         ▼   ▼                │       │ Raid v1 │◄───────────┤ (cost)
-   ┌──────────┐               │       │ (NPC)   │            │
-   │Auto-Catch│               │       └──┬──────┘            ▼
-   └──────────┘               │          │             ┌──────────┐
-                              │          │             │ Economy  │──► Leaderboard
-                              │          │             │(MemeCoin)│   (Richest Mgr)
-                              │          │             └────┬─────┘
-                              │          │                  │
-                              ▼          ▼                  │
-                        ┌──────────────────┐               │
-                        │ Work-Based Evo    │◄──────────────┘
-                        │ (lifetime stats)  │
-                        └─────────┬─────────┘
-                                  ▼
-                        ┌──────────────────┐
-                        │  Moment System    │
-                        └──────────────────┘
-
-   ┌──────────────────────────────────────────────────────────────┐
-   │ Daily Quests (#17, MVP)                                        │
-   │   reward  ◄── Economy (Meme Coins faucet quest_daily)          │
-   │   tracking/reset ◄── Data Persistence (lastQuestReset+progress,│
-   │                       server-clock daily reset)                │
-   │   progress from objective sources: Capture, Raid, Idle, Evo,   │
-   │                                     Pet AI (field-win source)  │
-   │   cross-cutting with UI/HUD (quest panel)                      │
-   └──────────────────────────────────────────────────────────────┘
-
-   ┌──────────────────────────────────────────────────────────────┐
-   │ Field Combat / Pet AI (#25, MVP — demo-validated)              │
-   │   shares stat formula  ◄── Battle (#5 §2.1 levelScale(L))      │
-   │   reads personality    ◄── Personality (#2)                    │
-   │   reads roster + level ◄── Data Persistence (#1) / Capture (#4)│
-   │   awards               ──► Economy (winCoins faucet)           │
-   │   feeds                ──► Evolution/Level (XP source)         │
-   │                            Moment System (#12)                 │
-   │                            Daily Quests (#17 field-win)        │
-   └──────────────────────────────────────────────────────────────┘
-
-   ┌──────────────────────────────────────────────────────────────┐
-   │ Base / Showroom Spatial Layer (#26, MVP — demo-validated)      │
-   │   pure UX wrapper over Idle Production deployment              │
-   │   reads/writes  ◄──► Idle Production (#3, base.buildings.dep.) │
-   │   reads/writes  ◄──► Data Persistence (#1, base block)         │
-   │   shares primitives ◄── UI/HUD (#13)                           │
-   │   no new persistence; no new production math                   │
-   └──────────────────────────────────────────────────────────────┘
-
-   Cross-cutting (depend on many): UI/HUD, Onboarding/FTUE, Monetization, Daily Quests
-
-   ── Phase 2 ──────────────────────────────────────────────
-   Raid v1 ──► PvP Raids (+ Burnout Inc. boss) ──► Revenge System
-                  ▲
-   Raid Shield (#7) ─┘  (defends against live attackers; no function in offense-only Raid v1)
-   Evolution ──► Multi-Branch Evolution
-   Economy/Monetization ──► Premium Currency (Brain Cells)
-   Leaderboard + Data Persistence ──► Base Visiting ──► Fame/Trending
-   Personality + Moment ──► Drama Events
+                    │ #2 Personality (P0 pillar)  │  shipped ✅
+                    └──────┬────────┬────────┬────┘
+                           │        │        │
+                    ┌──────▼──┐  ┌──▼────┐ ┌─▼────────┐
+                    │ #3 Econ │  │ #25   │ │ #11      │
+                    │  shipped│  │Pet AI │ │ Reroll   │
+                    └────┬────┘  └──┬────┘ └──────────┘
+                         │          │
+        ┌────────────────┼──────────┼─────────────────────────────┐
+        │                ▼          ▼                             │
+        │      ┌──────────────────────────┐                       │
+        │      │ #27 World Universe (P0)  │  FOUNDATION (NEW)     │
+        │      │  (lobby + sub-places)    │                       │
+        │      └──┬──────┬───────────────┬┘                       │
+        │         │      │               │                        │
+        │  ┌──────▼─┐ ┌──▼─────────┐ ┌──▼──────────┐              │
+        │  │ #26    │ │ #4 Capture │ │ #6 Boss     │              │
+        │  │Kandang │ │ v2 (item)  │ │  System     │              │
+        │  └────────┘ └────────────┘ │  (3-tier)   │              │
+        │                            └──┬──────────┘              │
+        │                               │                         │
+        │                  ┌────────────┼───────────────┐         │
+        │                  │            │               │         │
+        │             ┌────▼────┐ ┌─────▼─────┐ ┌──────▼────┐    │
+        │             │ Tier 1  │ │ Tier 2    │ │ Tier 3    │    │
+        │             │ Colony  │ │ CEO Bran. │ │ Raid Dun. │    │
+        │             │ solo    │ │ party     │ │ token+    │    │
+        │             │         │ │ instanced │ │ solo/party│    │
+        │             └─────────┘ └───────────┘ └───────────┘    │
+        │                              ▲              ▲           │
+        │                              │              │           │
+        │                       ┌──────┴──────┐ ┌────┴──────┐    │
+        │                       │ #29 Party + │ │ #31       │    │
+        │                       │  Matchmak.  │ │ Items +   │    │
+        │                       └─────────────┘ │ Tokens    │    │
+        │                                       └───────────┘    │
+        │                                                         │
+        │           ┌──────────────────────┐                       │
+        └──────────►│ #30 Trade Marketplace│  PEER-TO-PEER         │
+                    │ (in Lobby)           │                       │
+                    └──────────────────────┘                       │
+                                                                   │
+   Cross-cutting (depend on many):                                 │
+   - #8 Evolution + Level/XP (reads kandang lifetime + boss wins)  │
+   - #12 Moment System                                             │
+   - #13 UI/HUD                                                    │
+   - #14 Onboarding/FTUE                                           │
+   - #15 Monetization (GamePass + DevProduct ladder LOCKED)        │
+   - #16 Leaderboard (Richest Manager — write side shipped ✅)     │
+   - #17 Daily Quests                                              │
+   - #10 Auto-Catch (extends Capture v2 with item auto-use)        │
+                                                                   │
+   Phase 2:                                                        │
+   - #20 Multi-Branch Evolution                                    │
+   - #21 Premium Currency (Brain Cells)                            │
+   - #22 Fame / Trending                                           │
+   - #24 Visit Base (read-only Kandang visit — candidate MVP)      │
 ```
 
 ```mermaid
 graph TD
-    DP[Data Persistence & Roster P0] --> PS[Personality P0]
-    DP --> ECON[Economy: Meme Coins]
-    PS --> CAP[Capture]
-    PS --> IDLE[Idle Production]
-    PS --> BAT[Battle]
-    PS --> RR[Reroll]
-    PS --> EVO[Work-Based Evolution]
-    PS --> MOM[Moment System]
-    CAP --> AC[Auto-Catch]
-    IDLE --> RAID[Raid v1 NPC]
-    BAT --> RAID
-    ECON --> RAID
-    ECON --> RR
-    ECON --> AC
-    ECON --> LB[Leaderboard: Richest Manager]
-    IDLE --> EVO
-    BAT --> EVO
-    RAID --> EVO
-    EVO --> MOM
-    IDLE --> MOM
-    UI[UI/HUD] -.-> CAP
-    UI -.-> BAT
-    UI -.-> RAID
-    UI -.-> LB
-    FTUE[Onboarding/FTUE] -.-> CAP
-    FTUE -.-> IDLE
-    MON[Monetization] -.-> AC
-    MON -.-> RR
-
-    ECON --> DQ[Daily Quests]
-    DP --> DQ
-    CAP --> DQ
-    RAID --> DQ
-    IDLE --> DQ
-    EVO --> DQ
-    UI -.-> DQ
-
-    %% #25 Field Combat / Pet AI (MVP, demo-validated)
-    PS --> PETAI[Field Combat / Pet AI #25]
+    DP[#1 Persistence ✅] --> PS[#2 Personality ✅]
+    DP --> ECON[#3 Economy ✅]
+    PS --> PETAI[#25 Pet AI]
     DP --> PETAI
-    CAP --> PETAI
-    BAT -. shared levelScale .-> PETAI
-    PETAI --> ECON
-    PETAI --> EVO
-    PETAI --> MOM
-    PETAI --> DQ
+    DP --> WORLD[#27 World Universe FOUNDATION]
+    WORLD --> KAN[#26 Kandang]
+    WORLD --> CAP[#4 Capture v2]
+    WORLD --> BOSS[#6 Boss System 3-tier]
+    WORLD --> PARTY[#29 Party + Matchmaking]
+    WORLD --> TRADE[#30 Trade Marketplace]
+    ECON --> CAP
+    ECON --> ITEMS[#31 Items + Tokens]
+    ITEMS --> CAP
+    ITEMS --> BOSS
+    PETAI --> BOSS
+    PARTY --> BOSS
+    CAP --> KAN
+    KAN --> ECON
+    PETAI -. shares formulas .-> EVO[#8 Evolution + Level/XP]
+    BOSS --> EVO
+    BOSS --> MOM[#12 Moment]
+    BOSS --> DQ[#17 Daily Quests]
+    KAN --> DQ
+    CAP --> DQ
+    ECON --> LB[#16 Leaderboard ✅ write]
+    UI[#13 UI/HUD] -.-> KAN
+    UI -.-> CAP
+    UI -.-> BOSS
+    UI -.-> TRADE
+    FTUE[#14 Onboarding] -.-> KAN
+    FTUE -.-> CAP
+    FTUE -.-> BOSS
+    MON[#15 Monetization LOCKED] -.-> ECON
+    MON -.-> ITEMS
+    AC[#10 Auto-Catch] -.-> CAP
+    ITEMS -.-> AC
+    RR[#11 Reroll] -.-> PS
+    RR -.-> ECON
 
-    %% #26 Base / Showroom Spatial Layer (MVP, demo-validated)
-    IDLE --> SHOW[Base/Showroom #26]
-    DP --> SHOW
-    UI -.-> SHOW
+    BC[#21 Brain Cells P2] -.-> ECON
+    FAME[#22 Fame P2] -.-> KAN
+    FAME -.-> TRADE
+    VB[#24 Visit Base P2 candidate] -.-> KAN
+    MBE[#20 Multi-Branch Evo P2] -.-> EVO
 
-    RAID --> PVP[PvP Raids P2]
-    SHIELD[Raid Shield #7 P2] --> PVP
-    MON -.-> SHIELD
-    PVP --> REV[Revenge P2]
-    EVO --> MBE[Multi-Branch Evo P2]
-    ECON --> BC[Brain Cells P2]
-    LB --> BV[Base Visiting P2]
-    BV --> FAME[Fame/Trending P2]
-    PS --> DRAMA[Drama Events P2]
+    BATTLE[#5 Battle ❌ cancelled]:::cancelled
+    RAID[Old Raid #6 ❌ replaced]:::cancelled
+    SHIELD[#7 Shield ❌ cancelled]:::cancelled
+    PVP[#18 PvP Raid ❌ cancelled]:::cancelled
+    REV[#19 Revenge ❌ cancelled]:::cancelled
+
+    classDef cancelled fill:#fdd,stroke:#900
 ```
 
 ---
 
-## Priority List (recommended build order — solo dev)
+## Priority List (recommended build order — solo dev, post-pivot)
 
-Foundation-first; each step unlocks the next. MVP target launch July 2026.
+Foundation-first. **MVP target launch: re-estimated post-pivot, likely Q3-Q4 2026** depending on scope discipline.
 
-1. **Data Persistence & Roster Core** — nothing works without GUID schema, roster cap, server clock, MemoryStore. Build versioned/migratable from day one. Wire lifetime-stat counters now (cheap; enables Evolution + Phase 2 multi-branch later).
-2. **Personality System (trait-table layer)** — pillar. Data field + config trait table first; behavior hooks land as consumers are built.
-3. **Economy / Currency (Meme Coins)** — currency backbone many systems spend/earn against. Pre-provision `gems` field (default 0).
-4. **Idle Production (online + offline)** — first half of the core loop; the AFK-safe default state. Validates server-clock + pending-collect early.
-5. **Capture** — second half of core loop and roster growth. **Highest scope risk: decide explore-map vs crate-fallback before committing.** Lock that call here.
-6. **UI / HUD (incremental)** — start now and grow per system; needed to make capture + idle playable/testable.
-7. **Battle System** — logic-heavy; required before raids. Build deterministic server-authoritative turn engine + personality hooks.
-8. **Raid v1 (NPC Rival Startups)** — exercises battle + loot pipeline without PvP risk. *(Raid Shield is Phase 2 — Raid v1 is offense-only; see #7.)*
-9. **Work-Based Evolution (1 stage/personality)** — long-term hook; consumes the lifetime counters from step 1.
-10. **Moment System** — surfaces the pillar; ship minimal (pop-ups + recap), then enrich.
-11. **Reroll Personality** — small, high monetization; needs Personality + Economy (done) + odds-display UI.
-12. **Leaderboard (Richest Manager)** — small OrderedDataStore system; light social hook. Slots in once Economy + Persistence are stable.
-13. **Daily Quests (objectives)** — slots in here because its objective sources (Capture, Raid, Idle, Evolution) and its reward backbone (Economy) are now all functional, so quests can hook real progress events and pay out via the `quest_daily` faucet. Needs the server-clock daily reset + `lastQuestReset`/progress fields in PlayerData (Persistence). **Late MVP scope add (solo dev) — prune candidate if July 2026 slips; fallback = simple escalating daily-login reward feeding the same faucet.**
-14. **Auto-Catch (hybrid)** — convenience; gate behind ~50 manual catches, not default day 1.
-15. **Onboarding / FTUE** — script the guided path through the now-functional core loop; first-5-minutes retention. Can surface the first daily quest as an early objective once Daily Quests exists.
-16. **Monetization (GamePass + DevProduct)** — wire SKUs onto Auto-Catch, Shield, Reroll, convenience; idempotent ProcessReceipt. Non-blocking to loop, so late but pre-launch.
+### Phase 0: Foundation (must finish before any spatial work)
+1. ✅ **#1 Data Persistence & Roster Core** — shipped. Extension §11 cross-place handoff design needed.
+2. ✅ **#2 Personality** — shipped.
+3. ✅ **#3 Economy** — shipped. Extension v2 (Items/Tokens) pending.
+4. **#27 World Universe Architecture** — **BLOCKS everything spatial below**. Multi-place layout, TeleportService protocol, TeleportData schema, MemoryStore cross-server.
 
-### Demo-validated late MVP additions (build-order slots, GDD pending)
+### Phase 1: Core gameplay loop
+5. **#26 Kandang** (replaces Showroom) — private base sub-place, idle production.
+6. **#4 Capture v2** — item-based instant capture in Areas.
+7. **#31 Items + Token Economy** — Capture Item shop + Raid Token sources.
+8. **#25 Pet AI extension** — 3-tier boss combat scaling rules added to existing GDD.
+9. **#6 Boss System** — Tier 1 Colony first (in-Area), then Tier 2 CEO (party-instanced), then Tier 3 Raid Dungeon.
+10. **#29 Party + Matchmaking** — gates CEO + Raid co-op.
+11. **#13 UI/HUD** (incremental alongside above).
 
-These two systems were prototyped in the playable vertical slice ahead of formal GDD work (commits `e984677` / `a71e545`) and are folded back into the build order here. Code exists in `src/.../Demo/`; the **build-order obligation is to write the formal GDD, then graduate the demo code** from `Demo/*` namespace into the production `src/.../{PetCombat,BaseShowroom}/*` namespace (renaming and tightening against the GDD as needed). They are **not new code work** at the volume of items 1–16, but they **must not stay un-spec'd** — otherwise they become design debt.
+### Phase 2: Social + retention
+12. **#30 Trade Marketplace** — peer-to-peer in Lobby.
+13. **#16 Leaderboard read side + UI** (write side already shipped).
+14. **#17 Daily Quests**.
+15. **#8 Work-Based Evolution + Level/XP** (full Axis A + Axis B implementation).
+16. **#12 Moment System**.
+17. **#11 Reroll Personality**.
 
-- **#26 Base / Showroom Spatial Layer** — slot **after step 4 (Idle Production)** and **step 6 (UI/HUD)** in scope (it depends on both being designed); GDD work can land in parallel with step 6 since it is the spatial wrapper *for* the Idle deployment data. Pure UX layer over Idle #3's `base.buildings.deployment`; no new persistence.
-- **#25 Field Combat / Pet AI** — slot **after step 7 (Battle System)** in scope (shares `levelScale(L)` stat formula). Real-time field combat, **distinct from** turn-based Battle #5. GDD work can land in parallel with step 8 (Raid v1). Requires Personality battle tags (defined in #2 GDD) to be wired for full personality flavor in combat (currently only damage multiplier).
+### Phase 3: Convenience + launch
+18. **#10 Auto-Catch (hybrid)** — automate item-use loop.
+19. **#14 Onboarding / FTUE** — script the full guided path.
+20. **#15 Monetization** — wire SKUs (3 GamePasses + 4 Meme Coin Packs + Raid Token DevProduct).
 
-**Phase 2 (post-launch), rough order:** Raid Shield (#7, paired with PvP — defends against live attackers) → PvP Raids (+ Burnout Inc. boss) → Revenge System → Drama Events → Fame/Trending (reuses MVP Leaderboard infra + needs Base Visiting) → Multi-Branch Evolution → Premium Currency (Brain Cells).
+### Phase 2 (post-launch)
+- **#22 Fame / Trending** + **#24 Visit Base** (may promote to MVP if social-pillar reality demands)
+- **#20 Multi-Branch Evolution**
+- **#21 Premium Currency (Brain Cells)**
+
+---
+
+## Cancelled systems summary (don't build)
+
+❌ #5 Battle System (turn-based) — combat is real-time only
+❌ #6 Old Raid (NPC Rival Startups) — replaced by Boss System (slot #6 retained, content rewritten)
+❌ #7 Raid Shield — no PvP base raid
+❌ #18 PvP Raids — async open PvP cancelled
+❌ #19 Revenge System — coupled to PvP
+
+**Lore obsolete**: 4 NPC Rival Startups (Grind Corp / Chill Collective / The Glitch Gang / Pivot Ventures).
+
+**Locks obsolete**: `raidLootPct = 0.20` (was locked, cancelled same day per pivot).
+
+See `design/decisions/2026-05-29-vision-pivot.md` for full audit trail.
