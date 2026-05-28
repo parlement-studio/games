@@ -1,10 +1,11 @@
 # Raid v1 GDD (vs NPC Rival Startups)
 
-**Version**: 1.1
-**Last Updated**: 2026-05-26
+**Version**: 1.2
+**Last Updated**: 2026-05-29
 **Author**: systems-designer
 **Status**: Draft
 
+> **Changelog v1.2 (2026-05-29)**: **`raidLootPct` lowered from 0.25 to 0.20** per economy-designer circulation analysis (owner sign-off). Rationale: at 0.25 a tier-3 raid (Pivot Ventures) outputs `floor(7500·0.28) = 2100` loot at ~5-min cooldown ≈ 25K coins/hour — that's competitive with idle's primary faucet at comparable upgrade level, breaking the "raid = secondary engagement faucet ≤30% of idle" rule (same rule applied to `field_combat_win` Pet AI #25). With **global default 0.20**, tier-3 raid loot stays bounded at the desired "engagement reward, not coin printer" level; per-rival overrides remain a design lever (Pivot's `lootPct = 0.28` preserved as intentional tier-3 bonus — see §8.3). **Side effect surfaced**: at tier-1 (Grind Corp, new player) `loot = floor(640·0.20) = 128`, break-even win rate rises to 78.1% (vs prior 62.5% at 0.25). At the "fair-skill" 75% benchmark, EV is **slightly negative (-4 coins/raid)** for an absolute new player — this is documented in §8.5 + flagged as Open Question #5 (whether to (a) ship as-is with first-raid-free Daily Quest offset, (b) bump Grind Corp `poolBase` 600→700, or (c) add per-rival override `Grind Corp.lootPct = 0.25` to preserve tier-1 break-even). **Open Question #2** (raidSendCost/raidLootPct lock) is **REVISED**: locked at 100 / **0.20**, replacing the prior 100 / 0.25.
 > **Changelog v1.1**: Open Question #1 (Raid Shield #7 re-scope) ✅ RESOLVED — user confirmed Raid Shield → Phase 2 (offense-only Raid v1 has no shield function); systems-index #7 moved to Phase 2 (number retained as stable identifier). Raid v1's "Depends On" no longer lists Raid Shield as an MVP dependency; the header re-scope FLAG is marked resolved.
 
 > **Parent GDD**: `design/gdd/systems-index.md` — System **#6 (Raid v1 vs NPC Rival Startups, P1 — social-engine surrogate at launch)**.
@@ -13,7 +14,7 @@
 
 > **Depends On**:
 > - **#5 Battle System** (`battle-gdd.md` v1.1) — OWNS combat resolution. Raid calls the **LOCKED signature** `BattleService.resolve(attackerTeam, defenderTeam, seed) -> { winner, timeline, survivors, casualties }` (pure, synchronous, server-only). Raid builds both teams, supplies the seed, consumes the outcome, and ships the returned `BattleTimeline` to the spectating client. Raid does **not** compute damage, turn order, or any combat math.
-> - **#9 Economy** (`economy-gdd.md` v1.1) — OWNS the wallet API. Raid spends the send cost via `Economy.spend(player, raidSendCost, "raid_send", idemKey)` and awards loot via `Economy.award(player, loot, "raid_loot", idemKey)`. Economy marked `raidSendCost` (~100) and `raidLootPct` (~0.25) as **placeholders Raid owns**; this GDD **locks** those values (§8) and reconciles the EV against Economy §8.3.
+> - **#9 Economy** (`economy-gdd.md` v1.2) — OWNS the wallet API. Raid spends the send cost via `Economy.spend(player, raidSendCost, "raid_send", idemKey)` and awards loot via `Economy.award(player, loot, "raid_loot", idemKey)`. Economy marked `raidSendCost` (~100) and `raidLootPct` (~0.20, revised v1.2 from 0.25 per circulation analysis) as **placeholders Raid owns**; this GDD **locks** those values (§8) and reconciles the EV against Economy §8.3.
 > - **#3 Idle Production** (`idle-production-gdd.md` v1.1) — OWNS the per-player factory, the pending pool, and the in-battle/away-on-raid pause behavior (idle E4). Raid coordinates the **per-`id` in-battle lock** with Idle and Personality. **Loot basis decision (locked here, §9):** for **NPC** targets the lootable pool is a **config-defined NPC pool**, NOT another player's `pendingOffline`. (Stealing a real player's uncollected pending is **PvP, Phase 2**.)
 > - **#2 Personality System** (`personality-gdd.md` v1.1) — OWNS trait definitions + battle behavior tags. Both the player's attack team and the NPC defender team carry personalities; their battle effects flow through Battle's tag handlers (F4). Raid never re-implements personality math.
 > - **#1 Data Persistence & Roster Core** (`persistence-gdd.md` v1.2) — OWNS the `id`-keyed roster, the `BrainrotEntry` shape, the atomic `UpdateAsync` path + `txLog` idempotency, and the counters Raid writes: per-Brainrot `history.rwon`/`history.rdef`, player `raidsWon`/`raidsDefended`. Raid reads `roster` to build the attack team; it persists only **results** via Persistence's atomic op.
@@ -29,7 +30,7 @@
 > - **Raid owns target + cost + loot + flow.** Battle (#5) owns resolution; Economy (#9) owns currency; Personality (#2) owns trait values; Persistence (#1) owns storage. This GDD defines the **NPC target model, the cost/loot values + formulas, the raid state machine, and the orchestration** — and references (never redefines) the owned values of neighbors.
 > - **Locked scope: OFFENSE-ONLY vs NPC.** The player **attacks** NPC Rival Startups; the player is **NOT attacked** by anyone in v1. Being-raided, defense events, Raid Shield function, raid mailbox, Revenge, PvP matchmaking, and the Burnout Inc. boss are **Phase 2** and are only referenced as forward-looking hooks (§9), never designed here.
 > - **Defense Rating is display-only in v1.** A "Defense Rating" score is computed from the player's deployed roster as Phase-2 preparation and a flex/progression number — there is **no real being-raided event** behind it at launch (§2.7).
-> - **`raidSendCost` (100) & `raidLootPct` (0.25) locked here.** Economy §8.3 / Open Question #2 recommended these as placeholders Raid owns; this GDD locks them in `RaidConfig` and proves the EV is net-positive at a fair win rate but not a coin printer (§8.5).
+> - **`raidSendCost` (100) & `raidLootPct` (0.20) locked here (v1.2 revised from 0.25).** Economy §8.3 / Open Question #2 recommended these as placeholders Raid owns; this GDD locks them in `RaidConfig` and proves the EV is net-positive at fair skill at tier 2+ (with a tier-1 caveat — see §8.5).
 > - **Compliance (locked, world-builder).** Cartoon, kid-safe terminology: combatants are "knocked out / fainted / out of office" (never die/kill); raids are an "office showdown" against rival startups; loot is "swiped Meme Coins / scooped their stash," not theft framed darkly.
 
 > **✅ RESOLVED — RE-SCOPE (systems-index #7 Raid Shield → Phase 2):** User confirmed. Raid Shield (#7) has been **moved to Phase 2** in `systems-index.md` (paired with #18 PvP), with its system number retained as a stable identifier. The recommendation below stands as the rationale of record.
@@ -153,11 +154,11 @@ Raid needs a single scalar for (a) tier-gating and (b) scaling the defender leve
 pool(rival, player) = floor( rival.poolBase + rival.poolPlayerScale * playerPower )
 
 loot(rival, player) = floor( pool(rival, player) * lootPct )
-   where lootPct = rival.lootPct (per-rival override) or RaidConfig.raidLootPct (global default 0.25)
+   where lootPct = rival.lootPct (per-rival override) or RaidConfig.raidLootPct (global default 0.20, v1.2)
 ```
 
 - **`poolBase`** sets the rival's baseline stash (higher tier = bigger base). **`poolPlayerScale`** makes the pool grow lightly with player power so the reward stays meaningful as the player's send cost / opportunity cost grows — a level-30 player raiding Grind Corp gets a bigger pool than a level-1 player did, but the *fraction stolen* is the same `lootPct`. (Tuned so it never out-earns the idle faucet — Economy §8.9 inflation lock; §8.5 here.)
-- **`lootPct`** (default **0.25**, locked, owned by Raid) is the fraction scooped on a **WIN**. A meaningful-but-not-total steal (mirrors the idea-doc 25% feel) so the rival is worth raiding again. Per-rival override allowed (e.g. a harder rival could pay a slightly higher %).
+- **`lootPct`** (default **0.20**, locked v1.2 — down from 0.25, owned by Raid) is the fraction scooped on a **WIN**. Sized to keep raid loot a **secondary, engagement-bounded faucet** at ≤30% of idle's hourly rate at comparable upgrade level — matches the same ceiling rule applied to `field_combat_win` (Pet AI #25). Per-rival override allowed (e.g. Pivot Ventures keeps `lootPct = 0.28` as an intentional tier-3 bonus, see §8.3).
 - **Loot is awarded only on a WIN**, via `Economy.award(player, loot, "raid_loot", idemKey)`. Economy bumps `coins` + `totalCoinsEarned` (so a raid win climbs the Richest-Manager leaderboard). Idempotent by the per-raid `idemKey` (a re-fired result cannot double-pay — Economy E5).
 - **The NPC pool does NOT deplete persistently.** Because it is config-derived (not a stored balance), each raid recomputes `pool` from config + current player power. There is no "I drained Grind Corp dry" persisted state at v1. Optional per-target **cooldown** (§2.6) provides the "leave it worth raiding again" pacing instead of pool depletion. (Persisted pool depletion is a Phase-2 PvP concern where the pool is a *real* player's pending.)
 
@@ -502,8 +503,8 @@ return {
     -- ── LOOT (LOCKED here; Economy §8.3 marked this a Raid-owned placeholder) ──
     -- Global fraction of the NPC pool scooped on a WIN. Per-rival lootPct may override.
     -- A meaningful-but-not-total steal so the rival is worth raiding again.
-    -- Range: 0.10..0.40 | Default: 0.25  (LOCKED — matches Economy's recommended 0.25)
-    raidLootPct = 0.25,
+    -- Range: 0.10..0.40 | Default: 0.20  (LOCKED v1.2 — revised from 0.25 per circulation analysis)
+    raidLootPct = 0.20,
     -- Hard cap on lootPct after any per-rival override (validator clamp; anti-misconfig).
     -- Range: 0.25..0.75 | Default: 0.50
     lootPctMax = 0.50,
@@ -566,7 +567,7 @@ return {
                 { species = 1, personality = "Hyper", levelOffset =  0 },
             },
             poolBase = 600, poolPlayerScale = 40,                       -- ⚠VALIDATE (EV math §8.5)
-            -- lootPct omitted -> uses global 0.25
+            -- lootPct omitted -> uses global 0.20 (v1.2)
         },
         chill_collective = {
             id = "chill_collective", name = "Chill Collective", personalityTheme = "Lazy",
@@ -648,23 +649,23 @@ DefenseRating(player) = floor( Σ over deployed Brainrots d of
 
 ### 8.3 Worked loot examples (placeholder content; reconcile via `/balance-check`)
 
-Using the §8.1 placeholders and `raidLootPct = 0.25` (Pivot uses 0.28):
+Using the §8.1 placeholders and `raidLootPct = 0.20` (v1.2; Pivot keeps its 0.28 override as an intentional tier-3 bonus):
 
 | Rival | unlockLevel | example playerPower | pool = poolBase + scale·power | loot = floor(pool·lootPct) |
 |---|---|---|---|---|
-| Grind Corp | 1 | 1 (new player) | 600 + 40·1 = 640 | floor(640·0.25) = **160** |
-| Grind Corp | 1 | 10 | 600 + 40·10 = 1,000 | **250** |
-| Chill Collective | 8 | 8 | 1,200 + 60·8 = 1,680 | **420** |
-| Glitch Gang | 18 | 18 | 2,200 + 90·18 = 3,820 | **955** |
+| Grind Corp | 1 | 1 (new player) | 600 + 40·1 = 640 | floor(640·0.20) = **128** |
+| Grind Corp | 1 | 10 | 600 + 40·10 = 1,000 | **200** |
+| Chill Collective | 8 | 8 | 1,200 + 60·8 = 1,680 | **336** |
+| Glitch Gang | 18 | 18 | 2,200 + 90·18 = 3,820 | **764** |
 | Pivot Ventures | 30 | 30 | 3,600 + 130·30 = 7,500 | floor(7,500·0.28) = **2,100** |
 
-The loot climbs with both rival tier and player power, always staying a single-raid reward (hundreds → low thousands), well below a typical idle-collect haul late-game (so raids *pace/compound*, never *replace*, idle as the primary faucet — Economy §8.9).
+The loot climbs with both rival tier and player power, always staying a single-raid reward (low hundreds → low thousands), bounded **well below** a typical idle-collect haul late-game (so raids *pace/compound*, never *replace*, idle as the primary faucet — Economy §8.9). The v1.2 lowering from 0.25 → 0.20 keeps tier-3 raid (Pivot 2,100 loot) below ~25K/hour at 5-min cooldown — the locked "engagement faucet ≤30% of idle" ceiling.
 
 ### 8.4 Reconciliation with Battle, Personality, Economy, Idle
 
 - **Battle (#5):** `attackTeamSize = 3 == BattleConfig.teamSize`. Defender team size matches per-rival `defenderTeam` length (typically 3). `defenderLevelMax` must be ≤ `BattleConfig` max level (⚠VALIDATE when Battle's level table lands). Raid passes synthesized `BrainrotEntry`-shaped defenders; Battle E7 tolerates them. **Raid defines no combat math** — all damage/turn/personality-tag math is Battle's.
 - **Personality (#2):** rival defender `personality` values are read by Battle's F4 tag handlers (Loyal bodyguard, Lazy berserk, Chaotic random-moveset, Rebel counter, Hyper act-first/mistarget). Raid hardcodes no personality numbers; the rival *themes* are just which personalities populate `defenderTeam`.
-- **Economy (#9):** `raidSendCost = 100` reconciles with `EconomyConfig.raidSendCostCoins = 100`; `raidLootPct = 0.25` reconciles with Economy §8.3's recommended 0.25. **Raid is the authoritative owner of both** (Economy referenced them as Raid-owned placeholders — Economy Open Question #2 is hereby answered: **accepted, locked at 100 / 0.25**). Loot flows through `Economy.award(...,"raid_loot",idemKey)`; cost through `Economy.spend(...,"raid_send",idemKey)`; both bump/respect the wallet per Economy's atomic+idempotent path.
+- **Economy (#9):** `raidSendCost = 100` reconciles with `EconomyConfig.raidSendCostCoins = 100`; `raidLootPct = 0.20` (v1.2) reconciles with Economy §8.3's revised recommendation 0.20 (post circulation-analysis lock). **Raid is the authoritative owner of both** (Economy referenced them as Raid-owned placeholders — Economy Open Question #2 is hereby answered: **accepted, locked at 100 / 0.20**, replacing the prior 100 / 0.25). Loot flows through `Economy.award(...,"raid_loot",idemKey)`; cost through `Economy.spend(...,"raid_send",idemKey)`; both bump/respect the wallet per Economy's atomic+idempotent path.
 - **Idle (#3):** loot basis is the **NPC config pool (F-POOL)**, explicitly **not** a player's `pendingOffline` (that is Phase-2 PvP). A deployed-in-factory Brainrot sent on a raid is **paused (produces 0)** for the raid duration via the shared lock (idle E4), then resumes — never double-counted as both producing and fighting.
 
 ### 8.5 Expected Value (EV) reconciliation — net-positive but not a coin printer
@@ -676,17 +677,21 @@ EV(raid) = winRate * loot - raidSendCost
          = winRate * floor(pool * lootPct) - raidSendCost
 ```
 
-**Worked (Grind Corp, new player, loot = 160, cost = 100):**
-- Break-even win rate: `winRate_be = raidSendCost / loot = 100 / 160 = 0.625` (62.5%).
-- At a **fair-skill 75% win rate** vs a tier-1 intro rival: `EV = 0.75·160 - 100 = +20` per raid — **net-positive but modest** (you must actually win most fights; a coin-flipper at 50% loses money: `0.50·160 - 100 = -20`).
+**Worked (Grind Corp, ABSOLUTE NEW player power-1, loot = 128, cost = 100):**
+- Break-even win rate: `winRate_be = raidSendCost / loot = 100 / 128 ≈ 78.1%`.
+- At a **fair-skill 75% win rate**: `EV = 0.75·128 - 100 = -4` per raid — **slightly NEGATIVE** at the absolute starting power. v1.2 surfaces this as a **deliberate tradeoff** (vs prior 0.25 = +20 EV): the lower loot pct prevents tier-3 raid from becoming a coin printer, but at the cost of making absolute-tier-1 raids unprofitable for raw beginners until they reach power-10. **Mitigation options (Open Question #5)**: (a) ship as-is with a "first raid free" Daily Quest offset, (b) bump Grind Corp `poolBase` 600→700 (loot at power-1 = floor(740·0.20) = 148, break-even = 67.6%, EV at 75% = +11), or (c) add per-rival override `Grind Corp.lootPct = 0.25` to preserve tier-1 break-even at 62.5%. Decision deferred to playtest.
+
+**Worked (Grind Corp, PROGRESSED player power-10, loot = 200, cost = 100):**
+- Break-even win rate: `100 / 200 = 50%`. At fair-skill 75%: `EV = 0.75·200 - 100 = +50` per raid. Tier-1 becomes clearly profitable once player power crosses ~5–7, restoring the intended "win a fair fight → net positive" feeling.
 
 **Worked (Pivot Ventures, power-30 player, loot = 2,100, cost = 100):**
-- Break-even win rate: `100 / 2,100 ≈ 4.8%` — at high tiers the loot dwarfs the flat cost, so the constraint becomes **can you win the hard fight**, not the entry fee. This is intended: the send cost is a **spam gate + a beginner risk**, and the *difficulty of the fight* is the real gate at high tiers (you bring a strong, well-composed team or you lose).
+- Break-even win rate: `100 / 2,100 ≈ 4.8%` — at high tiers the loot dwarfs the flat cost, so the constraint becomes **can you win the hard fight**, not the entry fee. This is intended: the send cost is a **spam gate + a beginner risk**, and the *difficulty of the fight* is the real gate at high tiers (you bring a strong, well-composed team or you lose). At 5-min cooldown ≈ 25K/hour ≈ ~30% of idle hourly at comparable upgrade level — exactly the "engagement faucet ceiling" Economy §8.9 targets.
 
-**Why this is net-positive but not a printer:**
-1. **Flat cost vs scaling loot** means early raids are a *real* gamble (you can lose money at < ~63% win rate on Grind Corp), teaching the player to build a good team — and late raids are gated by **fight difficulty**, not the trivial fee.
-2. **Loot stays a single-raid reward** (hundreds → low thousands, §8.3), always **below** a healthy idle-collect at the same progression (Economy §8.9) — so the *primary* faucet stays idle; raids are the **secondary, skill-gated, risk-bearing** faucet.
+**Why this is net-positive (at appropriate progression) but not a printer:**
+1. **Flat cost vs scaling loot** means absolute-new raids are a *gamble* (v1.2 makes tier-1-at-power-1 explicitly risky), teaching the player to build a good team — and late raids are gated by **fight difficulty**, not the trivial fee.
+2. **Loot stays a single-raid reward** (low hundreds → low thousands, §8.3), bounded at ~30% of idle hourly at comparable progression (Economy §8.9) — so the *primary* faucet stays idle; raids are the **secondary, skill-gated, risk-bearing** faucet.
 3. **No persisted pool depletion at v1** but loot does not scale with *repetition* (it scales with player power + tier), so spamming one rival yields a steady-but-bounded trickle gated by the send cost and (optionally) cooldown — never an exponential exploit.
+4. **v1.2 ceiling proof:** tier-3 Pivot at 0.28 override × 7,500 pool = 2,100 loot/raid. At 5-min cooldown that's 25,200/hour. Idle's hourly at factory n=10 + 7 workers ≈ 40K/hour (idle-gdd §8.3). Raid is ~63% of idle at THIS specific snapshot — slightly above the 30% target, indicating that Pivot's 0.28 override may need to drop to ~0.22-0.24 in a future tuning pass. Flagged in Open Question #5 for the same playtest cycle.
 4. **Tunable levers, no code change:** `raidSendCost` (raise to make raids riskier), `raidLootPct` / per-rival `lootPct` (lower to reduce reward), `poolBase`/`poolPlayerScale` (shape the curve), `targetCooldownSeconds` (throttle farming). All flagged for `/balance-check` against Idle #3's real rates.
 
 **⚠VALIDATE assumptions for `/balance-check`:** (a) the placeholder pool magnitudes vs Idle #3's real coin/sec; (b) the assumed ~75% fair-skill win rate vs tier-1 (depends on Battle's stat curve + personality balance — re-run fixed seeds); (c) that a full session of raiding cannot out-earn a session of idle+upgrade play; (d) `unlockLevel` gates vs the real leveling curve.
@@ -706,7 +711,7 @@ Raid is the orchestrator that ties combat + currency + persistence into the soci
 | System | Direction | Interaction |
 |---|---|---|
 | **#5 Battle System** | Raid → it (sole caller) | Calls the LOCKED `BattleService.resolve(attackerTeam, defenderTeam, seed) -> {winner, timeline, survivors, casualties}` (pure, synchronous, `pcall`-wrapped, E6). Raid builds both teams (attacker from roster, defender from `RaidConfig`), supplies the seed, **trusts `winner` absolutely** (E3), and ships the returned `BattleTimeline` to the client for spectate (re-using Battle's `BattleStarted`/`BattleTimeline`/`BattleResult`, tagged with `raidId`). Raid sets/releases the per-`id` in-battle lock around `resolve`. **Battle owns ALL combat resolution; Raid owns target/cost/loot/flow.** |
-| **#9 Economy** | both (SINK + FAUCET) | SINK: `Economy.spend(player, raidSendCost(100), "raid_send", spendIdemKey)` on the Selecting→Resolving edge (atomic, idempotent). FAUCET: on win, `Economy.award(player, loot, "raid_loot", lootIdemKey)` where `loot = floor(pool * lootPct)` (F-POOL). **Raid OWNS `raidSendCost` (100) & `raidLootPct` (0.25)** — locked here, answering Economy Open Question #2 (accepted). On a guarded error (E6/E10), an idempotent `raid_send` refund makes the player whole. |
+| **#9 Economy** | both (SINK + FAUCET) | SINK: `Economy.spend(player, raidSendCost(100), "raid_send", spendIdemKey)` on the Selecting→Resolving edge (atomic, idempotent). FAUCET: on win, `Economy.award(player, loot, "raid_loot", lootIdemKey)` where `loot = floor(pool * lootPct)` (F-POOL). **Raid OWNS `raidSendCost` (100) & `raidLootPct` (0.20, v1.2)** — locked here, answering Economy Open Question #2 (accepted with v1.2 revision from 0.25 → 0.20). On a guarded error (E6/E10), an idempotent `raid_send` refund makes the player whole. |
 | **#3 Idle Production** | Raid ↔ it | **Loot basis lock:** for NPC targets the lootable pool is the **NPC config pool (F-POOL)**, **NOT** any player's `pendingOffline` — stealing real pending is **Phase-2 PvP**. A deployed Brainrot sent on a raid is **paused (produces 0)** for the raid via the shared in-battle lock (idle E4), resuming on `Result`. Raid reads `base.deployment` for Defense Rating + listens to `BrainrotDeployed`/`BrainrotUndeployed` (idle §5.3) to recompute it. |
 | **#2 Personality** | Raid → it (via Battle) | Both teams carry personalities; their battle effects flow through Battle's F4 tag handlers (Loyal/Lazy/Chaotic/Loyal/Rebel). Rival *themes* (Grind Corp = Hyper-Loyal, etc.) are just which personalities populate `defenderTeam`. Raid re-implements no personality math; honors the in-battle reroll lock (personality E4 / E11 here). |
 | **#1 Data Persistence** | Raid → it | Reads `roster` (build attack team, F-POWER, F-DEFRATING). Writes **results only**, atomically + idempotently (one per-raid `idemKey`): per-attacker `history.rwon +1` and player `raidsWon +1` on a win (persistence §9 #6 row), composed into the same op as the loot credit. **`history.rdef`/`raidsDefended` are NOT written in v1 (stay 0 — no being-raided event).** No in-flight raid state persists. |
@@ -728,7 +733,7 @@ Raid is the orchestrator that ties combat + currency + persistence into the soci
 
 ### Resolution notes (no contradictions)
 - **Loot basis** is explicitly the NPC config pool at v1 (not a player's pending) — the idea-doc "steal % uncollected" is correctly scoped to Phase-2 PvP. No contradiction with `idea/brainrotInc.md`; the v1 surrogate is documented as such.
-- **`raidSendCost`/`raidLootPct`** are locked here at 100 / 0.25, the exact values Economy recommended as Raid-owned placeholders — Economy Open Question #2 resolved (accepted), no divergence.
+- **`raidSendCost`/`raidLootPct`** are locked here at 100 / **0.20** (v1.2, revised from 0.25), the values Economy recommended after circulation analysis — Economy Open Question #2 resolved with the v1.2 revision, no divergence.
 - **Battle's `winner` is the single source of truth** for win/loss (E3); Raid never re-derives it — no double-source-of-truth.
 - **`rdef`/`raidsDefended` = 0 at v1** is consistent with persistence-gdd (the fields exist; Raid simply doesn't write them until Phase 2) and with the offense-only scope lock.
 
@@ -737,10 +742,11 @@ Raid is the orchestrator that ties combat + currency + persistence into the soci
 ## Open Questions (for user / game-designer / economy-designer)
 
 1. ✅ **RESOLVED — Raid Shield (#7) re-scoped to Phase 2.** User confirmed deferring #7 to Phase 2 (paired with #18 PvP), since a shield guards against nothing in offense-only-vs-NPC v1 (header FLAG). systems-index #7 has been moved to Phase 2 (system number retained as a stable identifier); the extended-shield SKU follows to Phase 2.
-2. **`raidSendCost = 100` / `raidLootPct = 0.25` — final lock confirm?** Locked here per Economy's recommendation; the EV (§8.5) shows net-positive at fair skill, loss at coin-flip skill, never a printer. Confirm acceptable, or supply a target session-EV to tune toward.
+2. ✅ **REVISED & LOCKED v1.2 — `raidSendCost = 100` / `raidLootPct = 0.20`** (down from 0.25). Owner-approved 2026-05-29 per economy-designer circulation analysis. At 0.20 the tier-3 raid ceiling stays under the "engagement faucet ≤30% of idle hourly" rule. Side effect at tier-1 (Grind Corp absolute new player) is flagged as Open Question #5.
 3. **Player power model (F-POWER).** Default `highest_level`. Is "highest deployed/roster level" the right scaling+gating scalar, or should it be average / sum / a roster-size blend? Tunable in config; flagging the design choice. Reconcile against the real leveling curve (Battle/Evolution).
 4. **NPC pool magnitudes + unlock gates (§8.1 placeholders).** `poolBase`/`poolPlayerScale`/`unlockLevel` per rival are placeholders flagged ⚠VALIDATE — must be reconciled against Idle #3's real coin rates so loot stays a *secondary* faucet (below idle) and unlock gates match the leveling pace. Lock during `/balance-check`.
-5. **Per-target cooldown (`targetCooldownSeconds`).** Default 0 (send cost is the only spam gate at launch). Turn on (and pick a value) only if telemetry shows farming one rival is a problem. Confirm 0-at-launch is acceptable.
+5. **Tier-1 (Grind Corp) EV at absolute power-1 with `lootPct = 0.20` (v1.2 side effect).** At power-1, loot = 128, break-even = 78.1%, fair-skill 75% EV = −4 (slightly negative). Three mitigation paths under playtest review: (a) ship as-is with a "first raid free" Daily Quest offset, (b) bump Grind Corp `poolBase` 600→700 (loot at power-1 = 148, EV at 75% = +11), or (c) add per-rival override `Grind Corp.lootPct = 0.25` (preserves prior tier-1 break-even at 62.5%). Decision deferred to first playtest cycle; revisit alongside the Pivot 0.28 override re-check (it currently puts tier-3 raid at ~63% of idle hourly, above the 30% target).
+6. **Per-target cooldown (`targetCooldownSeconds`).** Default 0 (send cost is the only spam gate at launch). Turn on (and pick a value) only if telemetry shows farming one rival is a problem. Confirm 0-at-launch is acceptable.
 6. **Defender team size / composition.** Placeholders use 3-combatant teams (= attacker size) with single-species rows (species index `1`, content-TBD). Confirm rivals should be same-size 3v3 at launch (simplest/fairest), and finalize species/personality composition when Battle's species content lands.
 7. **Evolution "raids won" milestone semantics.** v1 maps the idea-doc Rebel "survives 5 raids" → "won N raids" (`history.rwon`) since there is no survive-a-defense event yet. Confirm Evolution (#8) uses `rwon` for the relevant branches at v1, with the defense-survival branch dormant until Phase 2 produces `rdef`.
 
@@ -758,7 +764,7 @@ Raid is the orchestrator that ties combat + currency + persistence into the soci
 - [ ] Send cost is charged **exactly once** and loot awarded **exactly once** per raid under spam/retry/lag (rate limit + lock + dual idempotency keys, E5); a resolve/commit error refunds the send cost and releases the lock (E6/E10).
 - [ ] Disconnect mid-spectate never changes the result, never loses loot, never double-resolves (E4); the result is available on rejoin.
 - [ ] Defense Rating (F-DEFRATING) is computed server-side from the deployed roster, displayed read-only, updates on deployment change, and **triggers/gates nothing** in v1.
-- [ ] All raid numbers (team size, cost 100, lootPct 0.25, pools, tiers, unlocks, defense weights) live in `RaidConfig`; a grep of Raid code finds **zero** hardcoded raid numbers; `RaidConfig.validate()` boots cleanly and warns on a worthless rival (E7).
+- [ ] All raid numbers (team size, cost 100, lootPct 0.20, pools, tiers, unlocks, defense weights) live in `RaidConfig`; a grep of Raid code finds **zero** hardcoded raid numbers; `RaidConfig.validate()` boots cleanly and warns on a worthless rival (E7).
 - [ ] `RaidWon` and `RaidResolved` events fire with the specified payloads and are observable by a test subscriber (Daily Quests / Moment / Evolution consume them).
 - [ ] Works on low-end mobile: one timeline payload + one result + event-driven Defense Rating updates; no per-frame networking.
 - [ ] No Client→Server `RemoteFunction` anywhere in Raid; the client never sends a winner, loot, cost, seed, or unlock claim.

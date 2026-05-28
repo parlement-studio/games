@@ -1,11 +1,17 @@
 # Economy / Currency (Meme Coins) GDD
 
-**Version**: 1.2
-**Last Updated**: 2026-05-28
+**Version**: 1.3
+**Last Updated**: 2026-05-29
 **Author**: economy-designer
 **Status**: Draft
 
 > **Changelog**
+> - **v1.3 (2026-05-29):** **Economy circulation lock** per economy-designer recommendation (owner-approved 2026-05-29). Three concrete locks + two new prose sections:
+>   1. **`raidLootPct` recommendation lowered from 0.25 → 0.20** (§8.3). Authoritative owner = Raid #6 (`raid-gdd.md` v1.2 §8 `RaidConfig.raidLootPct = 0.20`); Economy aligns its recommendation here. Rationale: at 0.25 a tier-3 raid (Pivot 7,500 pool) outputs 2,100 loot/raid ≈ 25K/hour at 5-min cooldown — competitive with idle's primary faucet. At 0.20 the global default keeps raid as the locked "engagement faucet ≤30% of idle hourly" (same rule applied to `field_combat_win` Pet AI #25). Per-rival overrides remain a Raid-owned design lever (Pivot keeps 0.28 override).
+>   2. **Open Question #5 (DevProduct Meme Coins Pack sizes) RESOLVED**: 4-tier ladder locked at Small **15K @ 49 R**, Medium **50K @ 99 R**, Large **150K @ 249 R**, Mega **500K @ 599 R**. Medium tier ~one mid-game factory level (n=14 ≈ 38K, n=15 ≈ 52K); conservative sizing — won't trivialize treadmill or trigger inflation. See new §10.4.
+>   3. **`baseRatePerWorker` confirmed LOCKED at 0.5 coins/sec/worker** (idle-production-gdd v1.3 §8.1). With starting 2 workers = 1 coin/sec = 60/min, first factory upgrade (200 coins) affordable in ~3.3 min — fits Economy "Early Goals 5-15 min" pacing band (§10.2 new). **`pendingPoolCapBase = 3600` confirmed LOCKED** (= 1h starting output; pushes engagement + storage upgrade demand at the cost of slight AFK player friction).
+>   4. **New §10 added**: post-launch telemetry checklist with 10 anti-pattern smells + concrete remediation levers. Designed to be ingested by the analytics dashboard (system #16 / live-ops).
+>   5. **New §10.2 added** (wallet pressure curve): per-phase target wallet (minute 5 / 30 / 60 / day 1 / 7 / 30) with "next-goal sink" mapping — the validation target for `/balance-check` runs.
 > - **v1.2 (2026-05-28):** Phase A reconciliation — added **`field_combat_win` faucet (system #25 Field Combat / Pet AI)** to §3.1 catalog, ASCII flow diagram (§2.2), F-FAUCET-FIELDCOMBAT formula (§8.3), `faucetReasons` config (§8.1), and §9 Integration Points. Demo (`a71e545`) already pays `winCoins = 25` per Pet AI win; this GDD now locks that as a config-driven faucet with Pet AI #25 supplying the per-win amount and idempotency key. **Open Question #6 (storage upgrade semantics) RESOLVED**: idle-production-gdd v1.2 §2.6 + storage-cap decision lock `upgrade_storage` to raise **pending-pool cap only** (not the 8h offline window — that stays `PersistenceConfig.offlineCapSeconds`, fixed at launch).
 > - **v1.1 (2026-05-26):** Daily Quests added to MVP as systems-index **#17**. The `quest_daily` faucet now pays out **on quest completion** (not a login streak) and its reward is a **per-quest config pool/range** (no flat magic number) — see §3.1 and §8.2. Added Daily Quests (#17) to Integration Points (§9). Cross-references shifted by the Phase 2 renumber: Drama Events #22 → **#23**, Premium Currency / Brain Cells #20 → **#21**.
 > - **v1.0 (2026-05-26):** Initial economy model.
@@ -186,7 +192,7 @@ Economy's OWN data is the **faucet/sink catalog** — config tables (§8), not p
 | id (reason) | type | value / formula | comment |
 |---|---|---|---|
 | `idle_collect` | variable | amount supplied by Idle Production (#3) | PRIMARY faucet. Economy credits whatever Idle computes; rate owned by #3. |
-| `raid_loot` | formula | `floor(targetPool * raidLootPct)` (§8.3) | Secondary. `targetPool` = NPC Rival Startup's lootable pool (Raid #6). Carries per-raid `idemKey`. |
+| `raid_loot` | formula | `floor(targetPool * raidLootPct)` (§8.3, v1.3 recommended `raidLootPct = 0.20` — locked in raid-gdd v1.2) | Secondary. `targetPool` = NPC Rival Startup's lootable pool (Raid #6). Carries per-raid `idemKey`. |
 | `field_combat_win` | flat | `PetCombatConfig.winCoins` (demo = 25; per win) | **NEW v1.2.** Field Combat / Pet AI (#25) — paid when a summoned Brainrot wins against a wild Brainrot. Pet AI supplies the value + a per-engagement `idemKey` (the fighter/wild pairing); Economy credits + bumps `totalCoinsEarned`. Free-feel "found-money" faucet (engagement reward; no send cost — `costToSummon = 0`). Capped implicitly by `fighterLifetimeSec` + summon cooldown (Pet AI design). |
 | `quest_daily` | per-quest config range | `EconomyConfig.questRewards[questType]` → roll within `{min,max}` (§8.2) | Daily Quests (#17). Paid **on quest completion** (not login streak). Reward is a per-quest-type config range, not a flat value. |
 | `reward_generic` | flat | per-source value (codes, moments, FTUE gifts) | Positive one-off rewards; small. |
@@ -486,18 +492,29 @@ Where:
                  OWNED & supplied by Raid #6 (analogous to a real target's uncollected idle).
                  Range in practice scales with the rival tier (Grind Corp .. Pivot Ventures).
   raidLootPct  : fraction of the pool stolen on a WIN. OWNED by Raid #6 config (RaidConfig.lootPct).
-                 Recommended Range: 0.10-0.40 | Recommended Default: 0.25 (a meaningful but
-                 not total steal — leaves the rival worth raiding again; mirrors the "% of
-                 uncollected" steal from idea/brainrotInc.md Raid & Defend).
+                 Recommended Range: 0.10-0.40 | Recommended Default: 0.20 (v1.3 lowered from 0.25
+                 per circulation analysis — keeps tier-3 raid bounded as a SECONDARY engagement
+                 faucet ≤30% of idle hourly at comparable upgrade level; matches the same
+                 ceiling rule applied to `field_combat_win` Pet AI #25). Per-rival overrides
+                 remain a Raid-owned design lever (raid-gdd v1.2 §8.3 — Pivot Ventures keeps
+                 0.28 override as an intentional tier-3 bonus).
   On WIN:  Economy.award(player, loot, "raid_loot", idemKey = raidId)     -- idempotent (E5)
   On LOSS: no loot (and raid_send cost was already spent — net negative, the risk).
 
-Net-of-cost expected value (sanity, designer should keep > 0 for a fair-skill player):
+Net-of-cost expected value (sanity, designer should keep > 0 for a fair-skill player at tier 2+):
   EV = winRate * loot  -  raidSendCostCoins
      positive whenever  winRate * (targetPool * raidLootPct)  >  raidSendCostCoins
+
+EV worked at v1.3 lock (raidSendCostCoins = 100, raidLootPct = 0.20):
+  Grind Corp (tier 1, power-1 new player):  pool 640, loot 128, break-even 78.1%, EV at 75% = -4
+                                            (deliberately risky for absolute beginners — see raid-gdd §8.5 Open Q #5)
+  Grind Corp (tier 1, power-10 progressed):  pool 1000, loot 200, break-even 50%, EV at 75% = +50
+  Chill Collective (tier 2, power-8):        pool 1680, loot 336, break-even 29.8%, EV at 75% = +152
+  Glitch Gang (tier 3, power-18):            pool 3820, loot 764, break-even 13.1%, EV at 75% = +473
+  Pivot Ventures (tier 3+, power-30, 0.28 override): pool 7500, loot 2100, break-even 4.8%, EV at 75% = +1475
 ```
 
-> **Boundary note:** `raidLootPct` and `targetPool` are referenced here for the economy model but are **owned by Raid #6's config**, not duplicated authoritatively in `EconomyConfig`. Economy only consumes the resulting `loot` amount via `award`. The 0.25 default is a *recommendation* to Raid, ensuring loot meaningfully exceeds the 100-coin send cost.
+> **Boundary note (v1.3):** `raidLootPct` and `targetPool` are referenced here for the economy model but are **owned by Raid #6's config**, not duplicated authoritatively in `EconomyConfig`. Economy only consumes the resulting `loot` amount via `award`. The **0.20 default** is the v1.3 recommendation to Raid (revised from 0.25 per circulation analysis); Raid v1.2 has accepted and locked it in `RaidConfig.raidLootPct = 0.20`. Per-rival overrides preserved (Pivot at 0.28 — intentional tier-3 bonus).
 
 ```
 F-FAUCET-FIELDCOMBAT     Pet AI win reward (per win)                              -- NEW v1.2 (#25)
@@ -704,8 +721,97 @@ Economy is the wallet service every coin-touching system uses. **Reads** = consu
 ## Open Questions (for user / monetization-lead / game-designer)
 
 1. **RESOLVED (v1.1): Daily Quests is an MVP system (systems-index #17).** The `quest_daily` faucet pays **on quest completion** (not login streak), with a **per-quest-type reward range** in `EconomyConfig.questRewards` (§8.2) rather than a flat value. Open sub-question for Daily Quests #17 / game-designer: confirm the per-type ranges (capture_n 100–200, win_raids 150–300, collect_x 100–200, evolve_one 200–350) feel right against Idle #3's real rates, and that a full 3-quest day stays below a single big idle-collect (so quests pace, not replace, idle). Note: Daily Quests is a late MVP scope add and a prune candidate — if cut, the fallback daily-login reward reuses this same `quest_daily` faucet (use `questRewardFallbackCoins`).
-2. **Raid send cost vs. loot EV.** I recommend `raidSendCostCoins = 100` and `raidLootPct ≈ 0.25` so a fair-skill raid is net-positive (§8.3). Raid #6 owns `lootPct`/`targetPool` — please confirm these recommendations are acceptable so the raid loop is worth doing but not a free coin printer.
+2. ✅ **REVISED & LOCKED v1.3 (2026-05-29):** `raidSendCostCoins = 100` / `raidLootPct = 0.20` (down from 0.25 per circulation analysis). Owner-approved. Raid v1.2 has locked both in `RaidConfig`. Side effect at tier-1 absolute new player (EV slightly negative at fair-skill 75%) tracked in raid-gdd v1.2 Open Question #5 for first playtest cycle.
 3. **Upgrade `growth` tuning (1.35 factory / 1.50 worker / 1.40 storage).** These set how hard the inflation-absorbing treadmill bites. They MUST be reconciled against Idle Production #3's actual production rates (not yet written) so cost rises in step with income. Lock after Idle #3 lands; flagging the dependency now.
 4. **Drama fix as a sink (`dramaFixCostCoins` = 200).** Drama Events are Phase 2 (#23). Provisioned now; confirm the value and the always-free-alternative rule when Drama is designed.
-5. **"Meme Coins Pack" DevProduct grant amounts.** Owned by Monetization #15, but they directly affect the faucet/sink balance (a too-large pack trivializes the upgrade treadmill). Recommend coordinating pack sizes against the §8.4 cumulative costs (e.g. a pack ≈ one mid-game factory level, not the whole roster cap).
+5. ✅ **RESOLVED & LOCKED v1.3 (2026-05-29) — DevProduct Meme Coins Pack ladder:**
+   - **Small**:  15,000 coins  @ **49 Robux**  (~$0.61)
+   - **Medium**:  50,000 coins  @ **99 Robux**  (~$1.24)  — ≈ one mid-game factory level (n=14 ~38K, n=15 ~52K)
+   - **Large**: 150,000 coins  @ **249 Robux** (~$3.12)
+   - **Mega**:  500,000 coins  @ **599 Robux** (~$7.49)
+   Sized conservatively — Medium pack equals roughly one mid-game factory upgrade so a shortcut feels meaningful but won't trivialize the treadmill (cumulative factory cost ~4.9M to L29). All packs route through `Economy.award(player, packAmount, "devproduct_pack", PurchaseId)` via the idempotent `ProcessReceipt` (Monetization #15 / persistence v1.4 §2.3a). **Zero pay-to-win** verified: pack converts Robux → coins but coins must STILL flow through the same sink curves to make progress; no skipping of capture/upgrade/raid mechanics. See §10.4 for full SKU table (incl. 3 GamePasses).
 6. **RESOLVED (v1.2): `upgrade_storage` raises the *pending-pool cap* only** — NOT the offline 8h window. Per `idle-production-gdd.md` v1.2 §2.6: `pendingPoolCap = pendingPoolCapBase + pendingCapPerLevel * storageLevel`. The offline 8h window remains fixed at `PersistenceConfig.offlineCapSeconds = 28800` at launch (a separate Phase-2 GamePass lever — see Monetization #15). Economy owns the **cost** of `upgrade_storage` (geometric curve, §8.4); Idle owns the **benefit** (raised pending-pool ceiling so a slow-collect player loses less to overflow). No change to faucets/sinks; clarifies the boundary.
+
+---
+
+## 10. Economy Circulation Lock (v1.3, 2026-05-29)
+
+This section captures the **owner-approved circulation design** derived from the economy-designer recommendation (2026-05-29). All values here are **decision locks** — referenced by `/balance-check` runs + the post-launch live-ops telemetry dashboard.
+
+### 10.1 The big-picture circulation
+
+| Component | Volume share | Role | Locked value |
+|---|---|---|---|
+| **Idle Production (faucet)** | ~80% of all coins earned | SPINE; default state; AFK-safe | `baseRatePerWorker = 0.5` coins/sec/worker (idle-gdd v1.3 §8.1) |
+| **Factory upgrades (sink)** | ~60% of early/mid sink volume | Primary inflation absorber | Geometric `200 × 1.35^n` to L30 (cumulative ~4.9M) |
+| **Slot + storage (sink)** | ~40% of late-game sink volume | Late-game absorber | `slot 250 × 1.20^k` (max 35 paid) + `storage 300 × 1.40^n` to L12 |
+| **Raid loot (faucet)** | Secondary, capped at ~30% of idle hourly | Skill-gated engagement reward | `raidLootPct = 0.20` (raid-gdd v1.2) |
+| **Field combat win (faucet)** | Secondary, capped at ~30% of idle hourly | Real-time engagement reward | `winCoins = 25` (pet-combat-gdd v1.0) |
+| **Quest daily (faucet)** | Pacing/retention layer | Daily session direction | Per-quest range (§8.2 F-FAUCET-QUEST) |
+| **DevProduct Pack (faucet, Robux)** | Robux acceleration | Optional shortcut, zero P2W | 4-tier ladder (§10.4) |
+
+**Rule of thumb (LOCKED):** **idle = spine, everything else = secondary**. No non-idle faucet may exceed 30% of idle's hourly rate at comparable upgrade level. Telemetry alarm triggers if any single non-idle faucet ≥ 30% sustained across 7 days.
+
+### 10.2 Wallet pressure curve (the `/balance-check` validation target)
+
+Target wallet at each phase (assumes default play pattern, average personality mix, follow "next upgrade" path):
+
+| Time mark | Wallet peak | Cumulative earned | State snapshot | Next-goal sink (`always show 1 affordable + 1 aspirational`) |
+|---|---:|---:|---|---|
+| **Minute 5** | 100–200 | 300 | 2 workers, factory L0, free captures 3/3 | Capture #2 (25) → factory L0 (200) |
+| **Minute 30** | 500–800 | 1.8K | factory L2, 3 workers | factory L2 (364) → worker slot L1 (225) |
+| **Minute 60** | 1.2K–2K | 5K | factory L4, 4 workers | factory L4 (681) → first reroll (250) |
+| **Day 1 (~90 min total play)** | 2K–4K peak | 10K–15K lifetime | factory L6–8, 5 workers, ~10 roster | factory L8 (~2K) + first slot_unlock (250) at slot 25 |
+| **Day 7 (~7h total)** | 10K–30K peak | 250K–400K lifetime | factory L15–18, 7–8 workers, ~30–50 roster | factory L18 (~30K) + slot unlocks + Evolution milestones |
+| **Day 30** | 100K–500K peak | 3M–5M lifetime | factory L25–29, 9–10 workers, ~80–150 roster | storage L8+ + slot unlock cap approach + Phase 2 hooks |
+
+**Design rule (LOCKED):** target wallet always shows **≥1 affordable upgrade + 1 aspirational goal at 2–4× current wallet**. If wallet > 5× next-goal cost for ≥7 days → inflation alarm (§10.3 anti-pattern #1).
+
+### 10.3 Sink priority by phase
+
+| Phase | Dominant (volume) | Secondary | Tertiary | Avoid pushing |
+|---|---|---|---|---|
+| **Early (0–60 min)** | `upgrade_factory` (~60%) | `capture` (~20%) | `upgrade_worker_slot` (~15%) | Reroll (introduce gently, never tutorial-pushed) |
+| **Mid (1–10h)** | `upgrade_factory` (~40%) | `upgrade_worker_slot` + `slot_unlock` (~25%) | `reroll` (~15%), `raid_send` (~10%) | `drama_fix` (P2 only) |
+| **Late (10–50h)** | `slot_unlock` + `upgrade_storage` (~40%) | `reroll` on rare drops (~25%) | Factory final levels (~20%) | None — all sinks active |
+| **Prestige (50h+)** | Cosmetic / showroom skins (Phase 2) | Brain Cells store (Phase 2) | Evolution acceleration consumables (Phase 2) | — |
+
+### 10.4 Anti-pattern telemetry checklist (post-launch live-ops)
+
+10 smells to monitor + concrete remediation levers. Designed to be ingested by analytics dashboards (live-ops responsibility).
+
+| # | Smell | Threshold | Remediation lever |
+|---|---|---|---|
+| 1 | **Wallet bloat** | Median wallet > 5× median next-goal cost for ≥7 days | Raise `factory.growth` 1.35 → 1.40 OR add new sink tier |
+| 2 | **Empty wallet stall** | p50 wallet = 0 for ≥24h | Raise `baseRatePerWorker` 0.5 → 0.6 OR raise quest reward ranges |
+| 3 | **Reroll spam at tier-1** | >50% of rerolls at the 250-coin tier | Tighten `reroll.resetHours` 24 → 18 OR improve roll outcome telegraphing |
+| 4 | **Raid avoidance** | <20% of eligible players send any raid in first 3 sessions | Lower `raidSendCostCoins` 100 → 75 OR add "first raid free" Daily Quest |
+| 5 | **Capture droughts** | p50 captures/day < 2 | Extend `freeCapturesOnboarding` 3 → 5 OR lower `captureCostCoins` 25 → 20 |
+| 6 | **Storage-full chronic** | >40% of sessions hit storage cap before collect | Raise `pendingPoolCapBase` 3600 → 5400 (re-check the v1.3 lock decision) |
+| 7 | **Idle dominance >90%** | Non-idle faucets <10% of earned coins | Raise raid `lootPct` per-tier overrides OR raise quest ranges OR add daily login bonus |
+| 8 | **Robux conversion <2%** | <2% of session-active players purchase any GamePass/DevProduct | Lower 2x Offline GamePass 199 → 149 OR improve "while you were gone" recap selling moment |
+| 9 | **Whale ceiling** | Top-1% wallet > 100M coins | Ship Phase 2 cosmetics/Brain Cells faster OR add prestige reset |
+| 10 | **Net-worth leaderboard plateau** | Top-10 rankings static for weeks | Add limited-time event currency (auto-resetting, inflation-safe) |
+
+**All thresholds are starting points.** Tune after first cohort data (target: 2 weeks post-launch live-ops review).
+
+### 10.5 Monetization SKU lock (forwarded to Monetization #15)
+
+The 5 SKUs below are the v1.3 locked recommendation for launch. **Zero pay-to-win** verified for each. Authoritative ownership transfers to `monetization-gdd.md` (#15) when it ships; this is Economy's recommendation for the catalog.
+
+| SKU | Type | Price (Robux) | Grant | P2W check | Status |
+|---|---|---:|---|---|---|
+| **2x Offline Earnings** | GamePass | 199 (~$2.49) | `offlineGamePassMultiplier = 2.0` in `computeOfflineRate` | ✅ Pure pacing; doesn't touch raid combat power | LOCK |
+| **Extra Roster Slots (+50)** | GamePass | 299 (~$3.74) | Raises persistence `rosterCap` 200 → 250 | ✅ Inventory only; no combat power | LOCK |
+| **Auto-Catch toggle** | GamePass | 399 (~$4.99) | Auto-spend `captureCostCoins` on wild encounters | ✅ Pure UX automation; player still pays coins | LOCK |
+| **Meme Coins Pack (Small)** | DevProduct | 49 (~$0.61) | +15,000 coins (idempotent) | ✅ Coins still flow through same sinks | LOCK (§Open Q #5) |
+| **Meme Coins Pack (Medium)** | DevProduct | 99 (~$1.24) | +50,000 coins | ✅ ~1 mid-game factory level | LOCK (§Open Q #5) |
+| **Meme Coins Pack (Large)** | DevProduct | 249 (~$3.12) | +150,000 coins | ✅ Coins still flow through sinks | LOCK (§Open Q #5) |
+| **Meme Coins Pack (Mega)** | DevProduct | 599 (~$7.49) | +500,000 coins | ✅ Doesn't bypass progression gates | LOCK (§Open Q #5) |
+| **Offline Storage +4h** (FUTURE) | GamePass | 249 (~$3.12) | `offlineCapSeconds 28800 → 43200` (8h → 12h) | ✅ Pure pacing convenience | PHASE-2 (storage upgrade lever per Open Q #6) |
+
+**Explicit anti-recommendation (DO NOT ship at launch):**
+- ❌ Skip-reroll-cooldown GamePass — undermines locked 24h reset (kid frustration mechanic if monetized)
+- ❌ Buy-specific-Brainrot — directly P2W in capture loop
+- ❌ Boost-raid-winrate — explicit violation of zero-P2W rule
+- ❌ Loot boxes / Premium currency gacha — defer to Phase 2 Brain Cells with regulated odds disclosure (chance-display compliance)

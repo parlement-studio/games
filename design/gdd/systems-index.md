@@ -161,13 +161,19 @@
 - **Notes**: Guided first capture → reveal personality → deploy → first collect → soft raid intro, with an immediate reward inside the first session. Guide character ("Incubator HQ mentor") gives one instruction at a time; exactly one glowing objective beacon at all times. Must teach the capture mini-game before Auto-Catch is available. Build after core loop systems are functional (it scripts a path *through* them). Step thresholds/rewards config-driven.
 
 ### 15. Monetization (GamePass + DevProduct, zero P2W)
-- **Status**: Not started
+- **Status**: SKU table LOCKED (`economy-gdd.md` v1.3 §10.4, 2026-05-29). Full system implementation: Not started.
 - **Phase**: MVP
 - **Priority**: P1 (launch revenue, but non-blocking to core loop)
 - **Value**: 3 | **Effort**: 3 | **Risk**: M | **Monetization**: 5
-- **GDD**: `design/gdd/monetization-gdd.md` (planned)
+- **GDD**: `design/gdd/monetization-gdd.md` (planned — will adopt the §10.4 SKU table from economy-gdd v1.3)
 - **Depends On**: Data Persistence, Economy, Auto-Catch, Reroll (the things being sold). *(Raid Shield #7 is Phase 2, so the extended-shield product is a Phase-2 SKU, not a launch SKU.)*
-- **Notes**: GamePasses + DevProducts, strict zero pay-to-win (critical: nothing that boosts raid combat power). Launch SKUs: Auto-Catch upgrade, 2x offline earnings, Reroll Robux path, extra Brainrot slots, VIP cosmetics. **Extended Raid Shield (capped) is a Phase-2 SKU** (Raid Shield #7 moved to Phase 2 — no shield function in offense-only Raid v1). Receipt processing must be idempotent + server-authoritative (ProcessReceipt). Product IDs + grants config-driven. Wire after the underlying systems exist.
+- **Notes**: GamePasses + DevProducts, strict zero pay-to-win (critical: nothing that boosts raid combat power). **Launch SKU ladder LOCKED v1.3 (owner-approved 2026-05-29 per economy-designer circulation analysis — see `economy-gdd.md` §10.4 for full table + P2W audit):**
+  - 3 GamePasses: **2x Offline Earnings @ 199 R**, **Extra Roster Slots +50 @ 299 R**, **Auto-Catch toggle @ 399 R**
+  - 4 DevProduct Meme Coins Packs: **Small 15K @ 49 R**, **Medium 50K @ 99 R**, **Large 150K @ 249 R**, **Mega 500K @ 599 R**
+  - Phase 2 SKU (forward-flag): **Offline Storage +4h @ 249 R** (raises `offlineCapSeconds` 8h→12h, separate from `upgrade_storage`)
+  - **Extended Raid Shield (capped)** moved to Phase 2 (Raid Shield #7 moved to Phase 2 — no shield function in offense-only Raid v1)
+  - **Anti-recommendation (DO NOT ship):** skip-reroll-cooldown, buy-specific-Brainrot, boost-raid-winrate, loot boxes / premium currency gacha
+  - Receipt processing must be idempotent + server-authoritative (ProcessReceipt → `processReceiptGrant` in persistence v1.4 §2.3a). Product IDs + grants config-driven. Wire after the underlying systems exist.
 
 ### 16. Leaderboard (Richest Manager)
 - **Status**: Not started
