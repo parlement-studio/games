@@ -1,9 +1,17 @@
-# Field Combat / Pet AI GDD (Real-Time Hub Combat)
+# Field Combat / Pet AI GDD (Real-Time Hub Combat — **PROMOTED TO PILLAR**)
 
-**Version**: 1.0
+> ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD has been **PROMOTED to PILLAR combat engine** per the Vision Pivot 2026-05-29. Pet AI is now the **sole combat engine for ALL boss tiers** (Battle #5 is cancelled). Extensions needed:
+> - **3-tier boss combat scaling rules**: Tier 1 Colony Boss (solo-able in shared Area), Tier 2 Super Boss / CEO Brainrot (party-instanced sub-place), Tier 3 Raid Boss (token-gated Dungeon, solo or party).
+> - **Migration from Battle #5** (archived): `levelScale(L)` formula, the 5 personality battle tags + params, KnockedOut vocabulary lock — all now solely owned here.
+> - **Title rename**: "Real-Time Hub Combat" → "Real-Time Boss Combat (3-tier)" (planned in next revision).
+> - **PRESERVED**: Existing §1–§9 + 24-knob `PetCombatConfig` from demo `a71e545` survive intact as foundation; extension layers on top.
+>
+> See `design/decisions/2026-05-29-vision-pivot.md` (Decision 4) and `design/gdd/systems-index.md` v3.0 #25 (promoted to P1 PILLAR).
+
+**Version**: 1.0 (pivot-extension pending — 3-tier boss combat + Battle #5 migration)
 **Last Updated**: 2026-05-29
 **Author**: systems-designer
-**Status**: Draft (descriptive lock of demo reference impl `a71e545`)
+**Status**: Draft (descriptive lock of demo reference impl `a71e545`; pivot-extension pending)
 
 > **Changelog**
 > - **1.0 (2026-05-29)** — Initial GDD. Locks the demo reference implementation (`a71e545` `feat(demo): summoned-fighter pet AI`) as the v1 contract for System #25 Field Combat / Pet AI. **Descriptive scope:** documents the demo's mechanics, formulas, schema, and the cross-system contracts already locked in Phase B (`battle-gdd` v1.3 §2.4 shared personality tags; `evolution-gdd` v1.3 §2.7 Axis B XP write; `economy-gdd` v1.2 F-FAUCET-FIELDCOMBAT). **NOT prescribed in v1.0:** full personality battle-tag wiring (demo only applies `personalityDamageScales × prodMult` damage multiplier — full tag wiring is a v1.1 work item, flagged in §2.8 / Open Question #1).

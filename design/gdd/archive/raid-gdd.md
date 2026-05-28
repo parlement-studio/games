@@ -1,9 +1,40 @@
-# Raid v1 GDD (vs NPC Rival Startups)
+# Raid v1 GDD (vs NPC Rival Startups) — **ARCHIVED**
 
-**Version**: 1.2
-**Last Updated**: 2026-05-29
+> ## 🚫 ARCHIVED — REPLACED by Vision Pivot 2026-05-29
+>
+> **This GDD is no longer active.** It is preserved here for historical reference and audit trail integrity.
+>
+> **Why archived:** The Vision Pivot decision on **2026-05-29** replaced the NPC-Rival-Startup async raid mechanic entirely with a new **3-tier Boss System** (Tier 1 Colony Boss in Areas, Tier 2 Super Boss in dedicated zones, Tier 3 Raid Boss in token-gated Dungeons). The PvE boss progression replaces both this PvE-vs-NPC raid model AND the planned Phase 2 PvP raid (which is also cancelled). Combat resolution is now real-time via Pet AI #25 (Battle #5 also cancelled).
+>
+> **What was cancelled (no migration):**
+> - **4 NPC Rival Startups** as raid targets: Grind Corp, Chill Collective, The Glitch Gang, Pivot Ventures (lore archived)
+> - "Burnout Inc." Phase 2 boss-tier rival (may be repurposed as a Raid Boss Dungeon name, but not committed)
+> - **`raidLootPct = 0.20` lock** (locked 2026-05-29 hours before the pivot; cancelled same day — boss raid mechanic uses different loot model)
+> - `raidSendCost = 100` flat fee (replaced by **Raid Token consumption** for Tier 3; Tier 1 + 2 are free-explore per Vision Pivot Decisions 3+7)
+> - Per-rival `lootPct` override mechanism (no per-rival lootPct in new boss model — each boss has its own drop table)
+> - Defense Rating display (was display-only, became moot when PvP Raid Shield + PvP Raids cancelled)
+> - `BattleService.resolve` integration (Battle #5 itself cancelled)
+> - Raid v1 EV analysis (§8.5 worked examples for Grind Corp/Chill/Glitch/Pivot) — bosses have different drop economics
+>
+> **What carried forward (concepts that influence new Boss System):**
+> - The **per-tier difficulty scaling concept** (was tiers 1-3 across 4 rivals; now tiers 1-3 across Colony/CEO/Raid Boss)
+> - The **idempotency discipline** for the cost-and-reward op (will reappear in Boss System for token consumption + drop credit)
+> - The **lock-around-resolution discipline** (will reappear for boss combat lock vs roster ops)
+>
+> **Audit anchor:** `design/decisions/2026-05-29-vision-pivot.md` (Vision Pivot Doc).
+> **Replacement system:** `boss-system-gdd.md` (planned — 3-tier boss structure).
+> **Systems-index current state:** `design/gdd/systems-index.md` v3.0 (#6 slot RETAINED with content rewritten — new Boss System occupies same number).
+>
+> **Do not extend, modify, or implement against this GDD.** When the new `boss-system-gdd.md` is authored, it occupies the #6 slot.
+>
+> ---
+>
+> *(Original content preserved below for historical reference.)*
+
+**Version**: 1.2 (ARCHIVED — superseded by Vision Pivot 2026-05-29)
+**Last Updated**: 2026-05-29 (same day as pivot; content pre-pivot)
 **Author**: systems-designer
-**Status**: Draft
+**Status**: ARCHIVED (was: Draft)
 
 > **Changelog v1.2 (2026-05-29)**: **`raidLootPct` lowered from 0.25 to 0.20** per economy-designer circulation analysis (owner sign-off). Rationale: at 0.25 a tier-3 raid (Pivot Ventures) outputs `floor(7500·0.28) = 2100` loot at ~5-min cooldown ≈ 25K coins/hour — that's competitive with idle's primary faucet at comparable upgrade level, breaking the "raid = secondary engagement faucet ≤30% of idle" rule (same rule applied to `field_combat_win` Pet AI #25). With **global default 0.20**, tier-3 raid loot stays bounded at the desired "engagement reward, not coin printer" level; per-rival overrides remain a design lever (Pivot's `lootPct = 0.28` preserved as intentional tier-3 bonus — see §8.3). **Side effect surfaced**: at tier-1 (Grind Corp, new player) `loot = floor(640·0.20) = 128`, break-even win rate rises to 78.1% (vs prior 62.5% at 0.25). At the "fair-skill" 75% benchmark, EV is **slightly negative (-4 coins/raid)** for an absolute new player — this is documented in §8.5 + flagged as Open Question #5 (whether to (a) ship as-is with first-raid-free Daily Quest offset, (b) bump Grind Corp `poolBase` 600→700, or (c) add per-rival override `Grind Corp.lootPct = 0.25` to preserve tier-1 break-even). **Open Question #2** (raidSendCost/raidLootPct lock) is **REVISED**: locked at 100 / **0.20**, replacing the prior 100 / 0.25.
 > **Changelog v1.1**: Open Question #1 (Raid Shield #7 re-scope) ✅ RESOLVED — user confirmed Raid Shield → Phase 2 (offense-only Raid v1 has no shield function); systems-index #7 moved to Phase 2 (number retained as stable identifier). Raid v1's "Depends On" no longer lists Raid Shield as an MVP dependency; the header re-scope FLAG is marked resolved.

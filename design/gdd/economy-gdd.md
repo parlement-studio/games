@@ -1,9 +1,17 @@
 # Economy / Currency (Meme Coins) GDD
 
-**Version**: 1.3
+> ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **extensions and obsoletions**:
+> - **NEW sections needed**: §11 Capture Items Shop (faucet from Lobby shop) + §12 Raid Token Economy (gated entry for Tier 3 Boss).
+> - **OBSOLETED**: `raidLootPct = 0.20` lock (§8.3 + Open Q #2) — boss raid uses different loot mechanic.
+> - **OBSOLETED**: `raid_loot` faucet + `raid_send` sink — replaced by `boss_kill_drop` + `raid_token_purchase`.
+> - **PRESERVED**: All other locks (DevProduct ladder, GamePasses, wallet curve, anti-pattern checklist, idle economy mechanics).
+>
+> See `design/decisions/2026-05-29-vision-pivot.md` and `design/gdd/systems-index.md` v3.0 for canonical state. **Treat §8.3 raidLootPct + raid_loot/raid_send references below as historical.**
+
+**Version**: 1.3 (pivot-extension pending — partial obsoletions flagged above)
 **Last Updated**: 2026-05-29
 **Author**: economy-designer
-**Status**: Draft
+**Status**: Draft (pivot-extension pending)
 
 > **Changelog**
 > - **v1.3 (2026-05-29):** **Economy circulation lock** per economy-designer recommendation (owner-approved 2026-05-29). Three concrete locks + two new prose sections:

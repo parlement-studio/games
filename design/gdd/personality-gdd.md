@@ -1,9 +1,16 @@
 # Personality System GDD
 
-**Version**: 1.1.1
+> ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **minor reconciliation**:
+> - **Battle behavior tag consumer changed**: previously consumed by both Battle #5 (turn-based) + Pet AI #25 (real-time, shared contract). Now **Pet AI #25 is sole consumer** (Battle #5 cancelled). The 5 tags + params + values remain unchanged; only the runtime dispatch surface is single-engine.
+> - **All other locks preserved**: 5 personality enum (Hyper/Lazy/Chaotic/Loyal/Rebel), trait table (production multipliers, break/walkout/morale params), `getBattleBehavior(id)` API, runtime state machine, F1–F5 formulas, roll weights + reroll mechanics.
+> - **Implementation intact**: shipped code in `src/ServerStorage/Personality/PersonalityService.luau` requires zero changes.
+>
+> See `design/decisions/2026-05-29-vision-pivot.md` and `design/gdd/systems-index.md` v3.0 #2 + #25 (Pet AI as sole battle-tag consumer).
+
+**Version**: 1.1.1 (pivot-reconciliation minor; Battle tag consumer = Pet AI only)
 **Last Updated**: 2026-05-28
 **Author**: systems-designer
-**Status**: Draft
+**Status**: Draft (shipped + minor pivot reconciliation)
 
 > **Changelog**
 > - **1.1.1 (2026-05-28)** — **Phase A clarification (no schema or formula change).** Two prose clarifications for cross-system contracts surfaced by the systems-index 2026-05-28 update:

@@ -1,9 +1,16 @@
 # Work-Based Evolution + Level/XP Progression GDD
 
-**Version**: 1.3
+> ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **minor reconciliation**:
+> - **XP source consolidated**: previously Raid wins (Battle #5) + Field Combat wins (Pet AI #25). Now **all combat-win XP routes through Pet AI #25** (sole pillar combat engine; Battle #5 cancelled). The Axis B Level/XP curve + formula + values unchanged.
+> - **Axis A milestone source `history.rwon`** (raids won) — semantics adapted: was "wins as raid attacker"; now "Tier 1 Colony Boss kills" + "Tier 2 Super Boss kills" + "Tier 3 Raid Boss kills" (combined). Per-tier separation may be added in a future revision if Evolution wants to gate per-tier milestones.
+> - **Locked decisions preserved**: xpPerWin=50, xpCurveBase=100, statGrowthPerLevel=0.08, maxLevel=100, all multipliers, 5-personality form table.
+>
+> See `design/decisions/2026-05-29-vision-pivot.md` and `design/gdd/systems-index.md` v3.0 #8.
+
+**Version**: 1.3 (pivot-extension minor; XP source consolidated)
 **Last Updated**: 2026-05-28
 **Author**: systems-designer
-**Status**: Draft
+**Status**: Draft (post-pivot extension minor)
 
 > **Changelog v1.3 (2026-05-28)**: **Phase A reconciliation — added Axis B: Level/XP Progression** as a *descriptive* lock of the demo work (commit `36724cf`, demo's `DemoConfig.progression` block + `DemoServer` battle-resolution path). Per the systems-index 2026-05-28 update, system #8 now covers **two orthogonal progression axes**:
 > - **Axis A — Work-Based Evolution** (transformative milestone, unchanged in v1.3): one-shot, per-personality, flips identity (`evoStage 0 → 1`) — everything §2.1–§2.6 / §3.2 / §8.1–§8.4 describes.

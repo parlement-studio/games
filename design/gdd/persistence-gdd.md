@@ -1,9 +1,11 @@
 # Data Persistence & Roster Core GDD
 
+> ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **extension required**: a new **§11 Cross-Place TeleportData Handoff** is needed for multi-place Roblox Universe architecture (per System #27 World Universe). Player state must traverse Lobby ↔ Areas ↔ Super Boss zones ↔ Raid Dungeons ↔ Kandang cleanly. Current §1–§10 content remains canonical and shipped. See `design/decisions/2026-05-29-vision-pivot.md` and `design/gdd/systems-index.md` v3.0 for context.
+
 **Version**: 1.4.1
 **Last Updated**: 2026-05-28
 **Author**: datastore-architect
-**Status**: Draft
+**Status**: Draft (pivot-extension pending)
 
 > **Changelog**
 > - **1.4.1 (2026-05-28)** — **Phase A cross-system reconciliation note (no schema change, no logic change).** Documents two new MVP consumers of existing persistence-owned data, both shipped in the demo vertical slice (per `design/gdd/systems-index.md` revision 2026-05-28):

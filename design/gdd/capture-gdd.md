@@ -1,9 +1,19 @@
-# Capture System GDD (Explore + Manual Catch)
+# Capture System GDD (Explore + Manual Catch) — **WILL BE REWRITTEN**
 
-**Version**: 1.3
+> ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD is **scheduled for full rewrite** as `capture-v2-gdd.md` per the Vision Pivot 2026-05-29. New model:
+> - **Item-based instant capture** (no fight required for capture itself; Pet AI is for boss combat only) — per Vision Pivot Decision 2.
+> - **Area-tier items**: `Forest Item` / `Cave Item` / `Sky Item` / etc., bought in Lobby shop (coin sink), used in respective Area sub-places.
+> - **Areas are explore-map (not hub)** — the "explore-map vs crate fallback" tension in §10 below dissolves; Areas (System #27 World Universe) provide the explore-map natively.
+> - **Free captures, capture cost, timing minigame mechanics** — all OBSOLETED. Replaced by item-based flow.
+>
+> Treat this GDD as **historical reference only** while `capture-v2-gdd.md` is being authored. Roster cap (200) + GUID minting + `BrainrotEntry` schema survive in Persistence #1.
+>
+> See `design/decisions/2026-05-29-vision-pivot.md` (Decision 2) and `design/gdd/systems-index.md` v3.0 #4.
+
+**Version**: 1.3 (ARCHIVED-PENDING — will be superseded by capture-v2-gdd.md)
 **Last Updated**: 2026-05-28
 **Author**: systems-designer
-**Status**: Draft
+**Status**: Draft (pending full rewrite as Capture v2)
 
 > **Changelog**
 > - **1.3 (2026-05-28)** — Phase A reconciliation:

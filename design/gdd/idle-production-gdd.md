@@ -1,9 +1,20 @@
-# Idle Production (Online + Offline) GDD
+# Idle Production (Online + Offline) GDD — **WILL BE REWRITTEN as Kandang**
 
-**Version**: 1.3
+> ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD is **scheduled for rewrite + rename** as `kandang-gdd.md` per the Vision Pivot 2026-05-29. Changes:
+> - **Renamed**: "Showroom" → **"Kandang"** (utilitarian cage/pen vs display-flex showcase).
+> - **Demoted from pillar to "progress helper"**: idle production is no longer the spine of the game (hunting + boss raids are). Idle still accrues coins passively but is **NOT** the primary engagement loop.
+> - **Hosted as private sub-place** (per Vision Pivot Decision 1) — each player's Kandang is their own Roblox place, teleported from Lobby. Visit Base #24 (Phase 2 candidate) makes it visit-able read-only.
+> - **Production math + personality multipliers + offline accrual + storage cap + upgrade tracks all PRESERVED** — Persistence schema `base.buildings.deployment` survives unchanged. F1/F2/F3-ON/F3-OFF/F4/F5 formulas survive.
+> - **Showroom spatial layer (§6 + §9 #26)** — re-themed as Kandang vibe; pedestal/spatial rendering details adapt.
+>
+> Treat this GDD as **canonical-but-pending-rename** while `kandang-gdd.md` is being authored. Math + schema content carries forward; vibe + naming + sub-place hosting need rework.
+>
+> See `design/decisions/2026-05-29-vision-pivot.md` and `design/gdd/systems-index.md` v3.0 #26 (Kandang) + #27 (World Universe).
+
+**Version**: 1.3 (pivot-rewrite pending — will become kandang-gdd.md)
 **Last Updated**: 2026-05-28
 **Author**: systems-designer
-**Status**: Draft
+**Status**: Draft (pending rewrite as Kandang)
 
 > **Changelog v1.3 (2026-05-28)**: **Phase A reconciliation — two clarifications, no formula changes.**
 > - **Axis B Level/XP does NOT affect idle production rate (LOCKED).** Evolution v1.3 added an Axis B Level/XP system (§2.7) — combat-only by design. Idle's §2.2 already kept `levelRateBonus = 0` at MVP (line ~76 / §8.1 IdleConfig); v1.3 strengthens the language: **the `levelRateBonus` term in F1 / F3-OFF stays at `0` permanently — it is NOT a future tuning lever for Level/XP.** A level-driven idle multiplier would (a) double-stack with Evolution Axis A's production multiplier (`evoProductionMult` x1.20), (b) double-stack with factory-level upgrades, and (c) couple combat XP to economy inflation. Decision: Level affects **combat only** (Battle #5 + Pet AI #25 via `levelScale(L)`); Evolution Axis A (`evoStage`) is the **sole production multiplier hook** for Brainrot maturity. The `levelRateBonus` config entry is preserved (= 0) only as a non-Level forward-compat slot (e.g. for a future "tier" or "rarity" multiplier unrelated to Axis B). See evolution-gdd v1.3 §2.7 / §2.8.

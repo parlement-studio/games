@@ -1,9 +1,36 @@
-# Battle System GDD (Auto, Turn-Based, Spectatable — for Raid #6)
+# Battle System GDD (Auto, Turn-Based, Spectatable — for Raid #6) — **ARCHIVED**
 
-**Version**: 1.3
-**Last Updated**: 2026-05-28
+> ## 🚫 ARCHIVED — CANCELLED by Vision Pivot 2026-05-29
+>
+> **This GDD is no longer active.** It is preserved here for historical reference and audit trail integrity.
+>
+> **Why archived:** The Vision Pivot decision on **2026-05-29** cancelled the turn-based combat engine that this GDD specifies. All combat in the new vision is **real-time via Pet AI #25** (Vision Pivot Decision 4). Turn-based has no remaining caller — the only consumer (Raid #6 vs NPC Rival Startups) is itself cancelled and replaced by the new Boss System (3-tier, also pivoted to Pet AI engine).
+>
+> **What carried forward (migration to `pet-combat-gdd.md`):**
+> - The `levelScale(L) = 1 + statGrowthPerLevel * (L - 1)` formula → owned by Pet AI §8 (was Battle §2.1 / §8.2 F2)
+> - The 5 personality battle behavior tags (`act_first_mistarget`, `berserk_when_last`, `random_moveset`, `bodyguard`, `counter_double`) → consumed by Pet AI dispatch
+> - The `KnockedOut` terminal-state vocabulary lock → Pet AI vocabulary lock
+>
+> **What was cancelled (no migration):**
+> - The deterministic seeded RNG / event-log / spectatable replay model
+> - The NPC Rival Startups (Grind Corp / Chill Collective / The Glitch Gang / Pivot Ventures) as raid targets
+> - `BattleService.resolve()` signature
+> - `BattleConfig` (turn engine constants)
+>
+> **Audit anchor:** `design/decisions/2026-05-29-vision-pivot.md` (Vision Pivot Doc).
+> **Replacement systems:** `pet-combat-gdd.md` v1.0 (pillar combat engine) + `boss-system-gdd.md` (planned, 3-tier boss structure).
+> **Systems-index current state:** `design/gdd/systems-index.md` v3.0 (#5 marked CANCELLED with stable identifier retention).
+>
+> **Do not extend, modify, or implement against this GDD.** If a future design references a concept here, source from the replacement GDDs above.
+>
+> ---
+>
+> *(Original content preserved below for historical reference.)*
+
+**Version**: 1.3 (ARCHIVED — superseded by Vision Pivot 2026-05-29)
+**Last Updated**: 2026-05-28 (pre-pivot)
 **Author**: systems-designer
-**Status**: Draft
+**Status**: ARCHIVED (was: Draft)
 
 > **Changelog v1.3 (2026-05-28)**: **Phase A scope narrowing + cross-system contracts locked.**
 > - **§1 scope narrowed:** Battle is now explicitly scoped as the **turn-based combat engine for Raid (#6)** vs NPC Rival Startups. **Field combat against wild Brainrots in the hub world is owned by Pet AI (#25)** — a separate combat layer with its own GDD (`pet-combat-gdd.md` planned). The two coexist: Battle owns Raid combat (turn-based, deterministic replay); Pet AI owns field combat (real-time, tick-based). Same roster, same personality, same `levelScale(L)` — different resolution model.
