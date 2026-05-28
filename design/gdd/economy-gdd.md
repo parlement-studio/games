@@ -1,19 +1,20 @@
 # Economy / Currency (Meme Coins) GDD
 
-**Version**: 1.1
-**Last Updated**: 2026-05-26
+**Version**: 1.2
+**Last Updated**: 2026-05-28
 **Author**: economy-designer
 **Status**: Draft
 
 > **Changelog**
+> - **v1.2 (2026-05-28):** Phase A reconciliation — added **`field_combat_win` faucet (system #25 Field Combat / Pet AI)** to §3.1 catalog, ASCII flow diagram (§2.2), F-FAUCET-FIELDCOMBAT formula (§8.3), `faucetReasons` config (§8.1), and §9 Integration Points. Demo (`a71e545`) already pays `winCoins = 25` per Pet AI win; this GDD now locks that as a config-driven faucet with Pet AI #25 supplying the per-win amount and idempotency key. **Open Question #6 (storage upgrade semantics) RESOLVED**: idle-production-gdd v1.2 §2.6 + storage-cap decision lock `upgrade_storage` to raise **pending-pool cap only** (not the 8h offline window — that stays `PersistenceConfig.offlineCapSeconds`, fixed at launch).
 > - **v1.1 (2026-05-26):** Daily Quests added to MVP as systems-index **#17**. The `quest_daily` faucet now pays out **on quest completion** (not a login streak) and its reward is a **per-quest config pool/range** (no flat magic number) — see §3.1 and §8.2. Added Daily Quests (#17) to Integration Points (§9). Cross-references shifted by the Phase 2 renumber: Drama Events #22 → **#23**, Premium Currency / Brain Cells #20 → **#21**.
 > - **v1.0 (2026-05-26):** Initial economy model.
 
 > **Parent GDD**: `design/gdd/systems-index.md` — System #9 (Economy / Currency, **P1 currency backbone**).
 > **Source of Truth**: `idea/brainrotInc.md` (creative direction); locked pre-production + monetization brainstorm decisions.
 > **Governing standards (NON-NEGOTIABLE)**: `.claude/rules/design-docs.md` (9 sections, explicit formulas, ≥5 edge cases, version header), `.claude/rules/config-data.md` (commented config + ranges + version field), `.claude/rules/gameplay-systems.md` (zero magic numbers, event-driven, config-driven), `.claude/rules/server-scripts.md` (server-authoritative, never trust client, pcall, rate limit).
-> **Depends On**: System #1 Data Persistence & Roster Core (`persistence-gdd.md` v1.1) — Persistence OWNS storage + the atomic mutation path; Economy is the **service layer** that mutates the wallet through it.
-> **Depended On By**: Capture (#4, debit), Idle Production (#3, deposit), Raid (#6, cost + loot), Reroll (#11, cost), Upgrades/Shop, Auto-Catch (#10, optional unlock cost), Leaderboard (#16, net worth), Monetization (#15, DevProduct coin packs).
+> **Depends On**: System #1 Data Persistence & Roster Core (`persistence-gdd.md` v1.4) — Persistence OWNS storage + the atomic mutation path; Economy is the **service layer** that mutates the wallet through it.
+> **Depended On By**: Capture (#4, debit), Idle Production (#3, deposit), Raid (#6, cost + loot), Reroll (#11, cost), Upgrades/Shop, Auto-Catch (#10, optional unlock cost), Leaderboard (#16, net worth), Monetization (#15, DevProduct coin packs), Field Combat / Pet AI (#25, deposit — v1.2).
 
 > **Cross-GDD consistency lock (no contradictions introduced — per `design-docs.md`):**
 > - **Storage is owned by Persistence (#1).** Economy does NOT define a new `PlayerData` schema. It mutates the existing fields `coins` (Meme Coins), `gems` (Brain Cells, default 0, Phase 2), and `stats.totalCoinsEarned` (lifetime gross) that `persistence-gdd.md` v1.1 §3.2 already declares. All wallet mutations route through Persistence's atomic `UpdateAsync` path with `nextSeq` + `txLog` idempotency (persistence §2.3).
@@ -53,7 +54,8 @@ What this GDD does **NOT** do: it does not implement DataStore (that is Persiste
         ┌──────────────── FAUCETS (coins ENTER the economy) ────────────────┐
         │                                                                    │
         │  Idle Production (#3)  ──► Economy.award(reason="idle_collect")    │   PRIMARY faucet
-        │  Raid loot win   (#6)  ──► Economy.award(reason="raid_loot")       │   secondary
+        │  Raid loot win   (#6)  ──► Economy.award(reason="raid_loot")       │   secondary (turn-based combat)
+        │  Pet AI win     (#25)  ──► Economy.award(reason="field_combat_win")│   secondary (real-time combat) — NEW v1.2
         │  Daily quest    (#17)  ──► Economy.award(reason="quest_daily")     │   pacing / retention
         │  Positive reward (—)   ──► Economy.award(reason="reward")          │   moments/codes
         │  DevProduct pack (#15) ──► Economy.award(reason="devproduct")      │   Robux faucet (idempotent)
@@ -185,6 +187,7 @@ Economy's OWN data is the **faucet/sink catalog** — config tables (§8), not p
 |---|---|---|---|
 | `idle_collect` | variable | amount supplied by Idle Production (#3) | PRIMARY faucet. Economy credits whatever Idle computes; rate owned by #3. |
 | `raid_loot` | formula | `floor(targetPool * raidLootPct)` (§8.3) | Secondary. `targetPool` = NPC Rival Startup's lootable pool (Raid #6). Carries per-raid `idemKey`. |
+| `field_combat_win` | flat | `PetCombatConfig.winCoins` (demo = 25; per win) | **NEW v1.2.** Field Combat / Pet AI (#25) — paid when a summoned Brainrot wins against a wild Brainrot. Pet AI supplies the value + a per-engagement `idemKey` (the fighter/wild pairing); Economy credits + bumps `totalCoinsEarned`. Free-feel "found-money" faucet (engagement reward; no send cost — `costToSummon = 0`). Capped implicitly by `fighterLifetimeSec` + summon cooldown (Pet AI design). |
 | `quest_daily` | per-quest config range | `EconomyConfig.questRewards[questType]` → roll within `{min,max}` (§8.2) | Daily Quests (#17). Paid **on quest completion** (not login streak). Reward is a per-quest-type config range, not a flat value. |
 | `reward_generic` | flat | per-source value (codes, moments, FTUE gifts) | Positive one-off rewards; small. |
 | `devproduct_pack` | tier | grant from Monetization SKU (§9) | Robux faucet. **Idempotent by `PurchaseId`** (Monetization #15). |
@@ -364,7 +367,7 @@ return {
     -- Range: 0-100000 | Default: 50
     rewardGenericCoins = 50,
     -- Allowed faucet reason strings (audit/analytics whitelist).
-    faucetReasons = { "idle_collect", "raid_loot", "quest_daily", "reward_generic", "devproduct_pack" },
+    faucetReasons = { "idle_collect", "raid_loot", "field_combat_win", "quest_daily", "reward_generic", "devproduct_pack" },
 
     -- ── FLAT SINKS ──
     -- Capture cost is OWNED BY CaptureConfig.captureCostCoins (default 25). Mirrored here for
@@ -495,6 +498,36 @@ Net-of-cost expected value (sanity, designer should keep > 0 for a fair-skill pl
 ```
 
 > **Boundary note:** `raidLootPct` and `targetPool` are referenced here for the economy model but are **owned by Raid #6's config**, not duplicated authoritatively in `EconomyConfig`. Economy only consumes the resulting `loot` amount via `award`. The 0.25 default is a *recommendation* to Raid, ensuring loot meaningfully exceeds the 100-coin send cost.
+
+```
+F-FAUCET-FIELDCOMBAT     Pet AI win reward (per win)                              -- NEW v1.2 (#25)
+
+Owner of value:  Pet AI #25 (PetCombatConfig.winCoins; demo a71e545 = 25)
+Owner of credit: Economy (this GDD)
+
+  On a winning field combat (a player's summoned fighter knocks out a wild Brainrot):
+    pet-ai computes:  amount = PetCombatConfig.winCoins                          -- demo: 25 flat
+    pet-ai computes:  idemKey = "fcw:" .. fighterId .. ":" .. wildId              -- one credit per pairing
+  Economy:  award(player, amount, "field_combat_win", idemKey)                    -- idempotent (E5)
+
+Where:
+  PetCombatConfig.winCoins  : OWNED by Pet AI #25 (will live in PetCombatConfig once graduated;
+                              currently DemoConfig.combat.winCoins). Range: 1..1000 | Default: 25
+                              Sized to be a "found-money" engagement reward — meaningful per win
+                              but well below idle's primary faucet rate, so field combat doesn't
+                              displace idle as the economy's spine.
+  idemKey                   : pairing-based to prevent the same kill being re-credited if the
+                              tick-resolution code retries. Pet AI guarantees one credit per
+                              fighter+wild engagement boundary.
+
+Cap discipline:  bounded implicitly by Pet AI's `fighterLifetimeSec` (~60s in demo) + the
+                 summon cooldown + the density of wild Brainrots in the hub world. There is no
+                 send cost (costToSummon = 0 in v1) — the engagement is meant to feel free.
+                 ⚠VALIDATE total per-hour income vs. idle's hourly rate (target: field combat <
+                 30% of idle's primary faucet at comparable upgrade level).
+```
+
+> **Boundary note:** the value (`winCoins`) is owned by Pet AI #25 (and currently lives in `DemoConfig.combat.winCoins`); Economy only consumes the amount via `award` with the per-engagement idempotency key. Field-combat is **NOT pay-to-win**: no send cost, no Robux-only acceleration; the faucet exists purely to reward engagement.
 
 ### 8.4 Upgrade cost curve (explicit — the primary scaling sink)
 
@@ -651,6 +684,7 @@ Economy is the wallet service every coin-touching system uses. **Reads** = consu
 | **#3 Idle Production** | it → Economy | PRIMARY faucet. On Collect, Idle calls `Economy.award(player, amount, "idle_collect")`. Idle OWNS the rate/cap/2x-multiplier math; Economy only credits + tracks net worth. (Boundary §2.3.) |
 | **#4 Capture** | it → Economy | Reads `Economy.getBalance` (affordability); debits `CaptureConfig.captureCostCoins` (25) **atomically with the roster write** (capture-gdd §5.1 step 10d) — the debit logic is composed INTO capture's atomic op, not a separate spend. Free during onboarding. Economy does not own the 25. |
 | **#6 Raid** | both | SINK: `Economy.spend(player, raidSendCostCoins, "raid_send")` to send a team. FAUCET: on win, `Economy.award(player, loot, "raid_loot", raidId)` where `loot = floor(targetPool * raidLootPct)` (§8.3, `raidLootPct`/`targetPool` owned by Raid). Idempotent by `raidId`. |
+| **#25 Field Combat / Pet AI** | it → Economy | **NEW v1.2.** FAUCET: on a Pet AI fighter win, Pet AI calls `Economy.award(player, PetCombatConfig.winCoins, "field_combat_win", idemKey)` where `idemKey = "fcw:"..fighterId..":"..wildId` (F-FAUCET-FIELDCOMBAT §8.3). Pet AI OWNS the `winCoins` value (demo `winCoins = 25` in `DemoConfig.combat`; graduates to `PetCombatConfig`); Economy owns the credit + idempotency layer. **No send cost** (`costToSummon = 0`) — pure engagement reward. ⚠VALIDATE total field-combat income stays < 30% of idle's primary faucet at comparable upgrade level (Pet AI density × `winCoins` × win rate vs. idle hourly rate). |
 | **#11 Reroll** | it → Economy | SINK: charges `cost(k)` from the LOCKED curve {250,600,1200,2000} (§8.5) as part of the atomic "charge + re-draw personality" op (idempotency-keyed). Reroll owns the count/24h-reset mechanic + odds display; Economy owns the cost values + the debit. |
 | **Upgrades / Shop** | it → Economy | SINK: `Economy.spend(player, cost(n), "upgrade_factory" | "upgrade_worker_slot" | "upgrade_storage")` using the geometric curve (§8.4). Server reads current level `n` from persisted upgrade state and computes the authoritative cost (never trusts client price, E7). |
 | **Roster slot unlock** | it → Economy | SINK: `Economy.spend(player, cost(n), "slot_unlock")` (§8.6), cap-checked before charging (E10). Grants `slotsPerUnlock` slots up to `rosterCap` 200 (matches persistence). |
@@ -674,4 +708,4 @@ Economy is the wallet service every coin-touching system uses. **Reads** = consu
 3. **Upgrade `growth` tuning (1.35 factory / 1.50 worker / 1.40 storage).** These set how hard the inflation-absorbing treadmill bites. They MUST be reconciled against Idle Production #3's actual production rates (not yet written) so cost rises in step with income. Lock after Idle #3 lands; flagging the dependency now.
 4. **Drama fix as a sink (`dramaFixCostCoins` = 200).** Drama Events are Phase 2 (#23). Provisioned now; confirm the value and the always-free-alternative rule when Drama is designed.
 5. **"Meme Coins Pack" DevProduct grant amounts.** Owned by Monetization #15, but they directly affect the faucet/sink balance (a too-large pack trivializes the upgrade treadmill). Recommend coordinating pack sizes against the §8.4 cumulative costs (e.g. a pack ≈ one mid-game factory level, not the whole roster cap).
-6. **Storage upgrade semantics.** Does `upgrade_storage` raise the *offline 8h cap*, the *wallet headroom*, or both? This couples to Idle #3 (offline cap) and Persistence (`offlineCapSeconds`). Confirm intent so the sink's *benefit* is defined (Economy owns the cost; the benefit is Idle/Persistence's).
+6. **RESOLVED (v1.2): `upgrade_storage` raises the *pending-pool cap* only** — NOT the offline 8h window. Per `idle-production-gdd.md` v1.2 §2.6: `pendingPoolCap = pendingPoolCapBase + pendingCapPerLevel * storageLevel`. The offline 8h window remains fixed at `PersistenceConfig.offlineCapSeconds = 28800` at launch (a separate Phase-2 GamePass lever — see Monetization #15). Economy owns the **cost** of `upgrade_storage` (geometric curve, §8.4); Idle owns the **benefit** (raised pending-pool ceiling so a slow-collect player loses less to overflow). No change to faucets/sinks; clarifies the boundary.

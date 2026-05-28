@@ -1,11 +1,16 @@
 # Capture System GDD (Explore + Manual Catch)
 
-**Version**: 1.2
-**Last Updated**: 2026-05-26
+**Version**: 1.3
+**Last Updated**: 2026-05-28
 **Author**: systems-designer
 **Status**: Draft
 
 > **Changelog**
+> - **1.3 (2026-05-28)** — Phase A reconciliation:
+>   - **§9 Integration**: Added **#25 Field Combat / Pet AI** as a downstream consumer — Capture grows the roster; captured Brainrots become summon-able pets via Pet AI's `SummonFighter` remote. No call from Capture to #25 (downstream-only relationship like #3/#5/#6/#8).
+>   - **§10 Fallback Plan — status clarification (NOT canonical pivot)**: Demo (`e984677` and forward) currently exercises the **fallback encounter path** for vertical-slice testing of downstream systems (Personality reveal, Idle Production, Pet AI). **This does NOT promote the fallback to the canonical MVP capture model — explore-map (free-roam Downtown Scroll) remains the MVP target** per systems-index #4 build order. The build-step-5 go/no-go for the fallback is still pending and will be made when the explore-map work begins. Until then, the demo's fallback usage is "scaffolding for downstream testing" not "shipped capture model."
+>   - **Persistence ref refresh**: persistence-gdd reference bumped from v1.1 to v1.4 (no schema impact for Capture).
+>   - **systems-index status correction**: Capture #4 implementation status remains **"Not started"** for MVP scope. The demo's crate-encounter scaffolding is not counted as Capture-system implementation progress.
 > - **1.2 (2026-05-26)** — Cross-GDD schema reconciliation (persistence-gdd v1.1 owns the canonical shapes):
 >   - **`BrainrotEntry.guid → id`.** Renamed the per-Brainrot GUID field from `guid` to `id` for consistency with the canonical Persistence schema (`id` is also the roster map key). Updated the `BrainrotEntry` contract (§3.3) and the `CaptureResult.entry` payload (§5). Same value, canonical name.
 >   - **`freeCapturesOnboarding` is the canonical single source of truth.** `CaptureConfig.freeCapturesOnboarding` (§8.2) is the one authoritative definition; Persistence only READS/seeds the persisted `freeCapturesRemaining` counter from it (no duplicate value in `PersistenceConfig`). Clarified in §3.3.1 and §9.
@@ -587,7 +592,7 @@ Notes:
 | #2 Personality | Capture → it | Calls `Personality.roll()` at capture success; puts result in the entry + reveal. Does not own weights. |
 | #9 Economy | Capture → it | **Debits `captureCostCoins` Meme Coins on each paid successful catch**, atomically with the roster write (§2.4 step 7, §5.1 step 10d). Reads the authoritative balance to check affordability before committing. Economy owns the wallet API (`getBalance` / `debit`) and the persisted balance; Capture only consumes it as a sink. Capture does NOT define coin earn rates. |
 | #3 Idle Production | it → Capture (indirect) | New roster members become deployable workers. Capture grows the supply; no direct call. |
-| #5 Battle / #6 Raid / #8 Evolution | downstream | Consume roster members Capture produces; Evolution reads `history` (seeded here at capture). No direct calls. |
+| #5 Battle / #6 Raid / #8 Evolution + Level/XP / #25 Field Combat / Pet AI | downstream | Consume roster members Capture produces. Evolution reads `history` (seeded here at capture). Battle uses roster members as raid team-of-3. Pet AI (#25) summons a roster member as a temporary field pet (`SummonFighter(brainrotId)`, demo `a71e545`). No direct calls — Capture grows the supply only. |
 | #10 Auto-Catch | it → Capture | Reuses `CaptureService.resolveCapture(player, spawnId, nil, "auto")`. Capture exposes the hook; Auto-Catch is designed separately. |
 | #13 UI/HUD | Capture ↔ it | Capture's prompts, mini-game, reveal card, and edge-case toasts render through the shared UI framework. |
 | #14 Onboarding/FTUE | Capture ↔ it | FTUE scripts the guided first capture; relies on Capture's prompt/mini-game/reveal existing. Capture must work before Auto-Catch (manual experienced first). **Capture's `freeCapturesOnboarding` (default 3) guarantees the FTUE catches cost zero Meme Coins** — a new player completes the guided catches before the wallet is ever touched. The free-capture counter (`freeCapturesRemaining`) is seeded on first profile creation (Persistence/Onboarding) and decremented by Capture. Onboarding may surface "free catches left" but does not own the cost logic. |
@@ -601,6 +606,8 @@ Notes:
 ## 10. Fallback Plan
 
 > **Per systems-index #4 scope-risk note: explore-map capture is the single highest-effort MVP item. This section is mandatory.**
+
+> **v1.3 status note (2026-05-28):** Demo work (commit `e984677` and forward) **currently uses the fallback path** described below to scaffold downstream-system testing (Personality reveal, Idle Production, Pet AI summon flow). This is **NOT** a promotion of the fallback to canonical MVP capture — **explore-map remains the MVP target** per systems-index #4. The demo's "tap a creature → instant catch → reveal" is the fallback's *front-end swap* described in the section below; the authoritative core (resolution, rolls, reveal, persistence) is wired exactly as this GDD specifies, so swapping the front-end to free-roam exploration later is a localized change. **The build-step-5 go/no-go (fallback vs explore-map) is still pending** and will be made when the explore-map work begins — the demo's current usage does not pre-commit that decision.
 
 **Trigger (lock by build step 5, per systems-index build order):** If, at the Capture milestone, the explorable hub + `StreamingEnabled` + world-spawn pipeline is not demonstrably working and stable within the remaining schedule (e.g., streaming pop-in, mobile frame drops with `maxConcurrent` creatures, or director/state-machine bugs blocking a clean first-capture FTUE), **fall back to a crate/encounter UI**. This is a go/no-go decision made at step 5, not a mid-implementation pivot.
 

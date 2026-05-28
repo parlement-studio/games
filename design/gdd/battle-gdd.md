@@ -1,10 +1,17 @@
-# Battle System GDD (Auto, Turn-Based, Spectatable)
+# Battle System GDD (Auto, Turn-Based, Spectatable — for Raid #6)
 
-**Version**: 1.2
-**Last Updated**: 2026-05-26
+**Version**: 1.3
+**Last Updated**: 2026-05-28
 **Author**: systems-designer
 **Status**: Draft
 
+> **Changelog v1.3 (2026-05-28)**: **Phase A scope narrowing + cross-system contracts locked.**
+> - **§1 scope narrowed:** Battle is now explicitly scoped as the **turn-based combat engine for Raid (#6)** vs NPC Rival Startups. **Field combat against wild Brainrots in the hub world is owned by Pet AI (#25)** — a separate combat layer with its own GDD (`pet-combat-gdd.md` planned). The two coexist: Battle owns Raid combat (turn-based, deterministic replay); Pet AI owns field combat (real-time, tick-based). Same roster, same personality, same `levelScale(L)` — different resolution model.
+> - **Parameter rename:** `BattleConfig.statGrowth` → **`statGrowthPerLevel`** (and `statGrowthByStat` → `statGrowthPerLevelByStat`) — aligns with the demo's `DemoConfig.progression.statGrowthPerLevel` and Evolution v1.3 §8.5 naming. **No numeric change** (still 0.08 default).
+> - **§2.1 / F2 levelScale formula** is now explicitly marked as a **shared cross-system contract with Pet AI #25**: `levelScale(L) = 1 + statGrowthPerLevel * (L - 1)` is **identical** in both Battle (turn-based) and Pet AI (real-time). Both consumers read `statGrowthPerLevel` + `maxLevel` from Evolution v1.3 §8.5 (single source of truth via `EvolutionConfig`). No drift permitted.
+> - **§2.4 personality battle tags** marked as **shared cross-system contract**: the five tags (`act_first_mistarget` / `berserk_when_last` / `random_moveset` / `bodyguard` / `counter_double`) and their params (`mistargetChance`, `berserkAttackMultiplier`, etc.) are defined in Personality #2 §8 and consumed identically by **both** Battle (turn-based dispatch) and Pet AI (real-time AI dispatch). When Pet AI #25 wires the tags, no new tag definitions are needed; only the runtime dispatch differs (turn-tick vs damage-tick). Currently Pet AI (demo `a71e545`) only applies the damage multiplier — full tag wiring pending.
+> - **§9 Integration Points** updated: added Pet AI (#25) under Depended On By with the shared-formula/shared-tag annotations; refreshed Persistence ref to v1.4.
+>
 > **Changelog v1.2**: `evoStageStatMultiplier` values now **sourced from `EvolutionConfig`** (`EvolutionConfig.stageMultipliers[stage].combatMultiplier`) — **FLAG-BATTLE resolved, no numeric change**. Evolution #8 (`evolution-gdd.md` ≥ v1.1) is the **single source of truth** for the per-stage combat multiplier; Battle reads it via `entry.evoStage` rather than holding an authoritative copy. Stage-1 = **1.15** is confirmed (matches Evolution's locked `combatMultiplier`); the previous `{[0]=1.0,[1]=1.15}` in `BattleConfig` is now documented as a non-authoritative reference/fallback, not a second owner. Integration Points #8 updated accordingly.
 
 > **Changelog v1.1**: Open Questions 1–5 resolved by user. Key change: **Work-Based Evolution boosts combat** — added `evoStageStatMultiplier` (F1stats `evoMult`) to the stat-derivation formula + `BattleConfig` (placeholder values; final curve owned by Evolution #8, which must also add the parallel production multiplier to Idle #3).
@@ -35,7 +42,20 @@
 
 ## 1. Overview & Purpose
 
-The Battle System is the **deterministic combat engine** that resolves a fight between two teams of Brainrots and produces a **replayable timeline**. It is not a standalone game mode: at launch its **only caller is Raid (#6)**, which sends an attacking team of 3 against an NPC Rival Startup's defending team and asks "who wins, and what happened?" Battle answers with a winner, a tick-by-tick event log, and the surviving/knocked-out rosters. The player **does not play** the battle — it is **AUTO** (no input during the fight); the player **spectates a live cartoon replay** of a fight the server already decided.
+The Battle System is the **deterministic, turn-based combat engine** that resolves a Raid fight between two teams of Brainrots and produces a **replayable timeline**. It is not a standalone game mode: at launch its **only caller is Raid (#6)**, which sends an attacking team of 3 against an NPC Rival Startup's defending team and asks "who wins, and what happened?" Battle answers with a winner, a tick-by-tick event log, and the surviving/knocked-out rosters. The player **does not play** the battle — it is **AUTO** (no input during the fight); the player **spectates a live cartoon replay** of a fight the server already decided.
+
+> **Scope clarification (v1.3, post-demo reconciliation 2026-05-28):** This GDD defines the **turn-based** combat engine used by Raid (#6). It is **NOT** the engine used for **real-time hub-world combat** against wild Brainrots — that is **Field Combat / Pet AI (#25)**, a separate combat layer with its own GDD (`pet-combat-gdd.md` planned; reference impl in demo `a71e545`). The two combat layers **coexist**:
+>
+> | | **Battle (#5, this GDD)** | **Pet AI (#25, separate GDD)** |
+> |---|---|---|
+> | Context | Raid (3v3 team vs NPC Rival Startup) | Field (1 summoned pet vs wild Brainrot) |
+> | Resolution model | **Turn-based**, fully pre-simulated, deterministic replay | **Real-time**, tick-based damage with movement/formations |
+> | Caller | Raid (#6) only | Player tap on `SummonFighter` remote |
+> | Stat scaling | `levelScale(L)` — shared (this GDD §2.1) | `levelScale(L)` — **identical**, read from same param |
+> | Personality battle tags | All five tags wired (§2.4) | All five tags **must be wired identically** (Pet AI obligation; currently only damage mult) |
+> | Result | Persisted: `history.rwon`/`rdef`, `raidsWon`/`raidsDefended` | Persisted: `xp` (+`xpPerWin` per win — §2.7 evolution-gdd Axis B) |
+>
+> The shared layers (stat formula, personality tags, level cap) make a Lv50 Hyper feel like the same Brainrot in both contexts — only the resolution model differs. **Single source of truth for parameter values** is Evolution v1.3 §8.5 (Axis B Level/XP) — Battle and Pet AI both read; neither owns.
 
 It is **P1 (core combat) and blocks Raid (#6)** because:
 
@@ -80,7 +100,7 @@ Combatant <- derive( BrainrotEntry, BattleConfig )
 ```
 
 - **`species` (number)** indexes `BattleConfig.species` — the species base-stat table. **Base-stat VALUES are content (TBD)**; this GDD defines only the schema (§3.2) and a documented placeholder row so the engine compiles.
-- **`level` scaling** is a single config formula (`levelScale`, Formula **F2**), the same growth applied to all four stats unless a per-stat growth override is set in config (`statGrowth` map). No IV — two same-species, same-level, same-personality Brainrots derive **identical** stats by design (variance is a Phase-2 add — see §9).
+- **`level` scaling** is a single config formula (`levelScale`, Formula **F2**), the same growth applied to all four stats unless a per-stat growth override is set in config (`statGrowthPerLevelByStat` map). The formula is `levelScale(L) = 1 + statGrowthPerLevel * (L - 1)` — **identical to Pet AI #25's stat scaling** (shared cross-system contract per v1.3 §1 scope note). No IV — two same-species, same-level, same-personality Brainrots derive **identical** stats by design (variance is a Phase-2 add — see §9). **Parameter values (`statGrowthPerLevel`, `maxLevel`) are OWNED by Evolution v1.3 §8.5**; Battle reads via `EvolutionConfig` (single source of truth, mirrored optionally in `BattleConfig` for fallback only).
 - **`personality` modifier at launch** affects **DEF** (Lazy's `defenseMultiplier`, default 1.75; all other personalities 1.0). All *other* personality battle effects are **behavioral** (turn order, targeting, counters, redirects, berserk) and are applied by the turn engine via tags (§2.4 / F4), not baked into the derived stat block. This keeps the stat block clean and the behaviors decoupled.
 - **Derived, never stored.** The combatant block (current HP, status, the moveset instance) lives in server memory for the battle's duration only. Persistence stores only the outcome (§3.4).
 
@@ -108,6 +128,8 @@ Turn order is recomputed **each round** (a "round" = every alive combatant acts 
 ### 2.4 Personality behaviors as turn-engine mechanics (the 5 tags)
 
 Battle reads `{tag, params} = PersonalityService.getBattleBehavior(entry.id)` once at setup (the combatant is **locked** for the battle's duration — reroll mid-battle is rejected, personality-gdd E4) and implements each tag inside the turn loop. **All numbers come from `PersonalityConfig`; Battle hardcodes none.**
+
+> **Shared cross-system contract with Pet AI (#25) — v1.3:** The five tags below (`act_first_mistarget`, `berserk_when_last`, `random_moveset`, `bodyguard`, `counter_double`) and their params (`mistargetChance`, `defenseMultiplier`, `berserkAttackMultiplier`, `randomFromAnyMoveset`, `bodyguardAllyHpThreshold`, `bodyguardDamageTakenFraction`, `counterDamageMultiplier`) are defined in Personality #2 §8 and consumed **identically** by both Battle (turn-based dispatch, this section) **and** Pet AI (real-time dispatch, `pet-combat-gdd.md` planned). When a new tag is added to Personality #2, BOTH consumers must implement it; when a param value changes, BOTH consumers respond identically — no drift permitted. The runtime dispatch differs: Battle resolves tags inside a **turn step** (§2.5); Pet AI resolves them inside a **damage tick / AI decision frame**. Same intent (e.g., Hyper "acts first" = Battle gives turn-priority; Pet AI gives the first attack window in a real-time engage). Currently Pet AI (demo `a71e545`) only applies a personality **damage multiplier** (via `prodMult`) — **full tag wiring is a pet-combat-gdd obligation**, not implemented yet.
 
 | Personality | Tag (from #2) | Mechanic implemented by Battle | Params read (PersonalityConfig) |
 |---|---|---|---|
@@ -592,10 +614,13 @@ return {
     -- ── STAT SCALING PER LEVEL (Formula F2) ──
     -- stat = base * (1 + growth * (level - 1)). Linear-in-level growth (predictable, kid-clear).
     -- Range 0.0..0.50 | Default 0.08 (each level ≈ +8% of base). ⚠VALIDATE curve vs. level cap.
-    statGrowth = 0.08,
-    -- Optional PER-STAT growth overrides (else statGrowth applies to all). Default: empty (uniform).
+    -- ⚠ AUTHORITATIVE VALUE in Evolution v1.3 §8.5 (EvolutionConfig.progression.statGrowthPerLevel).
+    -- BattleConfig may hold a fallback mirror for boot-resilience; if a divergence is detected at
+    -- runtime, EvolutionConfig wins. Identical value also read by Pet AI #25 (shared formula contract).
+    statGrowthPerLevel = 0.08,
+    -- Optional PER-STAT growth overrides (else statGrowthPerLevel applies to all). Default: empty (uniform).
     -- e.g. { hp = 0.10, atk = 0.08, def = 0.06, spd = 0.04 }
-    statGrowthByStat = {},
+    statGrowthPerLevelByStat = {},
     -- Max level a Brainrot can reach (clamps derived stats; also the roster `level` cap source).
     -- Range 1..1000 | Default 100. (Coordinate with Evolution/Persistence level cap.) ⚠VALIDATE.
     maxLevel = 100,
@@ -661,7 +686,7 @@ return {
 **F1stats — Combatant stat derivation (Setup).** No IV; derived from species + level + personality + evoStage.
 ```
 levelScale(stat, level) = 1 + growth(stat) * (level - 1)         -- F2 (linear-in-level)
-  growth(stat) = statGrowthByStat[stat]  if present, else statGrowth     (BattleConfig)
+  growth(stat) = statGrowthPerLevelByStat[stat]  if present, else statGrowthPerLevel     (sourced from EvolutionConfig v1.3 §8.5 — shared with Pet AI #25)
 
 HP  = floor( species.base.hp  * levelScale("hp",  level) * evoMult )
 ATK = floor( species.base.atk * levelScale("atk", level) * evoMult )
@@ -685,7 +710,7 @@ SPD = floor( species.base.spd * levelScale("spd", level) * evoMult )
 **F2 — Level scaling.** (Used by F1stats; surfaced separately for clarity.)
 ```
 stat(level) = base * (1 + growth * (level - 1))
-  growth : BattleConfig.statGrowth (default 0.08) or per-stat override.   level 1 => stat == base.
+  growth : EvolutionConfig.progression.statGrowthPerLevel (default 0.08; v1.3 §8.5) or per-stat override.   level 1 => stat == base.
   At maxLevel 100, default growth 0.08 => stat ≈ base * (1 + 0.08*99) ≈ base * 8.92.   ⚠VALIDATE.
 ```
 
@@ -778,7 +803,7 @@ No math.random / os.time / tick / pairs-order anywhere in the sim. Sorted arrays
 ```
 
 ### 8.4 Assumptions to validate via `/balance-check` (⚠)
-1. **`statGrowth = 0.08` → ~8.9× stats at level 100** — does that produce a satisfying power curve without trivializing low-level enemies? (Coordinate with Evolution + roster level cap.)
+1. **`statGrowthPerLevel = 0.08` → ~8.9× stats at level 100** — does that produce a satisfying power curve without trivializing low-level enemies? (Coordinate with Evolution + roster level cap; Evolution v1.3 §8.5 owns the value.)
 2. **`damageVariance = 0.10`** — enough to feel "alive" without making replays read as random to a kid?
 3. **`defScaling = 100` / `defReductionCap = 0.80`** — depends entirely on the (TBD) species base DEF magnitudes; revisit once content base stats are authored.
 4. **`maxTurns = 60`** — long enough that real outcomes aren't decided by tie-break, short enough for a punchy replay?
@@ -790,15 +815,26 @@ No math.random / os.time / tick / pairs-order anywhere in the sim. Sorted arrays
 ## 9. Integration Points
 
 ### Depends On
-- **#1 Data Persistence & Roster Core** (`persistence-gdd.md` v1.2): Battle **reads** `BrainrotEntry` (`id`, `species`, `personality`, `level`, `evoStage`) to derive combatants — **there is no `iv`**, so stats come from species base + level + personality. Battle's **outcome** is written to `history.rwon`/`history.rdef` + player `raidsWon`/`raidsDefended` via Persistence's **atomic `UpdateAsync`** path (through Raid, with a per-raid `idemKey`). Battle stores **no combat state** (ephemeral, §3.1/§3.5).
-- **#2 Personality System** (`personality-gdd.md` v1.1): Battle reads `getBattleBehavior(id) -> {tag, params}` and implements the five tags (`act_first_mistarget`, `berserk_when_last`, `random_moveset`, `bodyguard`, `counter_double`) using params **from `PersonalityConfig`** (never redefined here). Battle honors the **in-battle reroll lock** (personality-gdd E4 → `"in_battle"`). Battle **emits `PersonalityMoment`** (reusing the exact `momentType` enum) for clutch beats. Decoupled: a new personality = at most one new tag handler.
-- **#9 Economy** (`economy-gdd.md` v1.1): Battle holds **no currency**. Cost/loot is Raid (#6) via Economy. Battle returns the outcome only.
+- **#1 Data Persistence & Roster Core** (`persistence-gdd.md` v1.4): Battle **reads** `BrainrotEntry` (`id`, `species`, `personality`, `level`, `xp`, `evoStage`) to derive combatants — **there is no `iv`**, so stats come from species base + level + personality. Battle's **outcome** is written to `history.rwon`/`history.rdef` + player `raidsWon`/`raidsDefended` via Persistence's **atomic `UpdateAsync`** path (through Raid, with a per-raid `idemKey`). Battle stores **no combat state** (ephemeral, §3.1/§3.5). **Battle also writes `xp` (+`xpPerWin`) on a winning raid** via direct `PlayerDataService.update()` per Evolution v1.3 §2.7 Axis B (no `txLog` idemKey in current contract — over-credit XP is low-stakes).
+- **#2 Personality System** (`personality-gdd.md` v1.1): Battle reads `getBattleBehavior(id) -> {tag, params}` and implements the five tags (`act_first_mistarget`, `berserk_when_last`, `random_moveset`, `bodyguard`, `counter_double`) using params **from `PersonalityConfig`** (never redefined here). Battle honors the **in-battle reroll lock** (personality-gdd E4 → `"in_battle"`). Battle **emits `PersonalityMoment`** (reusing the exact `momentType` enum) for clutch beats. Decoupled: a new personality = at most one new tag handler. **Tag definitions + params are a shared cross-system contract with Pet AI #25** — see §2.4 v1.3 note.
+- **#8 Work-Based Evolution + Level/XP** (`evolution-gdd.md` v1.3): Battle reads **two parameter blocks** from Evolution (single source of truth, no Battle-side authoritative copies):
+  - Axis A — `EvolutionConfig.stageMultipliers[evoStage].combatMultiplier` (`evoMult` in F1stats; stage-1 = 1.15) — was FLAG-BATTLE in v1.2, fully resolved.
+  - Axis B — `EvolutionConfig.progression.statGrowthPerLevel` (= 0.08) and `maxLevel` (= 100) for `levelScale(L)` in F2 — locked v1.3 §8.5. **Battle and Pet AI #25 read identically; no drift permitted.**
+- **#9 Economy** (`economy-gdd.md` v1.2): Battle holds **no currency**. Cost/loot is Raid (#6) via Economy. Battle returns the outcome only.
 
 ### Depended On By
-- **#6 Raid v1 (NPC Rival Startups)** — the **sole caller**. Calls `BattleService.resolve(attackerTeam, defenderTeam, seed)` (§5.3 locked signature): builds the player's 3 attackers from the roster and the **NPC defender team from config (the 4 Rival Startups: Grind Corp / Chill Collective / The Glitch Gang / Pivot Ventures)**, supplies+records the `seed`, sets/clears the per-`id` in-battle lock, and on the returned outcome applies cost+loot (Economy) and writes `history`/`raidsWon`/`raidsDefended` (Persistence atomic). Defender-faction personality flavor flows entirely through Battle's tag mechanics (e.g. Grind Corp = Hyper/Loyal; Chill Collective = Lazy; The Glitch Gang = Chaotic; Pivot Ventures = Rebel/Hyper — **faction→personality mapping is Raid-owned config**, Battle just executes the tags).
-- **#8 Work-Based Evolution** (`evolution-gdd.md` ≥ v1.1) — two-way: (a) **Battle supplies the events** — Evolution reads `history.rwon`/`history.rdef` milestones (which Battle's outcomes increment) for raid-win/survival evolution branches (Rebel→Revolutionary at N raids survived, Loyal→Guardian at N defends); Battle supplies the events, Evolution owns the thresholds. (b) **Battle reads the multiplier** — the F1stats `evoMult` is sourced **directly from `EvolutionConfig.stageMultipliers[entry.evoStage].combatMultiplier`** (stage 0 = 1.00, stage 1 = 1.15; unknown → `unknownStageMultiplier` = 1.0). **Evolution #8 is the single source of truth** for that value; `BattleConfig.evoStageStatMultiplier` is only a non-authoritative reference/fallback mirror (§8.1). Battle owns the combat *mechanic* (how `evoMult` multiplies derived stats), not the *number*. **FLAG-BATTLE resolved, no numeric change** (1.15 confirmed).
+- **#6 Raid v1 (NPC Rival Startups)** — the **sole caller** of `BattleService.resolve`. Calls `BattleService.resolve(attackerTeam, defenderTeam, seed)` (§5.3 locked signature): builds the player's 3 attackers from the roster and the **NPC defender team from config (the 4 Rival Startups: Grind Corp / Chill Collective / The Glitch Gang / Pivot Ventures)**, supplies+records the `seed`, sets/clears the per-`id` in-battle lock, and on the returned outcome applies cost+loot (Economy) and writes `history`/`raidsWon`/`raidsDefended` (Persistence atomic). Defender-faction personality flavor flows entirely through Battle's tag mechanics (e.g. Grind Corp = Hyper/Loyal; Chill Collective = Lazy; The Glitch Gang = Chaotic; Pivot Ventures = Rebel/Hyper — **faction→personality mapping is Raid-owned config**, Battle just executes the tags).
+- **#8 Work-Based Evolution + Level/XP** (`evolution-gdd.md` v1.3) — three-way relationship:
+  - (a) **Battle supplies the events** — Evolution reads `history.rwon`/`history.rdef` milestones (which Battle's outcomes increment) for Axis A raid-win/survival evolution branches (Rebel→Revolutionary at N raids survived, Loyal→Guardian at N defends); Battle supplies the events, Evolution owns the thresholds.
+  - (b) **Battle reads the Axis A combat multiplier** — F1stats `evoMult` sourced directly from `EvolutionConfig.stageMultipliers[entry.evoStage].combatMultiplier` (stage-1 = 1.15; unknown → `unknownStageMultiplier` = 1.0). Evolution #8 is single source of truth; `BattleConfig.evoStageStatMultiplier` is only a non-authoritative fallback mirror (§8.1). **FLAG-BATTLE v1.2 resolved**.
+  - (c) **Battle writes Axis B XP + reads `levelScale(L)` parameters** — on a winning raid, Battle credits `+xpPerWin` to each surviving attacker's `xp` via Persistence atomic `update()` (per Evolution v1.3 §2.7 XP-write path); Battle reads `statGrowthPerLevel` (= 0.08) + `maxLevel` (= 100) from `EvolutionConfig.progression` (v1.3 §8.5) for F2 `levelScale(L)`. **No drift with Pet AI #25 permitted** (shared contract).
 - **#12 Moment System** — primary listener of Battle's `PersonalityMoment` / `BattleResolved` events; formats the clutch-win recap + the in-battle callout banners (one at a time). Battle defines/fires; Moment presents.
 - **#13 UI/HUD** — owns the spectate arena + result screen that **replay** Battle's timeline (§6). Battle ships the log; UI animates it.
+- **#25 Field Combat / Pet AI** (`pet-combat-gdd.md` planned; demo `a71e545`) — **shared-formula consumer, not a caller of `BattleService.resolve`**. Pet AI runs its own real-time resolution loop in the hub world (separate from this turn-based engine) but READS this GDD for:
+  - The `levelScale(L) = 1 + statGrowthPerLevel * (L - 1)` stat formula (§2.1 / F2). Same params (`statGrowthPerLevel`, `maxLevel`) sourced from Evolution v1.3 §8.5 — single source of truth.
+  - The five personality battle behavior tags + params (§2.4 v1.3 shared-contract note). Pet AI must implement the tags identically in real-time form; **currently Pet AI applies only the damage multiplier** (demo) — full tag wiring is a pet-combat-gdd obligation.
+  - The combatant terminology / "knocked out" compliance vocabulary (§Cross-GDD consistency lock).
+  - On a Pet AI win, Pet AI itself (not Battle) writes `+xpPerWin` to the participating Brainrot's `xp` (same Axis B path as Battle — see Evolution v1.3 §2.7). Battle's `BattleService.resolve` is NEVER called by Pet AI.
 
 ### NPC Rival Startups (defender source)
 Battle is exercised against the 4 config-defined NPC factions at launch (no live PvP — that's Phase 2 #18, which reuses this exact engine + signature). The NPC defender **teams and their personality composition are Raid-owned config**; Battle treats an NPC combatant identically to a player combatant (same `BrainrotEntry` shape — Raid builds synthetic entries from faction config). This means **PvP (Phase 2) needs zero Battle changes** — only Raid's team-source changes from NPC config to a real player's deployed roster.

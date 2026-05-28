@@ -1,11 +1,15 @@
 # Personality System GDD
 
-**Version**: 1.1
-**Last Updated**: 2026-05-26
+**Version**: 1.1.1
+**Last Updated**: 2026-05-28
 **Author**: systems-designer
 **Status**: Draft
 
 > **Changelog**
+> - **1.1.1 (2026-05-28)** — **Phase A clarification (no schema or formula change).** Two prose clarifications for cross-system contracts surfaced by the systems-index 2026-05-28 update:
+>   - **Battle behavior tags are a shared cross-system contract.** The five tags (`act_first_mistarget`, `berserk_when_last`, `random_moveset`, `bodyguard`, `counter_double`) + their params (`mistargetChance`, `defenseMultiplier`, `berserkAttackMultiplier`, `randomFromAnyMoveset`, `bodyguardAllyHpThreshold`, `bodyguardDamageTakenFraction`, `counterDamageMultiplier`) are consumed identically by **both** Battle (#5, turn-based for Raid; `battle-gdd.md` v1.3 §2.4) **and** the new Field Combat / Pet AI (#25, real-time; `pet-combat-gdd.md` planned). Personality defines the tags + numbers (§2.1, §2.2, §8 F4); each consumer implements the dispatch in its own resolution model (turn-step for Battle vs damage-tick for Pet AI). When a new tag is added here, **both** consumers must implement it; when a param value changes, both respond identically — no drift permitted. Currently Pet AI (demo `a71e545`) wires only the production-style damage multiplier — **full tag wiring is a pet-combat-gdd obligation**, NOT a Personality change.
+>   - **§9 Integration Points updated** to add **System #25 (Field Combat / Pet AI)** as a `Depended On By` consumer of `getBattleBehavior(id) → {tag, params}` and the personality enum on `roster[id].personality`. Same contract Battle uses; no new API surface needed.
+>   - **No change** to roll weights, behavior params, runtime state machine, F1–F5 formulas, schema, or the locked uniform-roll decision (§2.3). Reroll mid-battle rejection (E4 → `"in_battle"`) is appropriate for turn-based Battle #5; Pet AI #25 will need to define its own deferral if reroll is attempted on a currently-summoned pet (not Personality's responsibility; flagged in pet-combat-gdd).
 > - **1.1 (2026-05-26)** — Cross-GDD schema reconciliation (persistence-gdd v1.1 owns the canonical shapes):
 >   - **Canonical Brainrot identifier `id`.** The roster is keyed by the canonical `BrainrotEntry.id` (GUID), per persistence-gdd v1.1. Renamed all roster-key / identifier references from `guid` to `id` (data schema, runtime-state table, service/function signatures, events, remotes, formulas) so the three GDDs use one name. The value (a `HttpService:GenerateGUID(false)` string) is unchanged.
 >   - **`history` consistency.** Personality persists only the `personality` enum and does not own the per-Brainrot `history` block, but where it references roster/record shape it now aligns with the canonical `id` + `history` naming.
@@ -543,9 +547,10 @@ If `sum == 0` after validation clamping, the validator already substituted unifo
 ### Depended On By (consumers that READ the trait table / listen to events)
 - **System #3 — Idle Production**: reads `getProductionModifier` / morale aura; respects `paused` (OnBreak/Walkout); applies F1; listens to `WalkoutStarted` and `PersonalityChanged`.
 - **System #4 — Capture**: calls `rollPersonality()` on finalize; drives `PersonalityRevealed`.
-- **System #5 — Battle System**: reads `getBattleBehavior` (tags + params); applies F4; honors the in-battle reroll lock (E4); deterministic/replayable.
-- **System #6 — Raid v1**: inherits Battle's personality behavior (raids use battle resolution); defense flavor (Loyal guards, Rebel fights harder if overworked) flows through F4.
-- **System #8 — Work-Based Evolution**: reads `personality` to pick the evolution branch (Hyper→Senior Hyper, Rebel→Revolutionary, Loyal→Guardian, etc.); may listen to Moments for milestone flavor.
+- **System #5 — Battle System** (`battle-gdd.md` v1.3): reads `getBattleBehavior` (tags + params); applies F4; honors the in-battle reroll lock (E4); deterministic/replayable. **Turn-based dispatch context** — see also #25 (real-time dispatch of the same tags).
+- **System #6 — Raid v1** (`raid-gdd.md` v1.1): inherits Battle's personality behavior (raids use battle resolution); defense flavor (Loyal guards, Rebel fights harder if overworked) flows through F4. Unaffected by #25 — raids stay turn-based.
+- **System #8 — Work-Based Evolution + Level/XP** (`evolution-gdd.md` v1.3): reads `personality` to pick the Axis A evolution branch (Hyper→Senior Hyper, Rebel→Revolutionary, Loyal→Guardian, etc.); may listen to Moments for milestone flavor. **Reroll preserves Axis B `level`/`xp`** identically to how it preserves `evoStage` (E3-aligned logic on Evolution's side).
+- **System #25 — Field Combat / Pet AI** (`pet-combat-gdd.md` planned; demo `a71e545`) — **NEW v1.1.1.** Reads `getBattleBehavior` (same API Battle uses; identical `{tag, params}` payload) for real-time field-combat dispatch. The five tags + params (§2.4, §8 F4) apply identically; only the runtime dispatch differs (damage-tick instead of turn-step). Reads `roster[id].personality` for the summoned-fighter's identity + damage multiplier (currently only the production-style `prodMult` is wired in demo; full tag wiring is a pet-combat-gdd obligation). Personality has **no special handling** for #25 — same contract as Battle.
 - **System #11 — Reroll Personality**: calls `rerollPersonality()` (owns cost/cap/odds-UI; Personality owns the draw + field write + `PersonalityChanged`).
 - **System #12 — Moment System**: primary listener of `PersonalityMoment` / `PersonalityMomentBurst`; formats and surfaces bursts (one at a time). Personality defines the contract only; Moment owns presentation/recap.
 - **Phase 2 — Drama Events (#22), Fame/Trending (#21)**: also listen to `PersonalityMoment` (interactive choices / fame sources). No change required in Personality core to add them.

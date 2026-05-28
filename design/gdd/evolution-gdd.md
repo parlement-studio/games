@@ -1,10 +1,15 @@
-# Work-Based Evolution GDD (MVP: 1 stage / personality)
+# Work-Based Evolution + Level/XP Progression GDD
 
-**Version**: 1.2
-**Last Updated**: 2026-05-26
+**Version**: 1.3
+**Last Updated**: 2026-05-28
 **Author**: systems-designer
 **Status**: Draft
 
+> **Changelog v1.3 (2026-05-28)**: **Phase A reconciliation — added Axis B: Level/XP Progression** as a *descriptive* lock of the demo work (commit `36724cf`, demo's `DemoConfig.progression` block + `DemoServer` battle-resolution path). Per the systems-index 2026-05-28 update, system #8 now covers **two orthogonal progression axes**:
+> - **Axis A — Work-Based Evolution** (transformative milestone, unchanged in v1.3): one-shot, per-personality, flips identity (`evoStage 0 → 1`) — everything §2.1–§2.6 / §3.2 / §8.1–§8.4 describes.
+> - **Axis B — Level/XP Progression** (gradual combat power, new in v1.3): per-Brainrot Level/XP system already shipped in demo. **New § added:** §2.7 (mechanics + shared `levelScale(L)` contract); §3.1 schema rows for `level`/`xp` updated; new §8.5 locks the demo curve values (`xpPerWin=50`, `xpCurveBase=100`, `statGrowthPerLevel=0.08`, `maxLevel=100`); new F-LEVELUP formula in §8.3; §9 Integration adds Pet AI #25 as an XP source and notes the shared `levelScale(L)` formula with Battle #5.
+>
+> **What this changelog does NOT do (locked, descriptive-only scope per user direction):** v1.3 does **not** prescribe a new XP-write architecture. Demo currently has Battle/Pet AI **directly increment `xp`/`level` via Persistence's atomic `update()` path** (no event-listener pattern yet); v1.3 documents that as the current path. Routing XP writes via an Evolution-service event listener (`battle_win` → Evolution listens → applies XP/level) is noted as a **future refactor option** in §9, NOT prescribed here. Same for **work-based Axis A milestone wiring**: demo skips it entirely; v1.3 leaves §2.1–§2.6 as the design target without claiming it is implemented. Status of Axis A in code = **not started** (per systems-index §8 status note).
 > **Changelog v1.2**: FLAG-BATTLE and FLAG-IDLE (§9) ✅ RESOLVED — the consumers are now wired: Battle **v1.2** reads `combatMultiplier` (1.15) from `EvolutionConfig` (single source of truth); Idle **v1.2** multiplies `productionMultiplier` (1.20) into `effectiveRate` + offline path. Evolution remains the owner of both VALUES. No numeric change.
 > **Changelog v1.1**: Open Question #2 (reroll-after-evolve) ✅ RESOLVED — user confirmed: a rerolled evolved Brainrot **KEEPS its evolved status** (`evoStage` is NOT reset by reroll); only the evolved-form **look/name is re-derived from the new personality** (E3 rule confirmed). No schema or formula change — confirms the locked behavior.
 
@@ -35,7 +40,12 @@
 
 ## 1. Overview & Purpose
 
-Work-Based Evolution is the game's **long-term hook** — the third MVP pillar. A Brainrot **evolves based on what it has *done***, not on items consumed or coins spent: a Hyper that has produced enough lifetime coins becomes a **"Senior Hyper"** (tie + coffee mug), a Rebel that has won enough raids becomes a **"Revolutionary"** (protest banner), a Loyal that has carried the factory becomes a **"Guardian"** (shield). The evolved form is a **visible record of how that specific Brainrot was used** — and because no two players play the same way, **no two players have the same evolved roster.** That is the USP this pillar delivers: *"Show me your evolved Brainrot"* becomes a social question with a real, personal answer.
+Work-Based Evolution + Level/XP Progression (System #8) is the game's **long-term hook** — the third MVP pillar. System #8 covers **two orthogonal progression axes** on every Brainrot:
+
+- **Axis A — Work-Based Evolution** (`evoStage`): a one-shot, per-personality **identity transformation** when a Brainrot crosses a work-history milestone. A Hyper that has produced enough lifetime coins becomes a **"Senior Hyper"** (tie + coffee mug); a Rebel that has won enough raids becomes a **"Revolutionary"** (protest banner); a Loyal that has carried the factory becomes a **"Guardian"** (shield). The evolved form is a **visible record of how that specific Brainrot was used** — and because no two players play the same way, **no two players have the same evolved roster.** That is the USP this pillar delivers: *"Show me your evolved Brainrot"* becomes a social question with a real, personal answer.
+- **Axis B — Level/XP Progression** (`level` / `xp`, §2.7, demo-validated `36724cf`): a continuous, **gradual combat-power ramp** earned from combat wins. A Brainrot fought into Lv50 is meaningfully harder-hitting and harder to kill than the same Brainrot at Lv1, via the shared `levelScale(L)` stat-scaling formula (Battle #5 + Pet AI #25 read it identically). **Level is *combat power*; Evolution is *identity*** — different rewards for different progressions, deliberately not merged into one system.
+
+The two axes are **independent** (§2.7 / §2.8): a Brainrot can be Lv50-unevolved or Lv1-evolved; reroll preserves both; level doesn't affect Idle Production (locked decision — Axis B is pure combat).
 
 It is **P2 (long-term hook)** because:
 
@@ -140,6 +150,85 @@ The idea doc specifies **Loyal → Guardian at "defend 3 raids"** and **Rebel �
   └─────────────────────────────────────────────┘
 ```
 
+### 2.7 Axis B: Level/XP Progression (orthogonal, gradual; demo-validated)
+
+**Status:** Axis B is **shipped in demo** (commit `36724cf`); this section describes the demo's locked mechanics. Axis A (§2.1–§2.6 work-based milestone) is **independent** — a Brainrot's `level` and `evoStage` are separate fields that progress on different signals.
+
+**Player intent:** *"My Hyper has won a few raids and he's gotten stronger — his bar shows 80 XP toward Level 4, and when he hits Level 4 his HP and damage go up a notch. Same Brainrot, just more capable."* The player thinks in "Brainrot gets better the more I use it in combat." Distinct from Axis A's "Brainrot becomes something else." Level is *combat power*; Evolution is *identity*.
+
+**Model — XP-on-win, threshold-cross levels up, shared stat scaling:**
+
+1. **XP is earned on a combat win** — both Raid Battle (#5) and Field Combat / Pet AI (#25) award `xpPerWin` to each participating Brainrot on a winning outcome. **Losses award no XP** (demo behavior). XP **only** comes from combat wins in v1; no idle XP, no quest XP, no capture XP (those are Axis A milestone-feeders / coin rewards, not XP).
+2. **Level-up is threshold-driven.** A Brainrot levels up when its cumulative `xp` reaches the threshold for its next level (F-LEVELUP, §8.3). On level-up, `level += 1`, and `xp` rolls into the residual (subtracts the threshold; the overflow carries forward — no XP lost). Level is **capped at `maxLevel`** (config; demo locks 100).
+3. **Combat stat scaling is shared with Battle.** A Brainrot's HP / damage in combat are scaled by **`levelScale(L) = 1 + statGrowthPerLevel * (L - 1)`** — Lv1 = ×1.00, Lv100 = ×8.92 at the demo's `statGrowthPerLevel = 0.08`. This formula is **defined in battle-gdd v1.3 §2.1 / §8.2 F2** and is **identical** in Pet AI (#25); Evolution v1.3 does not re-define it, only references it for context.
+4. **Axis B does NOT affect Idle Production** (locked design decision, 2026-05-28). `levelScale(L)` applies to **combat stats only** (HP/damage); idle production rate is unaffected by `level`. Rationale: keeps Axis B as a pure *combat* hook orthogonal to Idle's *production* hooks (personality `prodMult` + factory `factoryLevel` + storage). Documented in idle-production-gdd v1.3 §2.2 as a non-interaction.
+
+**XP-write path (descriptive, current demo behavior — locked as v1):**
+
+```
+COMBAT WIN (one of):
+  Raid Battle resolved with player attacker-win (Battle #5, planned)
+  Pet AI fighter killed a wild Brainrot (Pet AI #25, demo a71e545)
+      │
+      ▼
+FOR EACH winning Brainrot id on the player's side:
+  PlayerDataService.update(player, function(data)
+    local entry = data.roster[id]
+    if not entry then return UNCHANGED end
+    entry.xp = entry.xp + Config.xpPerWin
+    while entry.xp >= xpToNext(entry.level) and entry.level < maxLevel do
+      entry.xp = entry.xp - xpToNext(entry.level)
+      entry.level = entry.level + 1
+      -- (level-up moment fires here in demo via inline replicate)
+    end
+    return CHANGED
+  end)
+```
+
+> **No idempotency key in the current demo path** (the in-session `txLog` is not used for XP increments). This is acceptable for v1 because (a) the combat-win event is fired once by the resolution code (no replay), and (b) over-crediting XP is a low-stakes failure mode (it costs nothing real, unlike a duplicated currency credit). **Future refactor option** (§9): route XP via an Evolution-service event listener (`battle_win` → Evolution applies XP/level + fires `LevelUp`) — would centralize Axis B logic and add idempotency by reusing `txLog`. **Not prescribed in v1.3** — current demo path is the v1 contract.
+
+**State machine (per Brainrot, Axis B):**
+
+```
+   [Lv 1, xp=0] --on combat win--> [xp += xpPerWin]
+        │                                  │
+        ▼                                  ▼
+   xp < threshold(L+1) ──► (stay at L, persist xp)
+        │
+        ▼
+   xp >= threshold(L+1) AND L < maxLevel ──► level += 1; xp -= threshold(L+1)
+                                              fire LevelUp{id, fromLevel, toLevel}
+        │
+        ▼
+   L == maxLevel ──► (xp clamped or discarded; LEVEL CAP)
+```
+
+- Level-up can **cascade** if a single XP grant crosses multiple thresholds (low-XP grants don't, but a future `xpPerWin` bump could) — the `while` loop above handles it. Each level boundary fires its own `LevelUp` event (one per level crossed), so Moments don't get coalesced.
+- `LevelUp` is **transient** (server-fires, replicated to client for UI bump, NOT persisted as an "achievement" record — the only persistent record is the new `level` value).
+
+**Interaction with Axis A (work-based Evolution):**
+
+- **Axis A and Axis B are independent.** A Brainrot can be Lv50 unevolved (a lot of combat wins, hasn't hit the work-based threshold) or Lv1 evolved (rare — would require evolving with no combat history, possible via `lifetimeCoins` form on a deployed-but-unfought Brainrot). Most Brainrots progress on both axes over time.
+- A milestone metric `"level"` is **available** (Axis A `EvolutionConfig.byPersonality[*].milestoneMetric = "level"`) but **no v1 evolved form uses it**. F-METRIC supports `"level"` for forward-compat (Phase-2 or rebalanced forms can opt in).
+- **Reroll** (Personality #2) does NOT reset Axis B — `level`/`xp` are kept across reroll, identical to how Axis A's `evoStage` is kept (E3 logic). The player's combat investment in a Brainrot persists through identity changes.
+
+### 2.8 Why Axis A + Axis B (not one progression system)
+
+Two axes deliberately solve different player questions:
+
+| | Axis A — Evolution (§2.1–§2.6) | Axis B — Level/XP (§2.7) |
+|---|---|---|
+| **Player Q answered** | "What did my Brainrot *become*?" | "How *strong* is my Brainrot?" |
+| **Cadence** | One-shot per Brainrot (single milestone, single transform) | Continuous (every combat win) |
+| **Effect** | Identity flip (name/visual/role) + flat multiplier ×1.15 combat, ×1.20 production | Gradual stat scaling (`levelScale(L)`) on HP/damage only |
+| **Signal** | Specific work-history metric (coins or wins, per personality) | Generic combat win |
+| **Surface** | Big celebration Moment (one per evolve) | Small Moment / number tick (one per level) |
+| **Idle relevance** | ✅ Production multiplier (×1.20 at evoStage 1) | ❌ Idle unaffected — combat only (§2.7) |
+| **Reset on reroll** | ❌ Stage kept; form re-derives (E3) | ❌ Level/XP kept |
+| **Implementation status (2026-05-28)** | **Not started** — formal Axis A service pending | **Shipped (demo)** — direct write via `update()` |
+
+The two axes share **nothing structural** except the roster entry they both annotate — and that is correct: they are different reward shapes for different progressions.
+
 ---
 
 ## 3. Data Schema
@@ -155,8 +244,9 @@ Evolution **adds NO new persisted field.** It reads/writes only structures owned
 | `roster[id].history.coins` (Persistence; Idle bumps) | number | 0 | `lifetimeCoins` milestone metric (Hyper, Loyal, Lazy). | No (read-only). |
 | `roster[id].history.rwon` (Persistence; Raid bumps) | number | 0 | `raidsWon` milestone metric (Rebel, Chaotic). | No (read-only). |
 | `roster[id].history.rdef` (Persistence; Raid) | number | 0 | **NOT used as a v1 milestone** (offense-only raids → always 0 in v1). Reserved for Phase-2 defense branch (#20). | No. |
-| `roster[id].level` (Battle/Persistence) | number | 1 | Available as a milestone metric (`level`); **no v1 form uses it** but the config supports it. | No (read-only). |
-| `PlayerData.txLog` (Persistence) | { string } | {} | Holds the `evo:<id>:1` idempotency key (anti-double-evolve). Owned/managed by Persistence's atomic path. | Indirectly (append happens inside Persistence's atomic transform). |
+| `roster[id].level` (Persistence; **Battle #5 + Pet AI #25 write via direct `update()`**) | number | 1 | **Axis B (§2.7).** The per-Brainrot level reached via XP. Scales combat stats in **both** Battle (#5, turn-based Raid) and Pet AI (#25, real-time field) via the shared `levelScale(L)` formula. Available as an Axis A milestone metric (`level`), though no v1 evolved form uses it. | No (read-only here — written by Axis B XP system; see §2.7 for the write path). |
+| `roster[id].xp` (Persistence; **Battle #5 + Pet AI #25 write via direct `update()`**) | number | 0 | **Axis B (§2.7).** Accumulated XP on this Brainrot (monotonic between level-ups; rolls into next-level threshold per F-LEVELUP). Never decrements outside the level-up roll. | No (read-only here — written by Axis B XP system; see §2.7 for the write path). |
+| `PlayerData.txLog` (Persistence) | { [string] = any } | {} | Holds the `evo:<id>:1` idempotency key (anti-double-evolve, Axis A). Owned/managed by Persistence's atomic path. **Axis B XP increments do NOT use `txLog`** (the demo's current path is direct `update()` without an idempotency key — see §2.7 / §9 "future refactor"). | Indirectly (append happens inside Persistence's atomic transform). |
 
 > **Ephemeral, NOT persisted (server memory only):** the transient `Evolving` marker per `id` (race guard, §2.5); the per-session "login backfill already run" flag; any cached `EvolutionConfig` lookups. None of these are save-worthy — the durable truth is `evoStage` + `txLog`.
 
@@ -467,22 +557,68 @@ productionMult(entry) = EvolutionConfig.stageMultipliers[entry.evoStage].product
                         ?? EvolutionConfig.unknownStageMultiplier   (= 1.0, E7)   -- Idle effectiveRate factor (FLAG-IDLE)
 ```
 
+**F-LEVELUP — XP threshold for the next level + apply XP grant (Axis B, §2.7).**
+```
+xpToNext(L):                                                                     -- XP needed to reach level L+1
+  return xpCurveBase * L                                                          -- demo: linear curve (xpCurveBase=100):
+                                                                                   --   Lv1→2 = 100, Lv2→3 = 200, ..., Lv99→100 = 9900
+  Bounds: L in [1, maxLevel-1]; threshold = 100..9900 at demo defaults.
+
+applyXpGrant(entry, xpAmount):                                                    -- called from combat-win path (§2.7)
+  if entry.level >= maxLevel then return UNCHANGED                                -- level cap; XP simply not credited
+  entry.xp = entry.xp + xpAmount
+  levelsGained = 0
+  while entry.xp >= xpToNext(entry.level) and entry.level < maxLevel do
+    entry.xp    = entry.xp - xpToNext(entry.level)                                -- roll residual into next bucket
+    entry.level = entry.level + 1                                                 -- one level boundary crossed
+    levelsGained = levelsGained + 1
+    -- fire LevelUp{id, fromLevel = entry.level - 1, toLevel = entry.level} per boundary
+  end
+  return CHANGED  if (xpAmount > 0 or levelsGained > 0)  else UNCHANGED
+  Notes:
+   - Cascade-safe (handles a single grant that crosses multiple thresholds).
+   - At cap: XP grants beyond maxLevel are discarded (no overflow xp persisted).
+   - Demo path: this runs INSIDE PlayerDataService.update(...) (no separate idemKey in v1).
+   - Future-refactor path (§9): same logic moved into an Evolution event listener with txLog idempotency.
+
+levelScale(L) = 1 + statGrowthPerLevel * (L - 1)
+  Shared with Battle #5 (battle-gdd v1.3 §2.1 / §8.2 F2) and Pet AI #25.
+  Defined HERE (Evolution OWNS the parameter value via §8.5); applied by combat consumers.
+  Bounds: L in [1, maxLevel]; at demo defaults (statGrowthPerLevel = 0.08, maxLevel = 100): Lv1 = 1.00, Lv50 = 4.92, Lv100 = 8.92.
+```
+
 ### 8.4 Assumptions to validate via `/balance-check` + raid-balance coordination (⚠)
 1. **`combatMultiplier = 1.15`** — ⚠VALIDATE that a 3-member evolved team vs the NPC Rival Startup defender teams (Raid #6) does not warp the intended raid win-rate; coordinate with **Raid #6** loot/difficulty tuning and **Battle #5** species base stats. **Power-creep watch:** +15% combat is intentionally modest precisely to keep evolution *additive*, not *mandatory*, for raid success.
 2. **`productionMultiplier = 1.20`** — ⚠VALIDATE against **Economy/Idle** treadmill (idle §8.7): a fully-evolved roster of deployed workers must not outpace the geometric upgrade cost curves (factory 200/1.35 etc.). Confirm it stays a satisfying bump, not an inflation break.
 3. **All 5 thresholds (10k/5/8k/6k/4)** — ⚠VALIDATE time-to-first-evolution + cross-form wall-clock parity (§8.2 note) once real idle rates and raid cadence exist.
 4. **`maxEvoStage = 1` ceiling** — confirm the single-stage feel is "rewarding enough" to be a weeks-long hook in playtesting; if too thin, Phase-2 multi-stage (#20) is the planned extension (the engine is already parameterized for it).
 
+### 8.5 Locked Level/XP VALUES (Axis B — the demo-validated contract)
+
+These are the demo's currently-shipping values (`DemoConfig.progression`, commit `36724cf`), locked as v1 by this GDD. They will graduate from `DemoConfig` into a production `EvolutionConfig.progression` block (or equivalent) without value changes when the formal Evolution service ships. Battle (#5) and Pet AI (#25) read `statGrowthPerLevel` + `maxLevel` for `levelScale(L)`; Evolution owns the values.
+
+| Parameter | Locked value | Range (config) | Source | Notes |
+|---|---|---|---|---|
+| `xpPerWin` | **50** | 1..1000 | `DemoConfig.progression.xpPerWin` | XP awarded per combat win, per participating Brainrot. Shared by Battle (#5) raid-win path + Pet AI (#25) field-win path. **⚠VALIDATE** vs. raid cadence (Raid #6) and field-combat density (Pet AI #25) — the *time-to-first-levelup* should land around 2 combat wins for a fresh Lv1 (matches the demo: 2 × 50 = 100 = Lv2 threshold). Re-tune if level-up cadence feels too fast/slow once both consumers exist. |
+| `xpCurveBase` | **100** | 10..10000 | `DemoConfig.progression.xpCurveBase` | XP curve scalar; `xpToNext(L) = xpCurveBase × L` (linear). At demo defaults: Lv1→2 = 100 XP, Lv50→51 = 5000 XP, Lv99→100 = 9900 XP. **Curve is intentionally linear (not geometric)** so leveling stays paced across the cap; geometric curves would gate Lv100 behind an unreasonable late-game grind for a 100-level cap. |
+| `statGrowthPerLevel` | **0.08** (= +8% per level) | 0.01..0.50 | `DemoConfig.progression.statGrowthPerLevel` | The per-level combat-stat multiplier increment in `levelScale(L)`. At Lv1 = ×1.00; at Lv100 = ×8.92. **MODEST by design** to keep raid balance from being warped by Lv100 outliers (a Lv100 team is ~9× a Lv1 team in stats — significant but not gamebreaking for a long-term hook). ⚠VALIDATE in coordination with Raid #6 difficulty + Battle #5 species base stats. |
+| `maxLevel` | **100** | 10..500 | `DemoConfig.progression.maxLevel` | Hard cap on `level`. XP grants beyond cap are discarded (no overflow persists). Demo locks 100 as a multi-week ceiling that respects the linear curve (total XP to cap = `Σ(xpCurveBase × L for L=1..99)` ≈ 495,000 XP ≈ 9,900 combat wins at `xpPerWin=50`). |
+
+> **Where these values LIVE in code today:** `src/ReplicatedStorage/Shared/Demo/DemoConfig.luau` §progression (demo). On graduation to production, they move to `EvolutionConfig.progression` (or `src/ReplicatedStorage/Shared/Config/EvolutionConfig.luau` Axis B sub-block) with identical values and the same range comments.
+
+> **Cross-system contract (locked):** Battle #5 and Pet AI #25 BOTH read `statGrowthPerLevel` and `maxLevel` for `levelScale(L)`; neither holds its own copy. If a future tuning pass changes `statGrowthPerLevel`, **both consumers respond identically** (no drift). Evolution owns the value; combat systems own the application.
+
 ---
 
 ## 9. Integration Points
 
 ### Depends On
-- **#1 Data Persistence & Roster Core** (`persistence-gdd.md` v1.2): owns `evoStage` (the field Evolution writes via the **atomic `UpdateAsync` + idempotency key** path, §2.3), the per-Brainrot `history{coins, rwon, rdef, fame}` counters (milestone sources), and the player-level lifetime counters. Evolution adds **no** schema. The `txLog` is what guarantees idempotent (un-double-triggerable) evolution.
-- **#2 Personality System** (`personality-gdd.md` v1.1): owns the `personality` enum that **keys** which evolution rule (metric/threshold/form) applies. Evolution listens to `PersonalityChanged` for the reroll-after-evolve rule (E3 — evolved status is *kept*, form *re-derives* from current personality).
-- **#3 Idle Production** (`idle-production-gdd.md` v1.1): bumps `history.coins` on Collect (idle §2.9) — the `lifetimeCoins` milestone source — and fires `CoinsCollected` (Evolution's check trigger). **➡ See FLAG-IDLE below.**
-- **#5 Battle System** (`battle-gdd.md` v1.1): reads `entry.evoStage` and applies `evoStageStatMultiplier` (`evoMult`) as a flat combat-stat multiplier; fires `BattleResolved` (raid-win context). **➡ See FLAG-BATTLE below.**
-- **#6 Raid v1** (`raid-gdd.md`, planned): bumps `history.rwon` on a winning raid (the `raidsWon` milestone source, offense-only in v1) and provides the winning-raid outcome event Evolution checks against. (Raid v1 leaves `history.rdef = 0` — the reason for the §2.4 milestone redesign.)
+- **#1 Data Persistence & Roster Core** (`persistence-gdd.md` v1.4): owns `evoStage` (the field Axis A writes via the **atomic `UpdateAsync` + idempotency key** path, §2.3) AND `level` / `xp` (the fields Axis B writes via direct `update()` from combat consumers, §2.7), the per-Brainrot `history{coins, rwon, rdef, fame}` counters (milestone sources for Axis A), and the player-level lifetime counters. Evolution adds **no** schema. The `txLog` guarantees idempotent (un-double-triggerable) Axis A evolution; Axis B does not currently use `txLog` (acceptable per §2.7 risk analysis).
+- **#2 Personality System** (`personality-gdd.md` v1.1): owns the `personality` enum that **keys** which evolution rule (metric/threshold/form) applies. Evolution listens to `PersonalityChanged` for the reroll-after-evolve rule (E3 — evolved status is *kept*, form *re-derives* from current personality). Reroll also preserves Axis B `level`/`xp` (§2.7).
+- **#3 Idle Production** (`idle-production-gdd.md` v1.2): bumps `history.coins` on Collect (idle §2.9) — the `lifetimeCoins` milestone source — and fires `CoinsCollected` (Evolution's Axis A check trigger). **➡ See FLAG-IDLE below.** Axis B `level` has **no idle effect** (locked 2026-05-28, §2.7).
+- **#5 Battle System** (`battle-gdd.md` v1.2 / v1.3): **Axis A** — reads `entry.evoStage` and applies `evoStageStatMultiplier` (`evoMult`) as a flat combat-stat multiplier; fires `BattleResolved` (raid-win context). **➡ See FLAG-BATTLE below.** **Axis B** — Battle is an XP source: on a winning raid, Battle writes `+xpPerWin` to each participating Brainrot's `xp` and applies F-LEVELUP via Persistence's atomic `update()` (§2.7 XP-write path). Battle reads `statGrowthPerLevel` + `maxLevel` from Evolution's §8.5 for `levelScale(L)`.
+- **#6 Raid v1** (`raid-gdd.md` v1.1): bumps `history.rwon` on a winning raid (the `raidsWon` milestone source, offense-only in v1) and provides the winning-raid outcome event Evolution checks against. (Raid v1 leaves `history.rdef = 0` — the reason for the §2.4 milestone redesign.) Raid is also indirectly an Axis B XP source (raids resolve via Battle #5, which writes XP).
+- **#25 Field Combat / Pet AI** (`pet-combat-gdd.md` planned; demo `a71e545`): **Axis B XP source** — on a Pet AI fighter winning a field combat, Pet AI writes `+xpPerWin` to the participating Brainrot's `xp` via the same Persistence atomic `update()` path Battle uses (§2.7). Pet AI also reads `statGrowthPerLevel` + `maxLevel` for `levelScale(L)` — **identical** application to Battle, no drift. **Axis A** — Pet AI does NOT trigger Axis A milestones in v1 (no per-Brainrot `history.rwon` bump from field combat; only raid-win bumps `rwon`); a future rebalance may unify field+raid `rwon` accounting if Rebel/Chaotic Axis A timings drift.
 
 ### Depended On By
 - **#12 Moment System**: primary listener of `EvolutionOccurred` — surfaces the big "your Brainrot evolved!" celebration (one Moment at a time). **Evolution emits a Moment on every evolve.**
