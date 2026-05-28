@@ -14,7 +14,7 @@
 
 - Total systems: 26 (18 MVP, 8 Phase 2)
 - Not started: 22 (includes #4 Capture — demo only ships fallback scaffold, NOT canonical explore-map)
-- In design: 2 (#25 Pet AI, #26 Showroom — demo-validated, formal GDD pending)
+- In design: 2 (#25 Pet AI — GDD v1.0 drafted 2026-05-29; #26 Showroom — demo-validated, formal GDD pending)
 - In implementation: 2 (#1 Persistence — shipped; #2 Personality — shipped)
 - Implemented: 0
 - Polished: 0
@@ -190,11 +190,11 @@
 - **Notes**: Gives players a short daily set of goals so a 15–30 min session has direction beyond pure idle. **3 daily quests** rolled at reset from a config-driven pool (examples: "tangkap N Brainrot", "menang M raid", "menang M field battle", "kumpulkan X coins", "evolve 1 Brainrot", "level-up 1 Brainrot"); progress accrues from the objective-source systems' events (event-driven, not polling). On completion of a quest, reward = Meme Coins via Economy faucet `quest_daily` (reward pool is per-quest config, not a flat magic number — see economy-gdd §3.1/§8.2). **Daily RESET on server-clock** (never trust client time): store `lastQuestReset` + the active quest set + per-quest progress in PlayerData (coordinate with Persistence schema; reset = re-roll the 3 quests + zero progress when server-clock day boundary crossed). Quest pool, count (3), per-quest targets, and reward ranges are all config-driven. Risk M: cross-server-consistent daily reset + multi-source progress tracking is the moving part; lean on Persistence's server-clock + atomic mutation path. **Scope note (solo dev MVP addition):** this is a late add to MVP scope — a **prune candidate** if launch schedule slips. Fallback if cut: a simple escalating daily-login reward (no objectives), which still feeds the `quest_daily` faucet. Needs its own GDD: `design/gdd/daily-quests-gdd.md` (planned).
 
 ### 25. Field Combat / Summoned Pet AI
-- **Status**: In Implementation (demo `a71e545` shipped reference impl; formal GDD pending)
+- **Status**: In design (GDD v1.0 drafted 2026-05-29; demo `a71e545` shipped reference impl; production code graduation + personality battle-tag wiring pending)
 - **Phase**: MVP
 - **Priority**: P2 (field-world activity layer; not core loop blocker)
 - **Value**: 4 | **Effort**: 3 (much already built in demo) | **Risk**: M | **Monetization**: 2
-- **GDD**: `design/gdd/pet-combat-gdd.md` (planned — to lock contract around the demo reference impl)
+- **GDD**: `design/gdd/pet-combat-gdd.md` v1.0 (drafted 2026-05-29 — descriptive lock of demo reference impl)
 - **Depends On**: Personality (#2, damage multiplier + future battle tags), Data Persistence (#1, roster + `level`), Capture (#4, must own a Brainrot to summon it), Battle (#5, shares `levelScale(L)` stat-scaling formula from §2.1)
 - **Depended On By**: Moment System (#12, kill/summon as a moment), Daily Quests (#17, "win N field battles" objective), Evolution + Level/XP (#8, XP source on win)
 - **Notes**: **Real-time hub-world combat** — distinct from Battle #5 (turn-based, for Raid #6). Player taps a summon UI to spawn a caught Brainrot as a temporary field pet; the pet follows the player in a fan-out formation (`followSpreadDegrees`, `followJitterStuds`), detects wild Brainrots within `detectionRangeStuds` centered on the **owner player** (not the pet), engages in a combat ring (`combatRingRadiusStuds < attackRangeStuds`, no clipping) with periodic damage ticks (`combatTickSec`), and auto-despawns after `fighterLifetimeSec`. Wins award `winCoins` (Economy faucet). Server-authoritative: spawn, AI seek, damage tick, despawn, formation slot assignment all server-side. Personality currently scales damage via `prodMult`; **full battle behavior tags** (Hyper `act_first_mistarget`, Lazy `berserk_when_last`, etc., as defined in Personality #2) **to be wired** in the formal GDD. All ranges, timings, formation params, and reward values config-driven (currently in `DemoConfig` §combat; will graduate to `PetCombatConfig`). Wild Brainrot AI (wander/flee/engage) lives in `BrainrotAI.server.luau` (114 lines, demo). **Reference impl files:** `src/ReplicatedStorage/Shared/Demo/DemoConfig.luau` §combat (lines ~337–430); `src/ServerScriptService/Demo/DemoServer.server.luau` §fighter logic (lines ~900–1200); `src/ServerScriptService/Demo/BrainrotAI.server.luau`. **Open design questions** (deferred to GDD): leashing model (current = owner-centered detection); kill credit (current = owner only); multi-pet stacking cap; PvP collision (Phase 2).
