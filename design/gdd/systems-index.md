@@ -1,8 +1,10 @@
 # Systems Index — Brainrot Inc.
 
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-05-28
 **Author**: game-designer
 **Status**: Draft (pre-production system map)
+
+> **Revision note (2026-05-28):** **Demo-driven scope reconciliation (Phase A + Phase B cross-GDD reconciliation pass complete).** Two MVP systems surfaced by the playable vertical slice (commits `e984677`, `36724cf`, `a71e545`) were added to the system map: **#25 Field Combat / Pet AI** (real-time field combat with summoned Brainrots vs. wild Brainrots — distinct from turn-based Raid Battle) and **#26 Base / Showroom Spatial Layer** (3D pedestal/stand UI wrapper over Idle Production deployment). Also: **#5 Battle scope clarified** as turn-based-Raid-only (field combat is #25); **#8 Evolution extended** with a parallel **Level/XP progression axis** (`xpPerWin`/`xpCurveBase`/`statGrowthPerLevel`/`maxLevel`, from demo `36724cf`) — Level/XP is **combat-only** (does NOT affect idle production rate, locked decision). Summary count 24→26, build order, dependency graphs updated. **Phase B (2026-05-28) reconciliation pass updated 7 existing GDDs** (persistence v1.4 → v1.4.1, personality v1.1 → v1.1.1, battle v1.2 → v1.3, raid unchanged, evolution v1.2 → v1.3, idle-production v1.2 → v1.3, capture v1.2 → v1.3, economy v1.1 → v1.2) with descriptive cross-references — no schema or formula changes outside the documented renames (`statGrowth` → `statGrowthPerLevel`). New GDDs `design/gdd/pet-combat-gdd.md` and `design/gdd/base-showroom-gdd.md` remain planned. **Capture #4 status correction:** demo's crate/encounter usage is **fallback scaffolding for downstream-system testing**, NOT a promotion of fallback to canonical MVP capture — explore-map remains the MVP target (capture-gdd v1.3 §10 status note); #4 status stays "Not started" for explore-map work.
 
 > **Revision note (2026-05-26):** Added **Daily Quests** as MVP system **#17** (retention/objective layer). Phase 2 systems renumbered #17–23 → **#18–24**. Summary, build order, dependency graphs, and all by-number cross-references updated.
 
@@ -10,13 +12,15 @@
 
 ## Summary
 
-- Total systems: 24 (16 MVP, 8 Phase 2)
-- Not started: 24
-- In design: 0
-- In implementation: 0
+- Total systems: 26 (18 MVP, 8 Phase 2)
+- Not started: 22 (includes #4 Capture — demo only ships fallback scaffold, NOT canonical explore-map)
+- In design: 2 (#25 Pet AI, #26 Showroom — demo-validated, formal GDD pending)
+- In implementation: 2 (#1 Persistence — shipped; #2 Personality — shipped)
 - Implemented: 0
 - Polished: 0
 - Live: 0
+
+> **Phase B reconciliation (2026-05-28) completed for 7 existing GDDs**: persistence-gdd v1.4.1, personality-gdd v1.1.1, battle-gdd v1.3, evolution-gdd v1.3, idle-production-gdd v1.3, capture-gdd v1.3, economy-gdd v1.2 — all updated with descriptive cross-references to #25 and #26 + the Battle-scope clarification + the Level/XP Axis B documentation. No schema or formula changes outside the documented `statGrowth` → `statGrowthPerLevel` rename. Raid-gdd v1.1 unaffected (turn-based Raid scope unchanged by Pet AI #25 addition).
 
 **Legend** — Priority tiers: P0 = foundation/blocker, P1 = core MVP, P2 = MVP-supporting, P3 = Phase 2. Risk: L/M/H. Phase tag in each block.
 
@@ -74,7 +78,7 @@
 - **GDD**: `design/gdd/battle-gdd.md` (planned)
 - **Depends On**: Data Persistence, Personality (battle modifiers), Roster (combatants)
 - **Depended On By**: Raid (raid uses battle resolution), Evolution (raid-survival milestones)
-- **Notes**: Auto turn-based; player spectates live. Personality drives behavior (Hyper attacks first / 20% mistarget, Lazy berserk-when-last, Chaotic random move, Loyal bodyguard <30% HP, Rebel double-damage counter). Server-authoritative resolution; client is a replay/viewer. All damage/turn formulas config-driven (explicit formula required in GDD, no "calculated appropriately"). Risk H: turn engine + personality hooks + deterministic replay is the most logic-heavy system.
+- **Notes**: Auto turn-based; player spectates live. Personality drives behavior (Hyper attacks first / 20% mistarget, Lazy berserk-when-last, Chaotic random move, Loyal bodyguard <30% HP, Rebel double-damage counter). Server-authoritative resolution; client is a replay/viewer. All damage/turn formulas config-driven (explicit formula required in GDD, no "calculated appropriately"). Risk H: turn engine + personality hooks + deterministic replay is the most logic-heavy system. **Scope clarification (post-demo, 2026-05-28):** Battle in this GDD is **turn-based, designed for Raid (#6)** vs NPC Rival Startups (deterministic + spectatable replay). It is **NOT** the engine used for real-time hub-world combat against wild Brainrots — that is **Field Combat / Pet AI (#25)**, a separate combat layer with its own GDD. The two coexist: Battle owns Raid combat; Pet AI owns field combat. Both read personality + level + species stats from the same roster entry; only the resolution model (turn-based replay vs real-time tick) differs. Stat-scaling formula `levelScale(L)` is **shared** between both (defined here in Battle §2.1).
 
 ### 6. Raid v1 (vs NPC Rival Startups)
 - **Status**: Not started
@@ -86,15 +90,19 @@
 - **Depended On By**: Evolution (raid milestones), Revenge System (P2)
 - **Notes**: v1 targets are config-defined NPC "Rival Startups" (4 at launch: Grind Corp, Chill Collective, The Glitch Gang, Pivot Ventures) — no live PvP yet, which de-risks matchmaking and griefing for launch while still exercising the full battle + loot pipeline. **Raid v1 is offense-only** (you raid NPCs; nothing raids you), so the Raid Shield is deferred to Phase 2 (#7) — but the **Defense Rating display stays in v1** (owned here, Raid #6). Send team of 3, win = steal % of NPC pool (or apply to defense scoring). PvP + Revenge + boss-tier rival (Burnout Inc.) + Raid Shield deferred to Phase 2. Raid cost/loot %/team size config-driven.
 
-### 8. Work-Based Evolution (MVP: 1 stage/personality)
-- **Status**: Not started
+### 8. Work-Based Evolution + Level/XP Progression (MVP: 1 evolution stage/personality, level cap 100)
+- **Status**: Partial (Level/XP shipped in demo `36724cf`; work-based evolution not started)
 - **Phase**: MVP
 - **Priority**: P2 (long-term hook)
 - **Value**: 4 | **Effort**: 3 | **Risk**: M | **Monetization**: 2
-- **GDD**: `design/gdd/evolution-gdd.md` (planned)
-- **Depends On**: Data Persistence (tracks lifetime stats per GUID), Personality, Idle Production / Battle / Raid (milestone sources)
+- **GDD**: `design/gdd/evolution-gdd.md` (planned — needs extension per 2026-05-28 reconciliation)
+- **Depends On**: Data Persistence (tracks lifetime stats + `level`/`xp` per GUID), Personality, Idle Production / Battle / Raid / Pet AI (milestone + XP sources)
 - **Depended On By**: Moment System (evolution as a moment), Fame (P2), Multi-Branch Evolution (P2)
-- **Notes**: MVP = single milestone → single evolved stage per personality (e.g., Hyper→Senior Hyper at lifetime production X; Rebel→Revolutionary at N raids survived; Loyal→Guardian at N defends). Requires lifetime-stat counters wired from day one (cheap to add now, expensive to backfill). Multi-branch evolution → Phase 2. Milestone thresholds config-driven.
+- **Notes**: This system now covers **two orthogonal progression axes** (post-demo reconciliation 2026-05-28):
+  - **Axis A — Work-Based Evolution (transformative milestone, one-shot):** single milestone → single evolved stage per personality (e.g., Hyper→Senior Hyper at lifetime production X; Rebel→Revolutionary at N raids survived; Loyal→Guardian at N defends). Flips identity once; visible model/name change. Multi-branch evolution → Phase 2 (#20). Requires lifetime-stat counters wired from day one (cheap now, expensive to backfill).
+  - **Axis B — Level/XP Progression (gradual combat power growth):** per-Brainrot Level/XP system, prototyped in demo `36724cf` (`DemoConfig.progression`: `xpPerWin=50`, `xpCurveBase=100`, `statGrowthPerLevel=0.08`, `maxLevel=100`). XP awarded on battle wins (Raid #6 + Pet AI #25); level-up triggers `levelScale(L) = 1 + statGrowthPerLevel*(L-1)` applied to HP/damage in **both** Battle (#5) and Pet AI (#25) — formula is shared. `level`/`xp` fields persist on `BrainrotEntry`.
+  - **Axes are orthogonal:** Level grows gradually with use (combat power); Evolution flips identity once at a milestone. A Lv50 Hyper that hasn't hit the lifetime-coins threshold is still base-form; a freshly-evolved Senior Hyper might still be Lv1. Both feed the Moment System (#12).
+  - All milestone thresholds + XP curve params config-driven (no magic numbers).
 
 ### 9. Economy / Currency (Meme Coins)
 - **Status**: Not started
@@ -177,9 +185,29 @@
 - **Priority**: P2 (retention / objective layer)
 - **Value**: 3 | **Effort**: 3 | **Risk**: M | **Monetization**: 2
 - **GDD**: `design/gdd/daily-quests-gdd.md` (planned)
-- **Depends On**: Economy (#9, reward payout), Data Persistence (#1, progress tracking + daily reset state), and objective sources Capture (#4), Raid (#6), Idle Production (#3), Work-Based Evolution (#8)
+- **Depends On**: Economy (#9, reward payout), Data Persistence (#1, progress tracking + daily reset state), and objective sources Capture (#4), Raid (#6), Idle Production (#3), Work-Based Evolution + Level/XP (#8), Field Combat / Pet AI (#25)
 - **Depended On By**: (none in MVP)
-- **Notes**: Gives players a short daily set of goals so a 15–30 min session has direction beyond pure idle. **3 daily quests** rolled at reset from a config-driven pool (examples: "tangkap N Brainrot", "menang M raid", "kumpulkan X coins", "evolve 1 Brainrot"); progress accrues from the objective-source systems' events (event-driven, not polling). On completion of a quest, reward = Meme Coins via Economy faucet `quest_daily` (reward pool is per-quest config, not a flat magic number — see economy-gdd §3.1/§8.2). **Daily RESET on server-clock** (never trust client time): store `lastQuestReset` + the active quest set + per-quest progress in PlayerData (coordinate with Persistence schema; reset = re-roll the 3 quests + zero progress when server-clock day boundary crossed). Quest pool, count (3), per-quest targets, and reward ranges are all config-driven. Risk M: cross-server-consistent daily reset + multi-source progress tracking is the moving part; lean on Persistence's server-clock + atomic mutation path. **Scope note (solo dev MVP addition):** this is a late add to MVP scope — a **prune candidate** if launch schedule slips. Fallback if cut: a simple escalating daily-login reward (no objectives), which still feeds the `quest_daily` faucet. Needs its own GDD: `design/gdd/daily-quests-gdd.md` (planned).
+- **Notes**: Gives players a short daily set of goals so a 15–30 min session has direction beyond pure idle. **3 daily quests** rolled at reset from a config-driven pool (examples: "tangkap N Brainrot", "menang M raid", "menang M field battle", "kumpulkan X coins", "evolve 1 Brainrot", "level-up 1 Brainrot"); progress accrues from the objective-source systems' events (event-driven, not polling). On completion of a quest, reward = Meme Coins via Economy faucet `quest_daily` (reward pool is per-quest config, not a flat magic number — see economy-gdd §3.1/§8.2). **Daily RESET on server-clock** (never trust client time): store `lastQuestReset` + the active quest set + per-quest progress in PlayerData (coordinate with Persistence schema; reset = re-roll the 3 quests + zero progress when server-clock day boundary crossed). Quest pool, count (3), per-quest targets, and reward ranges are all config-driven. Risk M: cross-server-consistent daily reset + multi-source progress tracking is the moving part; lean on Persistence's server-clock + atomic mutation path. **Scope note (solo dev MVP addition):** this is a late add to MVP scope — a **prune candidate** if launch schedule slips. Fallback if cut: a simple escalating daily-login reward (no objectives), which still feeds the `quest_daily` faucet. Needs its own GDD: `design/gdd/daily-quests-gdd.md` (planned).
+
+### 25. Field Combat / Summoned Pet AI
+- **Status**: In Implementation (demo `a71e545` shipped reference impl; formal GDD pending)
+- **Phase**: MVP
+- **Priority**: P2 (field-world activity layer; not core loop blocker)
+- **Value**: 4 | **Effort**: 3 (much already built in demo) | **Risk**: M | **Monetization**: 2
+- **GDD**: `design/gdd/pet-combat-gdd.md` (planned — to lock contract around the demo reference impl)
+- **Depends On**: Personality (#2, damage multiplier + future battle tags), Data Persistence (#1, roster + `level`), Capture (#4, must own a Brainrot to summon it), Battle (#5, shares `levelScale(L)` stat-scaling formula from §2.1)
+- **Depended On By**: Moment System (#12, kill/summon as a moment), Daily Quests (#17, "win N field battles" objective), Evolution + Level/XP (#8, XP source on win)
+- **Notes**: **Real-time hub-world combat** — distinct from Battle #5 (turn-based, for Raid #6). Player taps a summon UI to spawn a caught Brainrot as a temporary field pet; the pet follows the player in a fan-out formation (`followSpreadDegrees`, `followJitterStuds`), detects wild Brainrots within `detectionRangeStuds` centered on the **owner player** (not the pet), engages in a combat ring (`combatRingRadiusStuds < attackRangeStuds`, no clipping) with periodic damage ticks (`combatTickSec`), and auto-despawns after `fighterLifetimeSec`. Wins award `winCoins` (Economy faucet). Server-authoritative: spawn, AI seek, damage tick, despawn, formation slot assignment all server-side. Personality currently scales damage via `prodMult`; **full battle behavior tags** (Hyper `act_first_mistarget`, Lazy `berserk_when_last`, etc., as defined in Personality #2) **to be wired** in the formal GDD. All ranges, timings, formation params, and reward values config-driven (currently in `DemoConfig` §combat; will graduate to `PetCombatConfig`). Wild Brainrot AI (wander/flee/engage) lives in `BrainrotAI.server.luau` (114 lines, demo). **Reference impl files:** `src/ReplicatedStorage/Shared/Demo/DemoConfig.luau` §combat (lines ~337–430); `src/ServerScriptService/Demo/DemoServer.server.luau` §fighter logic (lines ~900–1200); `src/ServerScriptService/Demo/BrainrotAI.server.luau`. **Open design questions** (deferred to GDD): leashing model (current = owner-centered detection); kill credit (current = owner only); multi-pet stacking cap; PvP collision (Phase 2).
+
+### 26. Base / Showroom Spatial Layer
+- **Status**: In Implementation (demo `e984677` shipped reference impl; formal GDD pending)
+- **Phase**: MVP
+- **Priority**: P2 (UX wrapper over Idle Production deployment; not core loop blocker)
+- **Value**: 3 | **Effort**: 2 (much already built in demo) | **Risk**: L | **Monetization**: 1
+- **GDD**: `design/gdd/base-showroom-gdd.md` (planned) *— alternative: fold into `idle-production-gdd.md` §6 UI if Showroom stays a pure UX layer; decision deferred to GDD draft.*
+- **Depends On**: Idle Production (#3, owns `base.buildings.deployment` data + production math), UI/HUD (#13, shared UI primitives), Data Persistence (#1, slot map persists in `base.buildings[id].deployment`)
+- **Depended On By**: (none yet — visual upgrades for Building/Worker Slot tiers in Phase 2 will skin this layer)
+- **Notes**: **3D spatial UI** sitting on top of Idle Production's abstract `deployment` slot map. The factory's worker slots are rendered as **physical pedestals/stands** in the world; the player taps an empty stand's `ProximityPrompt("Place")` to open an inventory picker, picks a caught Brainrot id, and the deployed model walks onto the pedestal and stays there producing coins. A deployed model carries a `ProximityPrompt("Recall")` to un-deploy. Slot-to-Brainrot mapping persists in `base.buildings[BUILDING_ID].deployment` (Persistence #1 + Idle #3 schema — no new fields). **Pure presentation layer:** production math, rates, personality multipliers, and offline accrual remain owned by Idle Production #3; Showroom only owns spatial UI, model spawn/despawn, and place/recall UX. Idempotent deploy/recall remotes (validate roster ownership, slot bounds, no double-occupancy invariant). **Reference impl files:** `src/ReplicatedStorage/Shared/Demo/DemoConfig.luau` §showroom (lines ~202–314); `src/ServerScriptService/Demo/DemoServer.server.luau` §deploy/recall (lines ~429–800); `src/StarterPlayer/StarterPlayerScripts/Demo/DemoUI.client.luau` §placement UI. **Open design questions** (deferred to GDD): naming alignment (`showroom` → `base/factory` per Idle GDD?); pedestal-tier visuals for `factoryLevel`/`storageLevel`; mobile reachability of ProximityPrompts.
 
 ---
 
@@ -283,8 +311,29 @@
    │   reward  ◄── Economy (Meme Coins faucet quest_daily)          │
    │   tracking/reset ◄── Data Persistence (lastQuestReset+progress,│
    │                       server-clock daily reset)                │
-   │   progress from objective sources: Capture, Raid, Idle, Evo    │
+   │   progress from objective sources: Capture, Raid, Idle, Evo,   │
+   │                                     Pet AI (field-win source)  │
    │   cross-cutting with UI/HUD (quest panel)                      │
+   └──────────────────────────────────────────────────────────────┘
+
+   ┌──────────────────────────────────────────────────────────────┐
+   │ Field Combat / Pet AI (#25, MVP — demo-validated)              │
+   │   shares stat formula  ◄── Battle (#5 §2.1 levelScale(L))      │
+   │   reads personality    ◄── Personality (#2)                    │
+   │   reads roster + level ◄── Data Persistence (#1) / Capture (#4)│
+   │   awards               ──► Economy (winCoins faucet)           │
+   │   feeds                ──► Evolution/Level (XP source)         │
+   │                            Moment System (#12)                 │
+   │                            Daily Quests (#17 field-win)        │
+   └──────────────────────────────────────────────────────────────┘
+
+   ┌──────────────────────────────────────────────────────────────┐
+   │ Base / Showroom Spatial Layer (#26, MVP — demo-validated)      │
+   │   pure UX wrapper over Idle Production deployment              │
+   │   reads/writes  ◄──► Idle Production (#3, base.buildings.dep.) │
+   │   reads/writes  ◄──► Data Persistence (#1, base block)         │
+   │   shares primitives ◄── UI/HUD (#13)                           │
+   │   no new persistence; no new production math                   │
    └──────────────────────────────────────────────────────────────┘
 
    Cross-cutting (depend on many): UI/HUD, Onboarding/FTUE, Monetization, Daily Quests
@@ -338,6 +387,21 @@ graph TD
     EVO --> DQ
     UI -.-> DQ
 
+    %% #25 Field Combat / Pet AI (MVP, demo-validated)
+    PS --> PETAI[Field Combat / Pet AI #25]
+    DP --> PETAI
+    CAP --> PETAI
+    BAT -. shared levelScale .-> PETAI
+    PETAI --> ECON
+    PETAI --> EVO
+    PETAI --> MOM
+    PETAI --> DQ
+
+    %% #26 Base / Showroom Spatial Layer (MVP, demo-validated)
+    IDLE --> SHOW[Base/Showroom #26]
+    DP --> SHOW
+    UI -.-> SHOW
+
     RAID --> PVP[PvP Raids P2]
     SHIELD[Raid Shield #7 P2] --> PVP
     MON -.-> SHIELD
@@ -371,5 +435,12 @@ Foundation-first; each step unlocks the next. MVP target launch July 2026.
 14. **Auto-Catch (hybrid)** — convenience; gate behind ~50 manual catches, not default day 1.
 15. **Onboarding / FTUE** — script the guided path through the now-functional core loop; first-5-minutes retention. Can surface the first daily quest as an early objective once Daily Quests exists.
 16. **Monetization (GamePass + DevProduct)** — wire SKUs onto Auto-Catch, Shield, Reroll, convenience; idempotent ProcessReceipt. Non-blocking to loop, so late but pre-launch.
+
+### Demo-validated late MVP additions (build-order slots, GDD pending)
+
+These two systems were prototyped in the playable vertical slice ahead of formal GDD work (commits `e984677` / `a71e545`) and are folded back into the build order here. Code exists in `src/.../Demo/`; the **build-order obligation is to write the formal GDD, then graduate the demo code** from `Demo/*` namespace into the production `src/.../{PetCombat,BaseShowroom}/*` namespace (renaming and tightening against the GDD as needed). They are **not new code work** at the volume of items 1–16, but they **must not stay un-spec'd** — otherwise they become design debt.
+
+- **#26 Base / Showroom Spatial Layer** — slot **after step 4 (Idle Production)** and **step 6 (UI/HUD)** in scope (it depends on both being designed); GDD work can land in parallel with step 6 since it is the spatial wrapper *for* the Idle deployment data. Pure UX layer over Idle #3's `base.buildings.deployment`; no new persistence.
+- **#25 Field Combat / Pet AI** — slot **after step 7 (Battle System)** in scope (shares `levelScale(L)` stat formula). Real-time field combat, **distinct from** turn-based Battle #5. GDD work can land in parallel with step 8 (Raid v1). Requires Personality battle tags (defined in #2 GDD) to be wired for full personality flavor in combat (currently only damage multiplier).
 
 **Phase 2 (post-launch), rough order:** Raid Shield (#7, paired with PvP — defends against live attackers) → PvP Raids (+ Burnout Inc. boss) → Revenge System → Drama Events → Fame/Trending (reuses MVP Leaderboard infra + needs Base Visiting) → Multi-Branch Evolution → Premium Currency (Brain Cells).
