@@ -15,6 +15,7 @@ local HttpService = game:GetService("HttpService")
 
 local Types = require(ReplicatedStorage.Shared.Types)
 local CaptureConfig = require(ReplicatedStorage.Shared.Config.CaptureConfig)
+local ElementConfig = require(ReplicatedStorage.Shared.Config.ElementConfig)
 local PersistenceConfig = require(ReplicatedStorage.Shared.Config.PersistenceConfig)
 
 type PlayerData = Types.PlayerData
@@ -22,6 +23,7 @@ type BrainrotEntry = Types.BrainrotEntry
 type BaseData = Types.BaseData
 type Building = Types.Building
 type Personality = Types.Personality
+type Element = Types.Element
 type NewBrainrotArgs = Types.NewBrainrotArgs
 
 local Schema = {}
@@ -41,6 +43,10 @@ for _, p in ipairs(Schema.PERSONALITIES) do
     PERSONALITY_SET[p] = true
 end
 
+-- Valid element enum values (element doc E2). Single source of truth is
+-- ElementConfig.order; mirrored here so validators read one schema surface.
+Schema.ELEMENTS = ElementConfig.order
+
 -- ── Pure helpers ────────────────────────────────────────────────────────
 
 -- Counts the keys of a map (used to self-heal a drifted rosterCount cache).
@@ -55,6 +61,11 @@ end
 -- True iff the value is a valid Personality enum string.
 function Schema.isValidPersonality(value: any): boolean
     return type(value) == "string" and PERSONALITY_SET[value] == true
+end
+
+-- True iff the value is a valid Element enum string (delegates to the config).
+function Schema.isValidElement(value: any): boolean
+    return ElementConfig.isValidElement(value)
 end
 
 -- ── Default builders ──────────────────────────────────────────────────────
@@ -129,11 +140,23 @@ end
 -- Mints a new Brainrot entry (the atomic capture commit calls this). species /
 -- personality / source / hotspotId are supplied by Capture; `id` is minted
 -- here via a server-side GUID. NEVER reused.
+--
+-- `element` (element doc E3): rolled HERE server-side (uniform via
+-- ElementConfig.rollWeights) when the caller does not supply one — the standard
+-- capture path. A supplied-but-INVALID value is re-rolled, never trusted (the
+-- args may have crossed a remote boundary upstream).
 function Schema.newBrainrot(args: NewBrainrotArgs): BrainrotEntry
+    local element: Element
+    if args.element ~= nil and ElementConfig.isValidElement(args.element) then
+        element = args.element :: Element
+    else
+        element = ElementConfig.rollElement()
+    end
     return {
         id = HttpService:GenerateGUID(false),
         species = args.species,
         personality = args.personality,
+        element = element,
         level = 1,
         xp = 0,
         evoStage = 0,
@@ -244,6 +267,9 @@ function Schema.validate(data: any): (boolean, string?)
         end
         if not Schema.isValidPersonality(entry.personality) then
             return false, "invalid personality on entry " .. tostring(id)
+        end
+        if not Schema.isValidElement(entry.element) then
+            return false, "invalid element on entry " .. tostring(id)
         end
     end
     return true, nil

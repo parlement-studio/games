@@ -19,6 +19,12 @@
 -- runtime state (Working/OnBreak/Walkout) is ephemeral and never stored.
 export type Personality = "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
 
+-- Element enum (design/decisions/2026-06-07-element-system.md E2, LOCKED).
+-- Combat-affinity axis, orthogonal to Personality: rolled SERVER-SIDE at
+-- capture mint (uniform), PERMANENT (never rerolled — element doc E4). The
+-- advantage circle + multipliers live in Shared/Config/ElementConfig.luau.
+export type Element = "Fire" | "Nature" | "Water" | "Volt" | "Wind"
+
 -- Per-Brainrot lifetime counters + capture provenance.
 export type BrainrotHistory = {
     coins: number, -- lifetime Meme Coins this Brainrot has produced (Idle #3)
@@ -35,6 +41,7 @@ export type BrainrotEntry = {
     id: string, -- GUID, minted server-side at capture; also the roster map key
     species: number, -- numeric species id (not a display name)
     personality: Personality, -- persisted enum
+    element: Element, -- persisted enum; rolled at capture mint, PERMANENT (element doc E3/E4)
     level: number, -- progression; default 1
     xp: number, -- accumulated XP; default 0
     evoStage: number, -- evolution stage; 0 = base
@@ -137,9 +144,13 @@ export type SessionLockValue = {
 }
 
 -- Arguments to mint a new Brainrot (Capture supplies these; id is minted).
+-- `element` is OPTIONAL: when nil, Schema.newBrainrot rolls it server-side via
+-- ElementConfig.rollElement (the standard capture path); a caller may supply a
+-- pre-rolled value (e.g. a deterministic test) which is validated at mint.
 export type NewBrainrotArgs = {
     species: number,
     personality: Personality,
+    element: Element?,
     source: string, -- "manual" | "auto"
     hotspotId: string,
 }

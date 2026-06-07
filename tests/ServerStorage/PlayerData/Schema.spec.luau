@@ -77,6 +77,57 @@ return function()
             expect(a.history.hotspotId).to.equal("hs1")
             expect(a.fav).to.equal(false)
         end)
+
+        it("rolls a valid element when args omit it (E3 standard capture path)", function()
+            -- Act
+            local entry = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+
+            -- Assert
+            expect(Schema.isValidElement(entry.element)).to.equal(true)
+        end)
+
+        it("keeps a supplied VALID element (deterministic caller)", function()
+            -- Act
+            local entry = Schema.newBrainrot({
+                species = 1,
+                personality = "Loyal",
+                element = "Volt",
+                source = "manual",
+                hotspotId = "",
+            })
+
+            -- Assert
+            expect(entry.element).to.equal("Volt")
+        end)
+
+        it("re-rolls (never trusts) a supplied INVALID element", function()
+            -- Act
+            local entry = Schema.newBrainrot({
+                species = 1,
+                personality = "Loyal",
+                element = "Shadow" :: any,
+                source = "manual",
+                hotspotId = "",
+            })
+
+            -- Assert: not the garbage value; a valid roll instead.
+            expect(entry.element).never.to.equal("Shadow")
+            expect(Schema.isValidElement(entry.element)).to.equal(true)
+        end)
+    end)
+
+    describe("Schema.isValidElement", function()
+        it("accepts every valid element enum value", function()
+            for _, e in ipairs(Schema.ELEMENTS) do
+                expect(Schema.isValidElement(e)).to.equal(true)
+            end
+        end)
+
+        it("rejects an invalid or non-string element", function()
+            expect(Schema.isValidElement("Shadow")).to.equal(false)
+            expect(Schema.isValidElement(42)).to.equal(false)
+            expect(Schema.isValidElement(nil)).to.equal(false)
+        end)
     end)
 
     describe("Schema.isValidPersonality", function()
@@ -241,6 +292,73 @@ return function()
             expect(#d.txLogOrder).to.equal(Config.txLogMaxEntries)
             expect(d.txLog["k-1"]).to.equal(nil)
             expect(d.txLog["k-" .. (Config.txLogMaxEntries + 10)]).to.equal(true)
+        end)
+
+        it("BACKFILLS a missing element on a legacy roster entry with a valid ROLL (element doc §3)", function()
+            -- Arrange: a pre-element roster entry (no element field).
+            local legacy = {
+                coins = 1,
+                roster = {
+                    ["guid-legacy"] = { id = "guid-legacy", species = 3, personality = "Hyper" },
+                },
+            }
+
+            -- Act
+            local d = Migrations.migrate(legacy)
+
+            -- Assert: a valid element was rolled in (not nil, not garbage).
+            expect(Schema.isValidElement(d.roster["guid-legacy"].element)).to.equal(true)
+        end)
+
+        it("KEEPS a valid stored element on re-migration (idempotency; element is PERMANENT, E4)", function()
+            -- Arrange: an entry that already carries Volt.
+            local legacy = {
+                coins = 1,
+                roster = {
+                    ["guid-volt"] = { id = "guid-volt", species = 3, personality = "Hyper", element = "Volt" },
+                },
+            }
+
+            -- Act: migrate twice (load, save, load again).
+            local once = Migrations.migrate(legacy)
+            local twice = Migrations.migrate(once)
+
+            -- Assert: Volt survives both passes — never re-rolled.
+            expect(once.roster["guid-volt"].element).to.equal("Volt")
+            expect(twice.roster["guid-volt"].element).to.equal("Volt")
+        end)
+
+        it("RE-ROLLS an invalid stored element (corruption repair) via the repair hook", function()
+            -- Arrange: a corrupted enum + a deterministic injected repair so the
+            -- assertion is exact (mirrors the setPersonalityRepair test idiom).
+            local legacy = {
+                coins = 1,
+                roster = {
+                    ["guid-bad"] = { id = "guid-bad", species = 3, personality = "Hyper", element = "Shadow" },
+                },
+            }
+            local Migs = Migrations
+            Migs.setElementRepair(function(entry)
+                if Schema.isValidElement(entry.element) then
+                    return entry.element
+                end
+                return "Water"
+            end)
+
+            -- Act
+            local d = Migs.migrate(legacy)
+
+            -- Assert: the corrupt value was replaced by the injected repair.
+            expect(d.roster["guid-bad"].element).to.equal("Water")
+
+            -- Cleanup: restore the production repair (valid-keep + uniform roll).
+            local ElementConfig = require(ReplicatedStorage.Shared.Config.ElementConfig)
+            Migs.setElementRepair(function(entry)
+                if Schema.isValidElement(entry.element) then
+                    return entry.element
+                end
+                return ElementConfig.rollElement()
+            end)
         end)
     end)
 

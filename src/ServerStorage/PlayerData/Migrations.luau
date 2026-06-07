@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage.Shared.Types)
 local CaptureConfig = require(ReplicatedStorage.Shared.Config.CaptureConfig)
+local ElementConfig = require(ReplicatedStorage.Shared.Config.ElementConfig)
 local PersistenceConfig = require(ReplicatedStorage.Shared.Config.PersistenceConfig)
 local Schema = require(script.Parent.Schema)
 
@@ -45,6 +46,26 @@ end
 -- Lets Personality (#2) inject its validateOrRepair implementation.
 function Migrations.setPersonalityRepair(fn: (entry: any) -> Types.Personality)
     repairPersonality = fn
+end
+
+-- The element-repair hook (element doc §3 + §5 #1). A valid stored element is
+-- KEPT (idempotency — element is PERMANENT per E4); a missing/invalid one is
+-- BACKFILLED with a uniform ROLL via ElementConfig — deliberately NOT a
+-- deterministic single-element default, so a legacy roster does not flood the
+-- future trade market with one element. Unlike personality (whose roll is owned
+-- by PersonalityService), the element roll is a pure config function, so the
+-- default here IS the production behavior; setElementRepair exists for
+-- deterministic tests.
+local repairElement: (entry: any) -> Types.Element = function(entry)
+    if Schema.isValidElement(entry.element) then
+        return entry.element
+    end
+    return ElementConfig.rollElement()
+end
+
+-- Lets a test (or a future service) inject a deterministic element repair.
+function Migrations.setElementRepair(fn: (entry: any) -> Types.Element)
+    repairElement = fn
 end
 
 -- Defensive backfill: runs every load. Cheap; makes partial/corrupt records
@@ -195,6 +216,7 @@ local function backfill(data: any)
         entry.id = entry.id or id
         entry.species = entry.species or 0
         entry.personality = repairPersonality(entry)
+        entry.element = repairElement(entry)
         entry.level = entry.level or 1
         entry.xp = entry.xp or 0
         entry.evoStage = entry.evoStage or 0
