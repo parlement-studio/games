@@ -28,6 +28,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
@@ -342,10 +343,11 @@ local rateLabel = apply(Instance.new("TextLabel"), {
 -- top bar is the single launcher surface now; the B key shortcut remains.)
 
 -- ════════════════════════════════════════════════════════════════════════════
--- SUMMON STATUS PANEL (right, under the top bar) — per the layout mock: the
--- live "monster yg di summon" readout (nama, darah, type/elemen). Reads the
--- REPLICATED Fighter_* models directly (attributes + Humanoid HP) on a 4 Hz
--- throttle — zero extra remote traffic, presentation only.
+-- SUMMON STATUS PANEL — a SLIDE DRAWER on the right edge (owner request):
+-- closed, only a « handle shows at the screen edge; tapping it slides the
+-- panel in from the right (and the handle flips to »). The live readout
+-- (nama, darah, type/elemen) reads the REPLICATED Fighter_* models directly
+-- (attributes + Humanoid HP) on a 4 Hz throttle — zero extra remote traffic.
 -- ════════════════════════════════════════════════════════════════════════════
 LY.SUMMON_PANEL_WIDTH = 230
 LY.SUMMON_ROW_HEIGHT = 64
@@ -353,12 +355,20 @@ LY.SUMMON_MAX = DemoConfig.combat.maxActiveFighters
 LY.SUMMON_REFRESH_SEC = 0.25
 
 LY.SUMMON_PANEL_FULL = 44 + (LY.SUMMON_ROW_HEIGHT + 6) * LY.SUMMON_MAX + 10
-LY.SUMMON_PANEL_COLLAPSED = 48 -- header-only height when hidden
+LY.SUMMON_HANDLE_WIDTH = 32 -- the « tab sticking out of the panel's left edge
+LY.SUMMON_HANDLE_HEIGHT = 64 -- MOBILE: tall enough to thumb easily
+LY.SUMMON_SLIDE_SEC = 0.25 -- drawer tween duration
+-- Drawer X targets (AnchorPoint (1,0): position.X = the panel's RIGHT edge).
+-- Closed pushes the panel fully off-screen (+2 hides its stroke too); the
+-- handle is a child sticking out LEFT, so it stays visible at the edge.
+LY.SUMMON_OPEN_X = 0
+LY.SUMMON_CLOSED_X = LY.SUMMON_PANEL_WIDTH + 2
 
 local summonPanel = apply(Instance.new("Frame"), {
     Name = "SummonPanel",
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, 0, 0, LY.TOPBAR_HEIGHT + 8), -- flush right, under the bar
+    -- Starts CLOSED (off-screen right; only the « handle shows).
+    Position = UDim2.new(1, LY.SUMMON_CLOSED_X, 0, LY.TOPBAR_HEIGHT + 8),
     Size = UDim2.fromOffset(LY.SUMMON_PANEL_WIDTH, LY.SUMMON_PANEL_FULL),
     BackgroundColor3 = Color.Panel,
     BackgroundTransparency = 0.1,
@@ -380,24 +390,27 @@ apply(Instance.new("TextLabel"), {
     Parent = summonPanel,
 })
 
--- HIDE/SHOW toggle (owner request): collapses the panel to its header. The
--- updater keeps painting rows only while expanded.
-local summonCollapsed = false
+-- SLIDE HANDLE: the « tab on the panel's LEFT edge. It is a CHILD of the
+-- panel so it slides along with it — when the panel is parked off-screen the
+-- handle is the only thing left peeking at the screen edge.
+local summonOpen = false
 local summonToggle = apply(Instance.new("TextButton"), {
     Name = "ToggleBtn",
-    AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.fromScale(1, 0),
-    Size = UDim2.fromOffset(32, 32),
+    AnchorPoint = Vector2.new(0, 0),
+    -- -8 cancels the panel's UIPadding; the tab hugs the panel's left edge.
+    Position = UDim2.fromOffset(-(LY.SUMMON_HANDLE_WIDTH + 8), 8),
+    Size = UDim2.fromOffset(LY.SUMMON_HANDLE_WIDTH, LY.SUMMON_HANDLE_HEIGHT),
     AutoButtonColor = true,
-    BackgroundColor3 = Color.SlotEmpty,
+    BackgroundColor3 = Color.Panel,
+    BackgroundTransparency = 0.1,
     BorderSizePixel = 0,
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
-    Text = "▲",
+    Text = "«",
     ZIndex = 16,
     Parent = summonPanel,
-}, { corner(8), padding(4) })
+}, { corner(10), stroke(Color.Stroke, 2), padding(4) })
 
 local summonEmpty = apply(Instance.new("TextLabel"), {
     Name = "EmptySummon",
@@ -482,8 +495,8 @@ rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
         return
     end
     summonAccum = 0
-    if summonCollapsed then
-        return -- hidden: skip the scan entirely (rows already blanked)
+    if not summonOpen then
+        return -- drawer parked off-screen: skip the scan entirely
     end
     local found = 0
     for _, m in workspace:GetChildren() do
@@ -515,20 +528,34 @@ rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
     summonEmpty.Visible = found == 0
 end))
 
--- Collapse/expand the summon panel (▲ shown = expanded, ▼ = collapsed).
-rootTrove:Add(summonToggle.Activated:Connect(function()
-    summonCollapsed = not summonCollapsed
-    summonToggle.Text = if summonCollapsed then "▼" else "▲"
-    summonPanel.Size = UDim2.fromOffset(
-        LY.SUMMON_PANEL_WIDTH,
-        if summonCollapsed then LY.SUMMON_PANEL_COLLAPSED else LY.SUMMON_PANEL_FULL
+-- Slide the drawer in/out. One reusable tween slot — starting a new slide
+-- cancels the in-flight one (no tween stacking on the same property).
+local summonTween: Tween? = nil
+
+local function setSummonOpen(open: boolean)
+    summonOpen = open
+    summonToggle.Text = if open then "»" else "«"
+    if summonTween then
+        summonTween:Cancel()
+    end
+    local targetX = if open then LY.SUMMON_OPEN_X else LY.SUMMON_CLOSED_X
+    summonTween = TweenService:Create(
+        summonPanel,
+        TweenInfo.new(LY.SUMMON_SLIDE_SEC, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        { Position = UDim2.new(1, targetX, 0, LY.TOPBAR_HEIGHT + 8) }
     )
-    if summonCollapsed then
+    summonTween:Play()
+    if not open then
+        -- Parked: blank the rows so the next open starts clean.
         for _, row in summonRows do
             row.frame.Visible = false
         end
         summonEmpty.Visible = false
     end
+end
+
+rootTrove:Add(summonToggle.Activated:Connect(function()
+    setSummonOpen(not summonOpen)
 end))
 
 -- ════════════════════════════════════════════════════════════════════════════
