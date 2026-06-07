@@ -142,12 +142,8 @@ local SHEET_DIVIDER_HEIGHT = 2 -- thin divider rule between sections
 -- EVOLVE row (S2 sink): full-width button stacked ABOVE the action row.
 local SHEET_EVOLVE_HEIGHT = 52
 
--- MOBILE BAG TOGGLE: an on-screen button that opens/closes the inventory panel
--- (same path as the B key). Anchored bottom-RIGHT but offset UP so it clears
--- Roblox's default jump button (bottom-right) and never overlaps it.
-local BAG_SIZE = 56
-local BAG_MARGIN_X = 16
-local BAG_MARGIN_Y = 150 -- lifted above the default mobile jump button
+-- (Mobile bag FAB constants removed with the button — the top bar is the
+-- single launcher surface per owner feedback; B key remains.)
 
 -- Place menu (modal opened from a podium's Place (F) prompt).
 local PLACE_WIDTH = 380
@@ -181,11 +177,26 @@ screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screen.DisplayOrder = 10
 screen.Parent = playerGui
 
+-- EDGE-FLUSH layer (owner feedback: "mentokin saja kanan atas") — a SEPARATE
+-- ScreenGui that IGNORES the safe insets so the top bar + summon panel can sit
+-- at the absolute top-right corner of the screen. Everything else stays on the
+-- inset-respecting `screen` gui.
+local edgeGui = rootTrove:Add(Instance.new("ScreenGui"))
+edgeGui.Name = "BrainrotDemoEdgeUI"
+edgeGui.ResetOnSpawn = false
+edgeGui.IgnoreGuiInset = true
+edgeGui.ScreenInsets = Enum.ScreenInsets.None
+edgeGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+edgeGui.DisplayOrder = 11
+edgeGui.Parent = playerGui
+
 -- ── Responsive scale ─────────────────────────────────────────────────────────
 -- Laid out against a ~1280x720 reference; a viewport-driven UIScale keeps it from
 -- clipping / looking oversized on other resolutions + small play windows.
 local uiScale = Instance.new("UIScale")
 uiScale.Parent = screen
+local edgeScale = Instance.new("UIScale")
+edgeScale.Parent = edgeGui
 
 local function updateScale()
     local cam = workspace.CurrentCamera
@@ -196,7 +207,9 @@ local function updateScale()
     if vp.X < 1 or vp.Y < 1 then
         return
     end
-    uiScale.Scale = math.clamp(math.min(vp.X / 1280, vp.Y / 720), 0.45, 1.15)
+    local s = math.clamp(math.min(vp.X / 1280, vp.Y / 720), 0.45, 1.15)
+    uiScale.Scale = s
+    edgeScale.Scale = s
 end
 
 updateScale()
@@ -245,15 +258,15 @@ local TOPBAR_GAP = 12 -- breathing room between launcher buttons (owner feedback
 local topBar = apply(Instance.new("Frame"), {
     Name = "TopBar",
     AnchorPoint = Vector2.new(1, 0),
-    -- FLUSH to the top edge (owner feedback: "mentokin ke atas") — y = 0;
-    -- CoreUISafeInsets already keeps us clear of the Roblox system bar.
-    Position = UDim2.new(1, -16, 0, 0),
+    -- ABSOLUTE top-right corner (owner: "mentokin saja kanan atas") — lives on
+    -- the inset-IGNORING edgeGui, so 0,0 really is the screen corner.
+    Position = UDim2.fromScale(1, 0),
     Size = UDim2.fromOffset(TOPBAR_BTN_WIDTH * 5 + TOPBAR_GAP * 4 + 20, TOPBAR_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BackgroundTransparency = 0.15,
     BorderSizePixel = 0,
     ZIndex = 15,
-    Parent = screen,
+    Parent = edgeGui,
 }, { corner(14), stroke(Color.Stroke, 2), padding(6) })
 apply(Instance.new("UIListLayout"), {
     FillDirection = Enum.FillDirection.Horizontal,
@@ -280,13 +293,10 @@ local function makeTopButton(order: number, text: string, active: boolean): Text
     }, { corner(10), padding(4) })
 end
 local topInventory = makeTopButton(1, "🎒 Inventory", true)
-local topMonster = makeTopButton(2, "🐾 Monster", true)
+local topMonster = makeTopButton(2, "🐾 Monster", true) -- static label (no count, owner feedback)
 local topSkill = makeTopButton(3, "🌟 Skill", true)
 makeTopButton(4, "🖼️ Galery", false) -- placeholder (inert)
 makeTopButton(5, "📜 Mission", false) -- placeholder (inert)
-
--- Back-compat alias: render() updates this button's count text.
-local inventoryButton = topMonster
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- COIN HUD (MIDDLE LEFT) — AUTO-COLLECT: climbing 🪙 total + "+N/s" rate line
@@ -328,27 +338,8 @@ local rateLabel = apply(Instance.new("TextLabel"), {
     Parent = coinHud,
 })
 
--- ════════════════════════════════════════════════════════════════════════════
--- BAG TOGGLE BUTTON (bottom-right, lifted) — MOBILE entry point to the inventory
--- panel. Toggles the SAME panel as the B key (both call toggle() below). Anchored
--- bottom-right but offset UP via BAG_MARGIN_Y so it clears Roblox's default mobile
--- jump button. Shown on all platforms; on PC the B shortcut still works too.
--- ════════════════════════════════════════════════════════════════════════════
-local bagButton = apply(Instance.new("TextButton"), {
-    Name = "BagButton",
-    AnchorPoint = Vector2.new(1, 1),
-    Position = UDim2.new(1, -BAG_MARGIN_X, 1, -BAG_MARGIN_Y),
-    Size = UDim2.fromOffset(BAG_SIZE, BAG_SIZE),
-    AutoButtonColor = true,
-    BackgroundColor3 = Color.CrateButton,
-    BorderSizePixel = 0,
-    FontFace = Font.Heavy,
-    TextColor3 = Color.Text,
-    TextScaled = true,
-    Text = "🎒",
-    ZIndex = 15,
-    Parent = screen,
-}, { corner(16), stroke(Color.Stroke, 2), padding(8) })
+-- (The old bottom-right mobile bag FAB was REMOVED per owner feedback — the
+-- top bar is the single launcher surface now; the B key shortcut remains.)
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- SUMMON STATUS PANEL (right, under the top bar) — per the layout mock: the
@@ -361,22 +352,25 @@ local SUMMON_ROW_HEIGHT = 64
 local SUMMON_MAX = DemoConfig.combat.maxActiveFighters
 local SUMMON_REFRESH_SEC = 0.25
 
+local SUMMON_PANEL_FULL = 44 + (SUMMON_ROW_HEIGHT + 6) * SUMMON_MAX + 10
+local SUMMON_PANEL_COLLAPSED = 48 -- header-only height when hidden
+
 local summonPanel = apply(Instance.new("Frame"), {
     Name = "SummonPanel",
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, -16, 0, TOPBAR_HEIGHT + 8), -- follows the flush-top bar
-    Size = UDim2.fromOffset(SUMMON_PANEL_WIDTH, 44 + (SUMMON_ROW_HEIGHT + 6) * SUMMON_MAX + 10),
+    Position = UDim2.new(1, 0, 0, TOPBAR_HEIGHT + 8), -- flush right, under the bar
+    Size = UDim2.fromOffset(SUMMON_PANEL_WIDTH, SUMMON_PANEL_FULL),
     BackgroundColor3 = Color.Panel,
     BackgroundTransparency = 0.1,
     BorderSizePixel = 0,
     ZIndex = 14,
-    Parent = screen,
+    Parent = edgeGui,
 }, { corner(14), stroke(Color.Stroke, 2), padding(8) })
 
 apply(Instance.new("TextLabel"), {
     Name = "Title",
     BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 0, 32),
+    Size = UDim2.new(1, -40, 0, 32),
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
@@ -385,6 +379,25 @@ apply(Instance.new("TextLabel"), {
     ZIndex = 15,
     Parent = summonPanel,
 })
+
+-- HIDE/SHOW toggle (owner request): collapses the panel to its header. The
+-- updater keeps painting rows only while expanded.
+local summonCollapsed = false
+local summonToggle = apply(Instance.new("TextButton"), {
+    Name = "ToggleBtn",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.fromScale(1, 0),
+    Size = UDim2.fromOffset(32, 32),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "▲",
+    ZIndex = 16,
+    Parent = summonPanel,
+}, { corner(8), padding(4) })
 
 local summonEmpty = apply(Instance.new("TextLabel"), {
     Name = "EmptySummon",
@@ -469,6 +482,9 @@ rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
         return
     end
     summonAccum = 0
+    if summonCollapsed then
+        return -- hidden: skip the scan entirely (rows already blanked)
+    end
     local found = 0
     for _, m in workspace:GetChildren() do
         if found >= SUMMON_MAX then
@@ -497,6 +513,20 @@ rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
         summonRows[i].frame.Visible = false
     end
     summonEmpty.Visible = found == 0
+end))
+
+-- Collapse/expand the summon panel (▲ shown = expanded, ▼ = collapsed).
+rootTrove:Add(summonToggle.Activated:Connect(function()
+    summonCollapsed = not summonCollapsed
+    summonToggle.Text = if summonCollapsed then "▼" else "▲"
+    summonPanel.Size =
+        UDim2.fromOffset(SUMMON_PANEL_WIDTH, if summonCollapsed then SUMMON_PANEL_COLLAPSED else SUMMON_PANEL_FULL)
+    if summonCollapsed then
+        for _, row in summonRows do
+            row.frame.Visible = false
+        end
+        summonEmpty.Visible = false
+    end
 end))
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -1425,7 +1455,7 @@ local function render(inventory: DemoClient.Inventory)
 
     local n = #inventory
     print(("[Inv][ui] render count=%d"):format(n))
-    inventoryButton.Text = string.format("🐾 Monster (%d)", n) -- the TOP BAR launcher
+    -- (Top-bar Monster label stays static per owner feedback — count removed.)
     -- TABBED MENU: the count lives on the Monster tab; the title stays put.
     tabMonsters.Text = string.format("🐾 Monster (%d/%d)", n, ROSTER_CAP)
 
@@ -1475,8 +1505,6 @@ end))
 rootTrove:Add(topSkill.Activated:Connect(function()
     openAt("skills")
 end))
--- Mobile on-screen Bag button shares the EXACT same toggle path as the B key.
-rootTrove:Add(bagButton.Activated:Connect(toggle))
 rootTrove:Add(closeButton.Activated:Connect(function()
     setOpen(false)
 end))
