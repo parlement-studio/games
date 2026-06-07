@@ -1,5 +1,7 @@
 # Work-Based Evolution + Level/XP Progression GDD
 
+> 💰 **ECONOMY SINK REVISION (2026-06-07)**: Evolution kini juga merupakan **coin sink** per `design/decisions/2026-06-07-economy-sinks-fase0.md` (S2) — model HYBRID: **milestone tetap gratis dari bermain** (Axis A/B utuh; "XP only from battles" TIDAK berubah), tetapi MEMICU evolusi membutuhkan **biaya aktivasi koin**: `evolveCost(stage, rarity) = {2500, 30K, 300K}[stage] × rarityMult{C 1.0, U 1.5, R 2.5, E 4.0, L 6.0}`. Milestone level demo: Lv 5/15/30 (sama semua rarity). Stat mult demo per stage: ×1.25/×1.5/×2.0 + aura warna elemen (placeholder VFX). Sink reason produksi baru: `evolve`. Detail + rationale di decision doc.
+
 > 🔄 **REBRAND NOTICE (2026-06-07)**: Tema diganti per `design/decisions/2026-06-07-monster-relic-rebrand.md` — kreatur "Brainrot" → **Monster Relic**, setting = reruntuhan kuno. **Semua mekanik evolusi + Level/XP TIDAK berubah.** Evolusi sekarang punya justifikasi lore natural: Monster Relic "berkembang menjadi berbagai spesies" pasca-ledakan Relic Inti. Open decision Element (rebrand doc §7) mungkin menambah axis baru di evolusi multi-branch Phase 2.
 
 > ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **minor reconciliation**:
