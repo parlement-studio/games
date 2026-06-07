@@ -91,6 +91,8 @@ export type KandangPayload = {
     level: number, -- current kandang (factory) level
     nextCost: number?, -- coins for the next level; nil = level cap reached
     bonusPerLevel: number, -- production multiplier gained per level (e.g. 0.15)
+    -- ECONOMY SINK (S4 shop):
+    nets: number, -- owned Capture Nets (profile.items.capture_net)
 }
 
 -- ── Module ─────────────────────────────────────────────────────────────────
@@ -247,6 +249,12 @@ end
 -- milestone + funds (x rarity) and replies via InventoryUpdate + a banner.
 function DemoClient.evolve(brainrotId: string)
     DemoRemotes.EvolveMonster:FireServer(brainrotId)
+end
+
+-- SHOP sink (S4): buy 1 Capture Net (bundle=false) or the 10-bundle (true).
+-- Server validates funds and replies with a kandang snapshot + a banner.
+function DemoClient.buyCaptureItem(bundle: boolean)
+    DemoRemotes.BuyCaptureItem:FireServer(bundle)
 end
 
 -- COMBAT (Tahap 2 + PROGRESSION): summon a SPECIFIC owned Brainrot (by its roster

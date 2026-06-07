@@ -114,7 +114,12 @@ function Schema.default(): PlayerData
         coins = 0,
         gems = 0,
 
-        freeCapturesRemaining = CaptureConfig.freeCapturesOnboarding,
+        -- S4 (item capture): the onboarding freebies are now SEEDED AS ITEMS
+        -- (visible in the backpack — "3 item gratis" per the decision doc)
+        -- instead of the legacy hidden counter, which new profiles seed at 0.
+        -- Migrations drains any LEGACY remainder into items on load.
+        freeCapturesRemaining = 0,
+        items = { capture_net = CaptureConfig.freeCapturesOnboarding },
 
         lastSeen = now,
         pendingOffline = { coins = 0, from = 0, to = 0 },

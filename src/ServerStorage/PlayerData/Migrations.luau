@@ -92,7 +92,31 @@ local function backfill(data: any)
     data.roster = data.roster or {}
     data.coins = data.coins or 0
     data.gems = data.gems or 0
-    data.freeCapturesRemaining = data.freeCapturesRemaining or CaptureConfig.freeCapturesOnboarding
+
+    -- S4 (item capture): persisted backpack + LEGACY free-capture conversion.
+    -- A record predating `items` entirely gets the onboarding freebies seeded
+    -- AS ITEMS only when the legacy counter is also absent (truly blank
+    -- record); otherwise the conversion below carries the real remainder.
+    if type(data.items) ~= "table" then
+        data.items = if data.freeCapturesRemaining == nil
+            then { capture_net = CaptureConfig.freeCapturesOnboarding }
+            else {}
+    end
+    -- Numeric-clean every count (corruption -> 0; floats -> floor).
+    for itemId, count in pairs(data.items) do
+        if type(count) ~= "number" or count < 0 then
+            data.items[itemId] = 0
+        else
+            data.items[itemId] = math.floor(count)
+        end
+    end
+    -- CONVERSION (idempotent — the counter is ZEROED after draining): any
+    -- legacy onboarding remainder becomes visible free Capture Nets.
+    data.freeCapturesRemaining = data.freeCapturesRemaining or 0
+    if data.freeCapturesRemaining > 0 then
+        data.items.capture_net = (data.items.capture_net or 0) + data.freeCapturesRemaining
+        data.freeCapturesRemaining = 0
+    end
 
     data.lastSeen = data.lastSeen or os.time()
     data.pendingOffline = data.pendingOffline or { coins = 0, from = 0, to = 0 }

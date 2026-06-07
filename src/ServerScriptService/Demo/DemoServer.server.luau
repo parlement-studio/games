@@ -1198,23 +1198,39 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
         return false
     end
 
-    -- ECONOMY SINK (capture, economy-gdd §8.2): the first
-    -- freeCapturesOnboarding catches are free (persisted counter, seeded at
-    -- profile creation); after that every catch debits captureCostCoins from
-    -- the live float. AFFORDABILITY FIRST: an unaffordable catch aborts with
-    -- player feedback BEFORE any mutation, so the wild stays catchable.
+    -- ECONOMY SINK (capture). Two modes, AFFORDABILITY FIRST in both (an
+    -- unaffordable catch aborts with feedback BEFORE any mutation, so the
+    -- wild stays catchable):
+    --   ITEM MODE (S4, captureUsesItems=true): a catch consumes ONE Capture
+    --     Net from the persisted backpack (bought in the Kandang menu shop;
+    --     onboarding seeds 3 free nets).
+    --   LEGACY MODE (fallback switch): free-capture counter then a direct
+    --     coin debit (the pre-S4 flow, kept revertible in one config line).
     local data = PlayerDataService.getData(player)
     if not data then
         return false
     end
+    local useItems = DemoConfig.captureUsesItems == true
     local cost = CaptureConfig.captureCostCoins
-    local usedFree = (data.freeCapturesRemaining or 0) > 0
-    if not usedFree and state.coins < cost then
-        DemoRemotes.Moment:FireClient(player, {
-            kind = "info",
-            text = ("🪙 Koin tidak cukup! Butuh %d untuk menangkap."):format(cost),
-        })
-        return false
+    local usedFree = false
+    if useItems then
+        local nets = (data.items and data.items.capture_net) or 0
+        if nets < 1 then
+            DemoRemotes.Moment:FireClient(player, {
+                kind = "info",
+                text = "🕸️ Capture Net habis! Beli di menu Kandang (tekan F di gerbang).",
+            })
+            return false
+        end
+    else
+        usedFree = (data.freeCapturesRemaining or 0) > 0
+        if not usedFree and state.coins < cost then
+            DemoRemotes.Moment:FireClient(player, {
+                kind = "info",
+                text = ("🪙 Koin tidak cukup! Butuh %d untuk menangkap."):format(cost),
+            })
+            return false
+        end
     end
 
     local entry = Schema.newBrainrot({
@@ -1232,26 +1248,35 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
     end
 
     -- Settle the price AFTER the add committed (a rejected add must not
-    -- consume a free capture or coins).
-    if usedFree then
+    -- consume a net / free capture / coins).
+    local priceNote: string
+    if useItems then
+        local remaining = 0
+        PlayerDataService.update(player, function(d)
+            d.items = d.items or {}
+            d.items.capture_net = math.max(0, (d.items.capture_net or 0) - 1)
+            remaining = d.items.capture_net
+            return true
+        end)
+        priceNote = ("-1🕸️ (sisa %d)"):format(remaining)
+        -- Net counter lives in the kandang menu; refresh an open one.
+        if pushKandangRef then
+            pushKandangRef(player)
+        end
+    elseif usedFree then
         PlayerDataService.update(player, function(d)
             d.freeCapturesRemaining = math.max(0, (d.freeCapturesRemaining or 0) - 1)
             return true
         end)
+        priceNote = "FREE (onboarding)"
     else
         state.coins = math.max(0, state.coins - cost)
         flushCoins(player, false)
+        priceNote = "-" .. cost .. " coins"
     end
     pushCoins(player)
     pushInventory(player)
-    print(
-        ("[Catch] %s caught pack %s (%s) — %s"):format(
-            player.Name,
-            personality,
-            entry.element,
-            if usedFree then "FREE (onboarding)" else ("-" .. cost .. " coins")
-        )
-    )
+    print(("[Catch] %s caught pack %s (%s) — %s"):format(player.Name, personality, entry.element, priceNote))
     return true
 end
 
@@ -2070,6 +2095,9 @@ local function buildKandangPayload(player: Player): { [string]: any }?
         level = level,
         nextCost = nextCost,
         bonusPerLevel = DemoConfig.kandang.upgrade.bonusPerLevel,
+        -- S4 shop: owned Capture Nets (the menu shows the count + buy buttons;
+        -- prices come from the replicated CaptureConfig client-side).
+        nets = (data and data.items and data.items.capture_net) or 0,
     }
 end
 
@@ -2296,6 +2324,50 @@ local function handleEvolve(player: Player, brainrotId: unknown)
             tostring(entry.rarity)
         )
     )
+end
+
+-- ── SHOP (sink S4): buy Capture Nets from the Kandang menu ──────────────────
+-- BuyCaptureItem(bundle): 1 net at `price` or `bundleCount` nets at
+-- `bundlePrice` (CaptureConfig.items.capture_net, authoritative). PERSIST
+-- FIRST: the item grant commits atomically before the float is debited.
+local function handleBuyCaptureItem(player: Player, bundle: unknown)
+    local state = states[player]
+    if not state then
+        return
+    end
+    if not allowAction(state, "buy_item", DemoConfig.rateLimits.deploy) then
+        return
+    end
+    local def = CaptureConfig.items.capture_net
+    local isBundle = bundle == true -- attacker-controlled arg; anything else = single
+    local cost = if isBundle then def.bundlePrice else def.price
+    local count = if isBundle then def.bundleCount else 1
+    if state.coins < cost then
+        DemoRemotes.Moment:FireClient(player, {
+            kind = "info",
+            text = ("🪙 Koin tidak cukup! %s butuh %d."):format(def.name, cost),
+        })
+        return
+    end
+    local newTotal = 0
+    local ok = PlayerDataService.update(player, function(d)
+        d.items = d.items or {}
+        d.items.capture_net = (d.items.capture_net or 0) + count
+        newTotal = d.items.capture_net
+        return true
+    end)
+    if not ok then
+        return
+    end
+    state.coins = math.max(0, state.coins - cost)
+    flushCoins(player, false)
+    pushCoins(player)
+    pushKandang(player) -- net counter + shop row re-render
+    DemoRemotes.Moment:FireClient(player, {
+        kind = "info",
+        text = ("🕸️ +%d %s! Total: %d"):format(count, def.name, newTotal),
+    })
+    print(("[Shop] %s bought %dx capture_net (-%d coins, total %d)"):format(player.Name, count, cost, newTotal))
 end
 
 -- DEV ONLY (Studio): grant XP to a roster entry through the REAL awardWinXp
@@ -2582,6 +2654,8 @@ DemoRemotes.RecallDeployed.OnServerEvent:Connect(handleRecallDeployed)
 DemoRemotes.UpgradeKandang.OnServerEvent:Connect(handleUpgradeKandang)
 -- EVOLUTION sink (S2): paid stage activation from the stat sheet.
 DemoRemotes.EvolveMonster.OnServerEvent:Connect(handleEvolve)
+-- SHOP sink (S4): Capture Net purchases from the kandang menu.
+DemoRemotes.BuyCaptureItem.OnServerEvent:Connect(handleBuyCaptureItem)
 -- AUTO-COLLECT: the Collect remote stays registered (handleCollect is a no-op)
 -- but is intentionally NOT wired to OnServerEvent — coins rise automatically.
 -- Reference the no-op so it is not flagged unused while documenting the removal.

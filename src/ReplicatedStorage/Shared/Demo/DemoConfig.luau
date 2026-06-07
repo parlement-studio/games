@@ -54,6 +54,14 @@ return {
     -- moment spam so pop-ups stay readable. Range: 1-30 | Default: 4
     momentCooldownSec = 4,
 
+    -- ── CAPTURE MODE (S4 item flow vs legacy coin debit) ─────────────────
+    -- true (S4-locked direction): a catch CONSUMES one Capture Net from the
+    -- persisted backpack (profile.items; bought in the Kandang menu shop).
+    -- false (FALLBACK SWITCH): revert to the direct coin debit in one line if
+    -- the item flow misbehaves — the player must never be unable to catch.
+    -- Boolean | Default: true
+    captureUsesItems = true,
+
     -- ── RATE LIMITS (server-enforced; client cannot bypass) ──────────────
     rateLimits = {
         -- Max OpenCrate requests honored per second per player. Range: 1-20 | Default: 4

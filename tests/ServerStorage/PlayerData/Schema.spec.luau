@@ -154,6 +154,56 @@ return function()
         end)
     end)
 
+    describe("items backpack (S4)", function()
+        it("seeds a fresh profile with the onboarding nets AS ITEMS (counter at 0)", function()
+            -- Act
+            local data = Schema.default()
+
+            -- Assert: visible backpack freebies replace the hidden counter.
+            expect(data.items.capture_net).to.equal(CaptureConfig.freeCapturesOnboarding)
+            expect(data.freeCapturesRemaining).to.equal(0)
+        end)
+
+        it("CONVERTS a legacy free-capture remainder into nets on migrate (idempotent)", function()
+            -- Arrange: an old profile mid-onboarding (2 freebies left, no items).
+            local legacy = { coins = 1, freeCapturesRemaining = 2 }
+
+            -- Act
+            local once = Migrations.migrate(legacy)
+            local twice = Migrations.migrate(once)
+
+            -- Assert: 2 nets granted ONCE; counter drained; second pass no-op.
+            expect(once.items.capture_net).to.equal(2)
+            expect(once.freeCapturesRemaining).to.equal(0)
+            expect(twice.items.capture_net).to.equal(2)
+        end)
+
+        it("seeds onboarding nets for a TRULY blank record (both fields absent)", function()
+            -- Act
+            local d = Migrations.migrate({ coins = 1 })
+
+            -- Assert
+            expect(d.items.capture_net).to.equal(CaptureConfig.freeCapturesOnboarding)
+        end)
+
+        it("numeric-cleans corrupted item counts (garbage/negative -> 0, floats floored)", function()
+            -- Arrange
+            local legacy = {
+                coins = 1,
+                freeCapturesRemaining = 0,
+                items = { capture_net = -5, weird = "yes", frac = 2.9 },
+            }
+
+            -- Act
+            local d = Migrations.migrate(legacy)
+
+            -- Assert
+            expect(d.items.capture_net).to.equal(0)
+            expect(d.items.weird).to.equal(0)
+            expect(d.items.frac).to.equal(2)
+        end)
+    end)
+
     describe("Schema.isValidRarity", function()
         it("accepts every valid rarity enum value", function()
             for _, r in ipairs(Schema.RARITIES) do

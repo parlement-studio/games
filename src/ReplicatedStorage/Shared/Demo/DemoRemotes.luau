@@ -67,6 +67,11 @@ local CLIENT_TO_SERVER = {
     -- to evolve an ELIGIBLE bag monster one stage (milestone level + coins,
     -- x rarity). Server validates everything; persists entry.evoStage.
     "EvolveMonster",
+    -- ECONOMY SINK (S4): BuyCaptureItem(bundle: boolean) — buy 1 Capture Net
+    -- (false) or the 10-bundle (true) from the Kandang menu shop. Prices from
+    -- CaptureConfig.items.capture_net; server validates funds + rate-limits;
+    -- persists profile.items.capture_net.
+    "BuyCaptureItem",
 }
 
 local SERVER_TO_CLIENT = {
@@ -111,6 +116,7 @@ export type DemoRemotes = {
     RecallDeployed: RemoteEvent,
     UpgradeKandang: RemoteEvent,
     EvolveMonster: RemoteEvent,
+    BuyCaptureItem: RemoteEvent,
     StateUpdate: RemoteEvent,
     CrateOpened: RemoteEvent,
     Moment: RemoteEvent,

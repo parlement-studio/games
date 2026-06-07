@@ -49,6 +49,9 @@ local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("Elemen
 -- RarityConfig likewise: the UI reads ONLY the display table (name + tier tint
 -- per rarity doc R3). statMult/evolveCostMult are server-applied.
 local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("RarityConfig"))
+-- CaptureConfig: shop DISPLAY prices for the Capture Net rows (S4). The
+-- server re-validates funds + applies the authoritative price on every tap.
+local CaptureConfig = require(Shared:WaitForChild("Config"):WaitForChild("CaptureConfig"))
 
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
 local DemoClient = require(script.Parent:WaitForChild("DemoClient"))
@@ -1167,7 +1170,8 @@ local KANDANG_WIDTH = 420
 local KANDANG_HEIGHT = 560
 local KANDANG_TITLE_HEIGHT = 44
 local KANDANG_UPGRADE_HEIGHT = 48 -- the upgrade-button row under the title (>=44px tap)
-local KANDANG_LIST_TOP = 56 + KANDANG_UPGRADE_HEIGHT + 8
+local KANDANG_SHOP_HEIGHT = 48 -- the Capture Net shop row under the upgrade button
+local KANDANG_LIST_TOP = 56 + KANDANG_UPGRADE_HEIGHT + 8 + KANDANG_SHOP_HEIGHT + 8
 local KANDANG_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
 local KANDANG_ROW_HEIGHT = 56
 local KANDANG_SECTION_HEIGHT = 30
@@ -1247,6 +1251,70 @@ local kandangUpgradeBtn = apply(Instance.new("TextButton"), {
     ZIndex = 42,
     Parent = kandangPanel,
 }, { corner(12), padding(8) })
+
+-- SHOP row (S4): Capture Net counter + two buy buttons (single / 10-bundle).
+-- Prices come from the replicated CaptureConfig (display only — the server
+-- re-validates funds on every tap).
+local kandangShopRow = apply(Instance.new("Frame"), {
+    Name = "Shop",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, 56 + KANDANG_UPGRADE_HEIGHT + 8),
+    Size = UDim2.new(1, 0, 0, KANDANG_SHOP_HEIGHT),
+    ZIndex = 42,
+    Parent = kandangPanel,
+})
+
+local kandangNetCount = apply(Instance.new("TextLabel"), {
+    Name = "NetCount",
+    BackgroundTransparency = 1,
+    Size = UDim2.new(0.3, -4, 1, 0),
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "🕸️ ×0",
+    ZIndex = 43,
+    Parent = kandangShopRow,
+})
+
+local kandangBuyOne = apply(Instance.new("TextButton"), {
+    Name = "BuyOne",
+    AnchorPoint = Vector2.new(0, 0),
+    Position = UDim2.new(0.3, 4, 0, 0),
+    Size = UDim2.new(0.35, -8, 1, 0),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color3.fromRGB(42, 157, 113),
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.TextOnBright,
+    TextScaled = true,
+    Text = "Beli 1 — 25 🪙",
+    ZIndex = 43,
+    Parent = kandangShopRow,
+}, { corner(10), padding(6) })
+
+local kandangBuyBundle = apply(Instance.new("TextButton"), {
+    Name = "BuyBundle",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.fromScale(1, 0),
+    Size = UDim2.new(0.35, -8, 1, 0),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color3.fromRGB(42, 157, 113),
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.TextOnBright,
+    TextScaled = true,
+    Text = "Paket 10 — 225 🪙",
+    ZIndex = 43,
+    Parent = kandangShopRow,
+}, { corner(10), padding(6) })
+
+-- Price labels from the replicated config (single source of display truth).
+do
+    local netDef = CaptureConfig.items.capture_net
+    kandangBuyOne.Text = ("Beli 1 — %d 🪙"):format(netDef.price)
+    kandangBuyBundle.Text = ("Paket %d — %d 🪙"):format(netDef.bundleCount, netDef.bundlePrice)
+end
 
 local kandangList = apply(Instance.new("ScrollingFrame"), {
     Name = "List",
@@ -1389,6 +1457,9 @@ local function renderKandang()
     local level = payload.level or 0
     kandangTitle.Text = string.format("🏠 KANDANG Lv%d (%d/%d)", level, deployedCount, capacity)
 
+    -- SHOP (S4): owned Capture Nets counter.
+    kandangNetCount.Text = string.format("🕸️ ×%d", payload.nets or 0)
+
     -- Upgrade button (data-driven; the server re-validates every tap).
     local nextCost = payload.nextCost
     if nextCost == nil then
@@ -1493,6 +1564,17 @@ rootTrove:Add(kandangBackdrop.Activated:Connect(closeKandangMenu))
 rootTrove:Add(kandangUpgradeBtn.Activated:Connect(function()
     if kandangOpen then
         DemoClient.upgradeKandang()
+    end
+end))
+-- SHOP taps (S4): buy 1 / buy the bundle. Server validates + banners.
+rootTrove:Add(kandangBuyOne.Activated:Connect(function()
+    if kandangOpen then
+        DemoClient.buyCaptureItem(false)
+    end
+end))
+rootTrove:Add(kandangBuyBundle.Activated:Connect(function()
+    if kandangOpen then
+        DemoClient.buyCaptureItem(true)
     end
 end))
 

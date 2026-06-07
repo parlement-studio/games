@@ -96,7 +96,8 @@ export type PlayerData = {
     coins: number, -- Meme Coins (soft currency); server-authoritative; >= 0
     gems: number, -- premium currency; provisioned, unused at launch; >= 0
 
-    freeCapturesRemaining: number, -- onboarding free captures; seeded from CaptureConfig
+    freeCapturesRemaining: number, -- LEGACY onboarding free-capture counter; new profiles seed 0 (converted to free Capture Nets in `items`); migration drains any legacy remainder into items
+    items: { [string]: number }, -- persisted backpack: itemId -> count (S4; e.g. capture_net). JSON-safe, additive
 
     lastSeen: number, -- os.time() of last SAVE; used to compute offline elapsed
     pendingOffline: PendingOffline,
