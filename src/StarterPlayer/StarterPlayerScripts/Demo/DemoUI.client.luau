@@ -326,8 +326,9 @@ local panel = apply(Instance.new("Frame"), {
     Parent = screen,
 }, { corner(20), stroke(Color.Stroke, 3), padding(14) })
 
--- Title doubles as the count header: "🎒 Brainrots (N/cap)".
-local titleLabel = apply(Instance.new("TextLabel"), {
+-- Title: the panel is now a TABBED MENU (Item / Monster / Skill) — the count
+-- lives on the Monster tab's label, so the title is static (no handle needed).
+apply(Instance.new("TextLabel"), {
     Name = "Title",
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(0, 0),
@@ -336,7 +337,7 @@ local titleLabel = apply(Instance.new("TextLabel"), {
     TextColor3 = Color.Text,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "🎒 Monsters (0)",
+    Text = "📦 MENU",
     ZIndex = 21,
     Parent = panel,
 })
@@ -356,10 +357,52 @@ local closeButton = apply(Instance.new("TextButton"), {
     Parent = panel,
 }, { corner(10), padding(8) })
 
+-- ── TAB BAR (Item / Monster / Skill) ────────────────────────────────────────
+local TAB_BAR_TOP = 44
+local TAB_BAR_HEIGHT = 40
+local CONTENT_TOP = TAB_BAR_TOP + TAB_BAR_HEIGHT + 8 -- content frames start here
+
+local tabBar = apply(Instance.new("Frame"), {
+    Name = "Tabs",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, TAB_BAR_TOP),
+    Size = UDim2.new(1, 0, 0, TAB_BAR_HEIGHT),
+    ZIndex = 21,
+    Parent = panel,
+})
+apply(Instance.new("UIListLayout"), {
+    FillDirection = Enum.FillDirection.Horizontal,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6),
+    Parent = tabBar,
+})
+
+local TAB_ACTIVE = Color3.fromRGB(42, 157, 113)
+local function makeTab(order: number, text: string): TextButton
+    return apply(Instance.new("TextButton"), {
+        Name = "Tab" .. order,
+        LayoutOrder = order,
+        AutoButtonColor = true,
+        Size = UDim2.new(1 / 3, -4, 1, 0),
+        BackgroundColor3 = Color.SlotEmpty,
+        BorderSizePixel = 0,
+        FontFace = Font.Heavy,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        Text = text,
+        ZIndex = 22,
+        Parent = tabBar,
+    }, { corner(10), padding(6) })
+end
+local tabItems = makeTab(1, "🎒 Item")
+local tabMonsters = makeTab(2, "🐾 Monster")
+local tabSkills = makeTab(3, "🌟 Skill")
+
+-- ── MONSTER tab content: the original card grid ─────────────────────────────
 local list = apply(Instance.new("ScrollingFrame"), {
     Name = "List",
-    Position = UDim2.fromOffset(0, 76),
-    Size = UDim2.new(1, 0, 1, -76),
+    Position = UDim2.fromOffset(0, CONTENT_TOP),
+    Size = UDim2.new(1, 0, 1, -CONTENT_TOP),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     ScrollBarThickness = 6,
@@ -388,7 +431,7 @@ local emptyLabel = apply(Instance.new("TextLabel"), {
     Name = "Empty",
     BackgroundTransparency = 1,
     AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.new(0.5, 0, 0, 92),
+    Position = UDim2.new(0.5, 0, 0, CONTENT_TOP + 16),
     Size = UDim2.new(1, -16, 0, 40),
     FontFace = Font.Bold,
     TextColor3 = Color.TextDim,
@@ -398,6 +441,238 @@ local emptyLabel = apply(Instance.new("TextLabel"), {
     ZIndex = 22,
     Parent = panel,
 })
+
+-- ── ITEM tab content: the persisted backpack (DemoClient.Items) ─────────────
+local itemsList = apply(Instance.new("ScrollingFrame"), {
+    Name = "ItemsList",
+    Visible = false,
+    Position = UDim2.fromOffset(0, CONTENT_TOP),
+    Size = UDim2.new(1, 0, 1, -CONTENT_TOP),
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 6,
+    CanvasSize = UDim2.new(),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ZIndex = 21,
+    Parent = panel,
+}, { corner(12), padding(8) })
+apply(Instance.new("UIListLayout"), {
+    FillDirection = Enum.FillDirection.Vertical,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6),
+    Parent = itemsList,
+})
+
+-- Item display registry (icon + name + blurb per itemId). New items only need
+-- a row here; counts come from the server push.
+local ITEM_DISPLAY: { [string]: { icon: string, name: string, blurb: string } } = {
+    capture_net = {
+        icon = "🕸️",
+        name = CaptureConfig.items.capture_net.name,
+        blurb = "Dipakai 1× per tangkapan. Beli di menu Kandang.",
+    },
+}
+
+local itemsTrove = rootTrove:Extend()
+local function renderItems()
+    itemsTrove:Clean()
+    local order = 0
+    local shown = 0
+    for itemId, count in DemoClient.Items do
+        local display = ITEM_DISPLAY[itemId]
+        if display and count > 0 then
+            order += 1
+            shown += 1
+            local row = itemsTrove:Add(apply(Instance.new("Frame"), {
+                Name = "ItemRow",
+                LayoutOrder = order,
+                BackgroundColor3 = Color.PanelLight,
+                BorderSizePixel = 0,
+                Size = UDim2.new(1, 0, 0, 64),
+                ZIndex = 22,
+                Parent = itemsList,
+            }, { corner(10), padding(8) }))
+            apply(Instance.new("TextLabel"), {
+                Name = "Icon",
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 48, 1, 0),
+                FontFace = Font.Regular,
+                TextColor3 = Color.Text,
+                TextScaled = true,
+                Text = display.icon,
+                ZIndex = 23,
+                Parent = row,
+            })
+            apply(Instance.new("TextLabel"), {
+                Name = "Name",
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(56, 0),
+                Size = UDim2.new(1, -56 - 80, 0.55, 0),
+                FontFace = Font.Bold,
+                TextColor3 = Color.Text,
+                TextScaled = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Text = display.name,
+                ZIndex = 23,
+                Parent = row,
+            })
+            apply(Instance.new("TextLabel"), {
+                Name = "Blurb",
+                BackgroundTransparency = 1,
+                AnchorPoint = Vector2.new(0, 1),
+                Position = UDim2.new(0, 56, 1, 0),
+                Size = UDim2.new(1, -56 - 80, 0.4, 0),
+                FontFace = Font.Bold,
+                TextColor3 = Color.TextDim,
+                TextScaled = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Text = display.blurb,
+                ZIndex = 23,
+                Parent = row,
+            })
+            apply(Instance.new("TextLabel"), {
+                Name = "Count",
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.fromScale(1, 0.5),
+                Size = UDim2.fromOffset(72, 36),
+                BackgroundColor3 = Color.Panel,
+                BackgroundTransparency = 0.15,
+                FontFace = Font.Heavy,
+                TextColor3 = Color.Text,
+                TextScaled = true,
+                Text = "×" .. count,
+                ZIndex = 23,
+                Parent = row,
+            }, { corner(8), padding(4) })
+        end
+    end
+    if shown == 0 then
+        itemsTrove:Add(apply(Instance.new("TextLabel"), {
+            Name = "EmptyItems",
+            LayoutOrder = 1,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 40),
+            FontFace = Font.Bold,
+            TextColor3 = Color.TextDim,
+            TextScaled = true,
+            Text = "Backpack kosong — beli Capture Net di Kandang!",
+            ZIndex = 22,
+            Parent = itemsList,
+        }))
+    end
+end
+
+-- ── SKILL tab content: placeholder (S5 deferred — bundled with boss HP
+-- scaling). Locked previews only; no server logic.
+local skillsList = apply(Instance.new("ScrollingFrame"), {
+    Name = "SkillsList",
+    Visible = false,
+    Position = UDim2.fromOffset(0, CONTENT_TOP),
+    Size = UDim2.new(1, 0, 1, -CONTENT_TOP),
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 6,
+    CanvasSize = UDim2.new(),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ZIndex = 21,
+    Parent = panel,
+}, { corner(12), padding(8) })
+apply(Instance.new("UIListLayout"), {
+    FillDirection = Enum.FillDirection.Vertical,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6),
+    Parent = skillsList,
+})
+do
+    local SKILL_PREVIEWS = {
+        { icon = "⚔", name = "Slot Summon ke-4", cost = "25K 🪙" },
+        { icon = "⚔", name = "Slot Summon ke-5", cost = "250K 🪙" },
+        { icon = "✨", name = "Efek Summon", cost = "???" },
+    }
+    for i, def in SKILL_PREVIEWS do
+        local row = apply(Instance.new("Frame"), {
+            Name = "SkillRow",
+            LayoutOrder = i,
+            BackgroundColor3 = Color.PanelLight,
+            BackgroundTransparency = 0.4, -- locked: dim
+            BorderSizePixel = 0,
+            Size = UDim2.new(1, 0, 0, 56),
+            ZIndex = 22,
+            Parent = skillsList,
+        }, { corner(10), padding(8) })
+        apply(Instance.new("TextLabel"), {
+            Name = "Label",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -90, 1, 0),
+            FontFace = Font.Bold,
+            TextColor3 = Color.TextDim,
+            TextScaled = true,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Text = ("%s %s — %s"):format(def.icon, def.name, def.cost),
+            ZIndex = 23,
+            Parent = row,
+        })
+        apply(Instance.new("TextLabel"), {
+            Name = "Lock",
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.fromScale(1, 0.5),
+            Size = UDim2.fromOffset(80, 32),
+            BackgroundColor3 = Color.Panel,
+            BackgroundTransparency = 0.15,
+            FontFace = Font.Heavy,
+            TextColor3 = Color.TextDim,
+            TextScaled = true,
+            Text = "🔒 Segera",
+            ZIndex = 23,
+            Parent = row,
+        }, { corner(8), padding(4) })
+    end
+    apply(Instance.new("TextLabel"), {
+        Name = "Note",
+        LayoutOrder = 99,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 36),
+        FontFace = Font.Bold,
+        TextColor3 = Color.TextDim,
+        TextScaled = true,
+        Text = "Skill tree menyusul bersama balance boss 👑",
+        ZIndex = 22,
+        Parent = skillsList,
+    })
+end
+
+-- ── Tab switching ───────────────────────────────────────────────────────────
+local function setTab(which: string)
+    local isItems = which == "items"
+    local isMonsters = which == "monsters"
+    local isSkills = which == "skills"
+    itemsList.Visible = isItems
+    list.Visible = isMonsters
+    emptyLabel.Visible = isMonsters and emptyLabel.Visible -- re-evaluated by render()
+    skillsList.Visible = isSkills
+    tabItems.BackgroundColor3 = if isItems then TAB_ACTIVE else Color.SlotEmpty
+    tabMonsters.BackgroundColor3 = if isMonsters then TAB_ACTIVE else Color.SlotEmpty
+    tabSkills.BackgroundColor3 = if isSkills then TAB_ACTIVE else Color.SlotEmpty
+    if isMonsters then
+        -- emptyLabel visibility belongs to the monster grid only.
+        emptyLabel.Visible = #DemoClient.Inventory == 0
+    else
+        emptyLabel.Visible = false
+    end
+    if isItems then
+        renderItems()
+    end
+end
+rootTrove:Add(tabItems.Activated:Connect(function()
+    setTab("items")
+end))
+rootTrove:Add(tabMonsters.Activated:Connect(function()
+    setTab("monsters")
+end))
+rootTrove:Add(tabSkills.Activated:Connect(function()
+    setTab("skills")
+end))
+setTab("monsters") -- default tab
 
 -- A reusable trove for the rendered cards so we cleanly clear + rebuild each update.
 local cardsTrove = rootTrove:Extend()
@@ -565,7 +840,11 @@ end
 -- one-liner + lifetime flavor (wins / coins made), then ⚔ Summon / ▶ Deploy.
 -- All data comes from the item payload; the effect text comes from DemoConfig.
 -- ════════════════════════════════════════════════════════════════════════════
-local ROSTER_CAP = DemoConfig.rosterCap
+-- DISPLAY cap = the REAL persistence roster cap (200), not the legacy demo
+-- crate guard (DemoConfig.rosterCap = 30) — the bag showed "(35/30)" once a
+-- player owned more than 30 monsters.
+local PersistenceConfig = require(Shared:WaitForChild("Config"):WaitForChild("PersistenceConfig"))
+local ROSTER_CAP = PersistenceConfig.rosterCap
 local STAND_COUNT = DemoConfig.showroom.showroomStandCount
 local MAX_LEVEL = DemoConfig.progression.maxLevel
 
@@ -958,10 +1237,12 @@ local function render(inventory: DemoClient.Inventory)
 
     local n = #inventory
     print(("[Inv][ui] render count=%d"):format(n))
-    inventoryButton.Text = string.format("🎒 INVENTORY (%d)", n)
-    titleLabel.Text = string.format("🎒 Monsters (%d/%d)", n, ROSTER_CAP)
+    inventoryButton.Text = string.format("📦 MENU (%d)", n)
+    -- TABBED MENU: the count lives on the Monster tab; the title stays put.
+    tabMonsters.Text = string.format("🐾 Monster (%d/%d)", n, ROSTER_CAP)
 
-    emptyLabel.Visible = n == 0
+    -- The empty-state belongs to the MONSTER tab only.
+    emptyLabel.Visible = list.Visible and n == 0
     for i, item in inventory do
         -- Each card is tap-to-open: tapping opens the STAT SHEET for this item,
         -- where the Summon / Deploy actions live.
@@ -1672,6 +1953,13 @@ DemoClient.BattleFeedback:Connect(showMoment)
 print("[Inv][ui] wiring InventoryChanged signal...")
 DemoClient.InventoryChanged:Connect(function(inventory)
     render(inventory)
+end)
+
+-- BACKPACK (S4): live-refresh the Item tab whenever a count changes.
+DemoClient.ItemsChanged:Connect(function()
+    if itemsList.Visible then
+        renderItems()
+    end
 end)
 
 -- Tear everything down if the ScreenGui is destroyed (respawn-safe + leave-safe).

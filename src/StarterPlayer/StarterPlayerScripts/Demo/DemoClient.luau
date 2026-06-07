@@ -101,6 +101,9 @@ local DemoClient = {}
 -- Last received authoritative inventory (empty until the first update arrives).
 DemoClient.Inventory = {} :: Inventory
 
+-- Last received authoritative BACKPACK item map (S4): itemId -> count.
+DemoClient.Items = {} :: { [string]: number }
+
 -- Last received authoritative coin values (display-only; server owns them).
 -- AUTO-COLLECT interpolation state: the HUD smoothly climbs from `baseCoins` at
 -- `ratePerSec`, measured from `lastAt`. `Coins` mirrors the last server total.
@@ -141,6 +144,9 @@ DemoClient.BattleFeedback = Signal.new()
 -- KANDANG MENU: fires with (payload: KandangPayload) when the server opens or
 -- refreshes the kandang menu (terminal prompt / RequestKandang / post-action).
 DemoClient.KandangUpdated = Signal.new()
+-- BACKPACK (S4): fires with (items: {[itemId]: number}) on every server push
+-- (hydrate / purchase / consumption) — feeds the menu's Item tab.
+DemoClient.ItemsChanged = Signal.new()
 
 local trove = Trove.new()
 local started = false
@@ -182,6 +188,16 @@ function DemoClient.init()
         DemoClient.PlaceMenuRequested:Fire(standIndex)
     end))
     print("[Place][client] OpenPlaceMenu handler connected")
+
+    -- BACKPACK (S4): authoritative item map for the menu's Item tab.
+    trove:Add(DemoRemotes.BackpackUpdate.OnClientEvent:Connect(function(payload)
+        if type(payload) ~= "table" or type(payload.items) ~= "table" then
+            return
+        end
+        DemoClient.Items = payload.items
+        DemoClient.ItemsChanged:Fire(DemoClient.Items)
+    end))
+    print("[Items][client] BackpackUpdate handler connected")
 
     -- KANDANG MENU: open/refresh snapshot from the server.
     trove:Add(DemoRemotes.OpenKandangMenu.OnClientEvent:Connect(function(payload: KandangPayload)

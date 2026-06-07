@@ -86,6 +86,10 @@ local SERVER_TO_CLIENT = {
     -- (it builds a friendly text from the payload); a dedicated remote keeps the
     -- combat-feedback stream distinct from the welcome-back Moment.
     "BattleEvent",
+    -- BACKPACK (S4 items): BackpackUpdate({ items = { [itemId]: count } }) —
+    -- pushed on hydrate and whenever an item count changes (purchase /
+    -- consumption). Feeds the menu's Item tab.
+    "BackpackUpdate",
     -- KANDANG MENU: OpenKandangMenu(payload) — open/refresh the kandang menu.
     -- payload = {
     --   capacity: number,                 -- total stands (6)
@@ -124,6 +128,7 @@ export type DemoRemotes = {
     CoinUpdate: RemoteEvent,
     OpenPlaceMenu: RemoteEvent,
     BattleEvent: RemoteEvent,
+    BackpackUpdate: RemoteEvent,
     OpenKandangMenu: RemoteEvent,
 }
 

@@ -465,6 +465,16 @@ local function pushCoins(player: Player)
     })
 end
 
+-- BACKPACK (S4 items): ship the persisted item map to the client (the menu's
+-- Item tab). Pushed on hydrate + whenever a count changes (purchase/consume).
+local function pushBackpack(player: Player)
+    local data = PlayerDataService.getData(player)
+    if not data then
+        return
+    end
+    DemoRemotes.BackpackUpdate:FireClient(player, { items = data.items or {} })
+end
+
 -- Flush the live float coin total into the PERSISTED profile (floored to whole
 -- coins — data.coins is integer). Routed through the audited update() transaction
 -- (non-yielding mutator). When `clearOffline` is true we ALSO zero pendingOffline
@@ -1259,10 +1269,11 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
             return true
         end)
         priceNote = ("-1🕸️ (sisa %d)"):format(remaining)
-        -- Net counter lives in the kandang menu; refresh an open one.
+        -- Net counter lives in the kandang menu + the menu's Item tab.
         if pushKandangRef then
             pushKandangRef(player)
         end
+        pushBackpack(player)
     elseif usedFree then
         PlayerDataService.update(player, function(d)
             d.freeCapturesRemaining = math.max(0, (d.freeCapturesRemaining or 0) - 1)
@@ -2363,6 +2374,7 @@ local function handleBuyCaptureItem(player: Player, bundle: unknown)
     flushCoins(player, false)
     pushCoins(player)
     pushKandang(player) -- net counter + shop row re-render
+    pushBackpack(player) -- menu Item tab re-render
     DemoRemotes.Moment:FireClient(player, {
         kind = "info",
         text = ("🕸️ +%d %s! Total: %d"):format(count, def.name, newTotal),
@@ -2476,6 +2488,7 @@ local function hydrate(player: Player, data: Types_PlayerData)
 
     pushInventory(player)
     pushCoins(player)
+    pushBackpack(player) -- menu Item tab initial state
 
     -- Welcome-back Moment (only when something accrued). PAYLOAD SHAPE: there was
     -- no pre-existing client Moment handler, so we define a minimal, explicit one:
