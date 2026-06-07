@@ -546,9 +546,9 @@ local panel = apply(Instance.new("Frame"), {
     Parent = screen,
 }, { corner(20), stroke(Color.Stroke, 3), padding(14) })
 
--- Title: the panel is now a TABBED MENU (Item / Monster / Skill) — the count
--- lives on the Monster tab's label, so the title is static (no handle needed).
-apply(Instance.new("TextLabel"), {
+-- Title: reflects the ACTIVE tab (the in-panel tab bar was removed — the TOP
+-- BAR launchers are the tabs now); the Monster count lives here too.
+local titleLabel = apply(Instance.new("TextLabel"), {
     Name = "Title",
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(0, 0),
@@ -577,46 +577,8 @@ local closeButton = apply(Instance.new("TextButton"), {
     Parent = panel,
 }, { corner(10), padding(8) })
 
--- ── TAB BAR (Item / Monster / Skill) ────────────────────────────────────────
-LY.TAB_BAR_TOP = 44
-LY.TAB_BAR_HEIGHT = 40
-LY.CONTENT_TOP = LY.TAB_BAR_TOP + LY.TAB_BAR_HEIGHT + 8 -- content frames start here
-
-local tabBar = apply(Instance.new("Frame"), {
-    Name = "Tabs",
-    BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(0, LY.TAB_BAR_TOP),
-    Size = UDim2.new(1, 0, 0, LY.TAB_BAR_HEIGHT),
-    ZIndex = 21,
-    Parent = panel,
-})
-apply(Instance.new("UIListLayout"), {
-    FillDirection = Enum.FillDirection.Horizontal,
-    SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 6),
-    Parent = tabBar,
-})
-
-LY.TAB_ACTIVE = Color3.fromRGB(42, 157, 113)
-local function makeTab(order: number, text: string): TextButton
-    return apply(Instance.new("TextButton"), {
-        Name = "Tab" .. order,
-        LayoutOrder = order,
-        AutoButtonColor = true,
-        Size = UDim2.new(1 / 3, -4, 1, 0),
-        BackgroundColor3 = Color.SlotEmpty,
-        BorderSizePixel = 0,
-        FontFace = Font.Heavy,
-        TextColor3 = Color.Text,
-        TextScaled = true,
-        Text = text,
-        ZIndex = 22,
-        Parent = tabBar,
-    }, { corner(10), padding(6) })
-end
-local tabItems = makeTab(1, "🎒 Item")
-local tabMonsters = makeTab(2, "🐾 Monster")
-local tabSkills = makeTab(3, "🌟 Skill")
+-- ── Content offset (tab bar removed — the TOP BAR launchers are the tabs) ───
+LY.CONTENT_TOP = 48 -- content frames start right below the title row
 
 -- ── MONSTER tab content (per owner mock): controls row (element filter chips
 -- left + sort cycle right) above a WIDE-CARD grid (3 columns).
@@ -935,10 +897,25 @@ do
 end
 
 -- ── Tab switching ───────────────────────────────────────────────────────────
+local currentTab = "monsters"
+
+-- DISPLAY cap = the REAL persistence roster cap (200), not the legacy demo
+-- crate guard (DemoConfig.rosterCap = 30) — the bag showed "(35/30)" once a
+-- player owned more than 30 monsters.
+local PersistenceConfig = require(Shared:WaitForChild("Config"):WaitForChild("PersistenceConfig"))
+local ROSTER_CAP = PersistenceConfig.rosterCap
+
+-- The Monster count lives in the panel title now (the tab bar is gone).
+local function monsterTitle(): string
+    return string.format("🐾 Monster (%d/%d)", #DemoClient.Inventory, ROSTER_CAP)
+end
+
 local function setTab(which: string)
+    currentTab = which
     local isItems = which == "items"
     local isMonsters = which == "monsters"
     local isSkills = which == "skills"
+    titleLabel.Text = if isItems then "🎒 Inventory" elseif isMonsters then monsterTitle() else "🌟 Skill"
     -- MOCK: the Monster tab takes ~80% of the screen with a semi-transparent
     -- backdrop; the other tabs keep the compact opaque panel.
     if isMonsters then
@@ -953,9 +930,6 @@ local function setTab(which: string)
     list.Visible = isMonsters
     emptyLabel.Visible = isMonsters and emptyLabel.Visible -- re-evaluated by render()
     skillsList.Visible = isSkills
-    tabItems.BackgroundColor3 = if isItems then LY.TAB_ACTIVE else Color.SlotEmpty
-    tabMonsters.BackgroundColor3 = if isMonsters then LY.TAB_ACTIVE else Color.SlotEmpty
-    tabSkills.BackgroundColor3 = if isSkills then LY.TAB_ACTIVE else Color.SlotEmpty
     if isMonsters then
         -- emptyLabel visibility belongs to the monster grid only.
         emptyLabel.Visible = #DemoClient.Inventory == 0
@@ -966,15 +940,6 @@ local function setTab(which: string)
         renderItems()
     end
 end
-rootTrove:Add(tabItems.Activated:Connect(function()
-    setTab("items")
-end))
-rootTrove:Add(tabMonsters.Activated:Connect(function()
-    setTab("monsters")
-end))
-rootTrove:Add(tabSkills.Activated:Connect(function()
-    setTab("skills")
-end))
 setTab("monsters") -- default tab
 
 -- A reusable trove for the rendered cards so we cleanly clear + rebuild each update.
@@ -1231,11 +1196,6 @@ end
 -- one-liner + lifetime flavor (wins / coins made), then ⚔ Summon / ▶ Deploy.
 -- All data comes from the item payload; the effect text comes from DemoConfig.
 -- ════════════════════════════════════════════════════════════════════════════
--- DISPLAY cap = the REAL persistence roster cap (200), not the legacy demo
--- crate guard (DemoConfig.rosterCap = 30) — the bag showed "(35/30)" once a
--- player owned more than 30 monsters.
-local PersistenceConfig = require(Shared:WaitForChild("Config"):WaitForChild("PersistenceConfig"))
-local ROSTER_CAP = PersistenceConfig.rosterCap
 local STAND_COUNT = DemoConfig.showroom.showroomStandCount
 local MAX_LEVEL = DemoConfig.progression.maxLevel
 
@@ -1652,7 +1612,9 @@ local function render(inventory: DemoClient.Inventory)
 
     local n = #inventory
     print(("[Inv][ui] render count=%d"):format(n))
-    tabMonsters.Text = string.format("🐾 Monster (%d/%d)", n, ROSTER_CAP)
+    if currentTab == "monsters" then
+        titleLabel.Text = monsterTitle()
+    end
 
     -- Filter chip highlight state.
     for key, chip in filterButtons do
