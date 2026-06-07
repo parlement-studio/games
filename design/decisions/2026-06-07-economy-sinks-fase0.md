@@ -94,16 +94,39 @@ tree" terpisah, dibahas tersendiri.
 | Jam 2+ | Slot summon 4/5 | 25K / 250K | S5 — ditunda |
 | Produksi | Reroll (LOCKED 250–2K), Raid Token, Trade fee | — | sistem masing-masing |
 
-## Urutan build (Fase 0)
+## Urutan build (Fase 0) — FINAL pasca lock rarity
 
-1. **Capture Item + Shop** — schema `items` + migrasi, kiosk/shop UI, mint
-   bridge konsumsi item, konversi onboarding
-2. **Evolution + aura elemen** — tombol evolve di stat sheet, evolveCost
-   formula (rarity param, default Common), stat mult di fighter derivation,
-   ParticleEmitter aura warna `ElementConfig.display`
+> Rarity & drop rate dikunci menyusul di `2026-06-07-rarity-droprate.md`
+> (R1–R5) — roll wild 80/20 DILIPAT ke build #1 (satu sentuhan mint path),
+> dan drop Rare boss TERIKAT infra first-kill (#28 langkah 4): kedua fitur
+> itu dibangun BERSAMA, bukan terpisah.
+
+1. **Capture Item + Shop** (issue #29-1) — schema `items` + migrasi, kiosk/
+   shop UI, mint bridge konsumsi item, konversi onboarding, **+ roll rarity
+   wild 80/20 + badge warna + statMult (R1/R3)**
+2. **Evolution + aura elemen** (issue #29-2) — tombol evolve di stat sheet,
+   `evolveCost(stage, rarity)` (rarity kini NYATA, bukan default), stat mult
+   di fighter derivation, ParticleEmitter aura warna `ElementConfig.display`
+3. **First Hour + Daily Loop** (issue #28) — goal checklist → daily reset →
+   3 quest → first-kill bonus **+ drop Rare boss 20%/2% (R2)** → offline cap
+
+## Papan status keputusan economy (akhir sesi 2026-06-07)
+
+| Keputusan | Status |
+|---|---|
+| Sink Upgrade Kandang + catch berbayar | ✅ LIVE di demo (`1fbc71a`) |
+| Capture via item backpack (S4) | 🔒 locked, build #1 |
+| Evolution hybrid × rarity (S2) | 🔒 locked, build #2 |
+| Rarity 5 tier + roll + drop + statMult (R1–R5) | 🔒 locked, terlipat ke build #1 & #3 |
+| First hour + daily loop | 🔒 GDD v1.0, build #3 |
+| Slot summon 4/5 (S5) | ⏸️ ditunda — bundel dengan Colony Boss HP scaling |
+| Nama currency (ganti "Meme Coins") | ⏸️ TBD rebrand |
+| Re-balance rate demo vs GDD (2.0 vs 0.5/s) | ⏸️ belum dibahas |
+| Faucet `boss_kill_drop` resmi di whitelist | ⏸️ saat graduasi EconomyService |
 
 ## Audit trail
 
 | Tanggal | Perubahan | Oleh |
 |---|---|---|
 | 2026-06-07 | S1–S5 dikunci dalam diskusi economy; build order ditetapkan | Owner + Claude |
+| 2026-06-07 | Rarity R1–R5 dikunci (doc terpisah); build order difinalkan dengan fold-in rarity + interlock #28↔#29; papan status ditambahkan | Owner + Claude |

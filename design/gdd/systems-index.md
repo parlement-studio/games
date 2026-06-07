@@ -1,6 +1,6 @@
 # Systems Index — Brainrot Inc. (rebrand tematik: Monster Relic)
 
-**Version**: 3.1 (Monster Relic rebrand)
+**Version**: 3.3 (Economy session: sinks + rarity + retention)
 **Last Updated**: 2026-06-07
 **Author**: game-designer
 **Status**: Locked post-pivot + post-rebrand
@@ -14,6 +14,14 @@
 > **Revision note (2026-05-29, v3.0 rewrite)**: **Game vision pivot**. New genre: multi-place creature hunter (Pokémon GO + Adopt Me DNA) with idle Kandang economy + 3-tier boss progression + peer-to-peer trade. **5 systems obsoleted** (Battle #5, Raid #6, Raid Shield #7, PvP Raid #18, Revenge #19 — see Cancelled Systems section). **7 new MVP systems** added (World Universe, Kandang, Boss System, Capture v2, Items+Token, Party+Matchmaking, Trade Marketplace). **System numbers retained for stable identifier integrity** — cancelled systems keep their slot with `(CANCELLED)` marker.
 
 > **Revision note (2026-06-07, v3.1 rebrand)**: **Tema diganti, mekanik tetap.** Kreatur "Brainrot" → **Monster Relic**; player fantasy → **Relic Hunter**; setting "The Feed" → **reruntuhan peradaban kuno** (Relic Inti meledak ratusan tahun lalu; monster liar + monster penjaga kuil/gerbang/harta). Tier 2 boss kandidat nama baru: **Temple Guardian** (menggantikan kandidat "CEO Brainrot"); Raid Dungeon → kandidat **Ancient Vault**; token → kandidat **Relic Key**; "Meme Coins" → nama currency TBD. **Open decision baru: Element system** (lore menyebut monster ber-elemen — mekanik type-chart atau flavor saja? blokir boss-system-gdd). Tidak ada perubahan status/prioritas/dependency sistem apa pun. Lihat `design/decisions/2026-06-07-monster-relic-rebrand.md`.
+
+> **Revision note (2026-06-07, v3.3 Economy session — sinks, rarity, retention)**: Sesi economy mendalam menghasilkan 4 dokumen lock baru:
+> 1. **Sink demo LIVE** — Upgrade Kandang (kurva factory LOCKED ×1.35, bonus +15%/lvl via `b1.factoryLevel`) + catch berbayar (3 free onboarding → 25/catch) — `1fbc71a`.
+> 2. **`2026-06-07-economy-sinks-fase0.md` (S1–S5)** — paid level-up DITOLAK (lock "XP only from battles" dijaga); **Evolution = sink hybrid** (milestone Lv 5/15/30 + aktivasi `{2.5K,30K,300K} × rarityMult`); capture pindah ke **item backpack** (jalur Capture v2); slot summon ditunda (bundel dgn HP scaling).
+> 3. **`2026-06-07-rarity-droprate.md` (R1–R5)** — rarity 5 tier by-source (Decision 8): wild roll **80/20 C/U**, Colony Boss drop Rare **20% first-kill harian / 2% repeat**, statMult moderat C×1.0→L×2.0 (urutan kekuatan: level > evolusi ≥ rarity > element), `entry.rarity` aditif.
+> 4. **`first-hour-daily-loop-gdd.md` v1.0** — kurva sesi pertama 60 menit + daily loop 1 jam (prototipe #14 FTUE + #17 Daily Quests; schema carry-forward). Anti-farm boss: reward kill berulang menurun.
+>
+> Tracking: GitHub issues **#28** (first hour/daily) + **#29** (capture items + evolution) — saling mengunci di first-kill↔Rare-drop. Demo lain yang sudah live sejak v3.2: boss spot per pack (2×/6HP), kandang padok wander + menu satu-F, pack catch → roster mint, grounding fix, pre-baked templates.
 
 > **Revision note (2026-06-07, v3.2 Element system LOCKED)**: Open decision Element **resolved** — **light chart mekanik combat**: 5 elemen **Fire > Nature > Water > Volt > Wind > Fire** (lingkaran 1-arah), `elementMod` 1.25/1.00/0.75 config-driven di formula damage Pet AI (dua arah, semua 3 boss tier). Element **di-roll server-side saat capture (uniform 20%)**, **permanen** (no reroll — hanya Personality yang rerollable), elemen boss **fixed per spec**. Field schema baru `BrainrotEntry.element` + backfill migrasi roster lama. Element TIDAK memengaruhi idle production (axis milik Personality) maupun capture success rate. **Blokir boss-system-gdd / capture-v2-gdd / ekstensi Pet AI 3-tier DIBUKA.** Lihat `design/decisions/2026-06-07-element-system.md`.
 
