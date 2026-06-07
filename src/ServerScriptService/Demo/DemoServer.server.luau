@@ -45,6 +45,10 @@ local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 -- for the joining player (slots are not shared across players).
 local Types = require(Shared:WaitForChild("Types"))
 local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("ElementConfig"))
+-- ECONOMY SINKS (demo): catch cost (CaptureConfig, authoritative) + the LOCKED
+-- factory upgrade curve (EconomyConfig.upgradeCost) consumed by Upgrade Kandang.
+local CaptureConfig = require(Shared:WaitForChild("Config"):WaitForChild("CaptureConfig"))
+local EconomyConfig = require(Shared:WaitForChild("Config"):WaitForChild("EconomyConfig"))
 local PlayerDataService = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("PlayerDataService"))
 local Schema = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("Schema"))
 
@@ -144,6 +148,11 @@ type PlayerState = {
     -- we attributed idle production to the producing Brainrots. The delta since this
     -- stamp is split across the currently-deployed slots on each flush.
     lastCoinAttributeAt: number,
+    -- ECONOMY SINK (Upgrade Kandang): live CACHE of the persisted
+    -- base.buildings.b1.factoryLevel (seeded at hydrate, bumped on upgrade) so
+    -- the per-second rate math never touches the profile. Authority stays in
+    -- the persisted field.
+    factoryLevel: number,
     -- ── Combat (Tahap 2) ─────────────────────────────────────────────────
     fighters: { FighterRecord }, -- active summoned fighters (capped at maxActiveFighters)
 }
@@ -228,23 +237,34 @@ local function levelScale(level: number): number
     return 1 + PROGRESSION.statGrowthPerLevel * (clamped - 1)
 end
 
+-- ECONOMY SINK (Upgrade Kandang): production multiplier from the persisted
+-- kandang (factory) level: 1 + bonusPerLevel * level. Level 0 = 1.0 (base).
+-- The level itself lives in profile.base.buildings.b1.factoryLevel (schema
+-- field shipped with Persistence #1); the live state caches it for the rate
+-- math (seeded at hydrate, bumped on upgrade).
+local function kandangBonus(factoryLevel: number): number
+    return 1 + DemoConfig.kandang.upgrade.bonusPerLevel * math.max(factoryLevel or 0, 0)
+end
+
 -- Current AUTO-COLLECT production rate (coins/sec) for a player: the sum over
--- every deployed slot of baseRatePerSlot * prodMult(personality). 0 if nothing
--- is deployed. Shipped alongside the live total so the client can interpolate.
+-- every deployed slot of baseRatePerSlot * prodMult(personality), multiplied
+-- by the kandang upgrade bonus. 0 if nothing is deployed. Shipped alongside
+-- the live total so the client can interpolate.
 local function currentRate(state: PlayerState): number
     local rate = 0
     for _, slot in state.slots do
         rate += DemoConfig.baseRatePerSlot * prodMult(slot.personality)
     end
-    return rate
+    return rate * kandangBonus(state.factoryLevel)
 end
 
 -- OFFLINE RESOLVER (installed BEFORE any profile loads). Persistence owns the
 -- clock + the clamped `elapsed`; we own the RATE. The rate mirrors currentRate
 -- but is computed from the PERSISTED roster + deployment map (the live `state`
 -- does not exist yet at load time): sum over each deployed roster id of
--- baseRatePerSlot * prodMult(entry.personality). Returns integer coins. PURE +
--- non-yielding (it runs inside the load path).
+-- baseRatePerSlot * prodMult(entry.personality), times the persisted kandang
+-- bonus. Returns integer coins. PURE + non-yielding (it runs inside the load
+-- path).
 PlayerDataService.setOfflineResolver(function(roster, base, elapsed)
     local b1 = base.buildings and base.buildings[BUILDING_ID]
     if not b1 then
@@ -257,7 +277,7 @@ PlayerDataService.setOfflineResolver(function(roster, base, elapsed)
             rate += DemoConfig.baseRatePerSlot * prodMult(entry.personality)
         end
     end
-    return math.floor(rate * elapsed)
+    return math.floor(rate * kandangBonus(b1.factoryLevel) * elapsed)
 end)
 
 -- ── Helpers ──────────────────────────────────────────────────────────────
@@ -1091,6 +1111,26 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
     if type(personality) ~= "string" or not isValidPersonality[personality] then
         return false
     end
+
+    -- ECONOMY SINK (capture, economy-gdd §8.2): the first
+    -- freeCapturesOnboarding catches are free (persisted counter, seeded at
+    -- profile creation); after that every catch debits captureCostCoins from
+    -- the live float. AFFORDABILITY FIRST: an unaffordable catch aborts with
+    -- player feedback BEFORE any mutation, so the wild stays catchable.
+    local data = PlayerDataService.getData(player)
+    if not data then
+        return false
+    end
+    local cost = CaptureConfig.captureCostCoins
+    local usedFree = (data.freeCapturesRemaining or 0) > 0
+    if not usedFree and state.coins < cost then
+        DemoRemotes.Moment:FireClient(player, {
+            kind = "info",
+            text = ("🪙 Koin tidak cukup! Butuh %d untuk menangkap."):format(cost),
+        })
+        return false
+    end
+
     local entry = Schema.newBrainrot({
         species = speciesByPersonality[personality] or 1,
         personality = personality :: any,
@@ -1104,8 +1144,28 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
         warn("[Catch] " .. player.Name .. " pack add rejected for " .. personality)
         return false
     end
+
+    -- Settle the price AFTER the add committed (a rejected add must not
+    -- consume a free capture or coins).
+    if usedFree then
+        PlayerDataService.update(player, function(d)
+            d.freeCapturesRemaining = math.max(0, (d.freeCapturesRemaining or 0) - 1)
+            return true
+        end)
+    else
+        state.coins = math.max(0, state.coins - cost)
+        flushCoins(player, false)
+    end
+    pushCoins(player)
     pushInventory(player)
-    print(("[Catch] %s caught pack %s (%s)"):format(player.Name, personality, entry.element))
+    print(
+        ("[Catch] %s caught pack %s (%s) — %s"):format(
+            player.Name,
+            personality,
+            entry.element,
+            if usedFree then "FREE (onboarding)" else ("-" .. cost .. " coins")
+        )
+    )
     return true
 end
 
@@ -1885,10 +1945,22 @@ local function buildKandangPayload(player: Player): { [string]: any }?
             table.insert(free, index)
         end
     end
+    -- ECONOMY SINK (Upgrade Kandang): ship the current level + the next cost
+    -- so the menu renders the upgrade button without trusting the client.
+    -- nextCost nil = level cap reached (upgradeCost returns math.huge there,
+    -- which does not survive a remote cleanly).
+    local level = state.factoryLevel
+    local nextCost: number? = EconomyConfig.upgradeCost("factory", level)
+    if nextCost == math.huge then
+        nextCost = nil
+    end
     return {
         capacity = SHOWROOM.showroomStandCount,
         deployed = deployed,
         free = free,
+        level = level,
+        nextCost = nextCost,
+        bonusPerLevel = DemoConfig.kandang.upgrade.bonusPerLevel,
     }
 end
 
@@ -1963,6 +2035,55 @@ local function handleRecallDeployed(player: Player, standIndex: unknown)
     end
 end
 
+-- C->S: buy the next kandang (factory) level — the demo's PRIMARY coin sink.
+-- Cost from the LOCKED EconomyConfig factory curve; production bonus applied
+-- via state.factoryLevel (kandangBonus). PERSIST FIRST: the level bump commits
+-- atomically before the float is debited.
+local function handleUpgradeKandang(player: Player)
+    local state = states[player]
+    if not state then
+        return
+    end
+    if not allowAction(state, "upgrade_kandang", DemoConfig.rateLimits.deploy) then
+        return
+    end
+    local level = state.factoryLevel
+    local cost = EconomyConfig.upgradeCost("factory", level)
+    if cost == math.huge then
+        DemoRemotes.Moment:FireClient(player, { kind = "info", text = "🏠 Kandang sudah level maksimum!" })
+        return
+    end
+    if state.coins < cost then
+        DemoRemotes.Moment:FireClient(player, {
+            kind = "info",
+            text = ("🪙 Koin tidak cukup! Upgrade butuh %d."):format(cost),
+        })
+        return
+    end
+    local ok = PlayerDataService.update(player, function(d)
+        local b1 = d.base.buildings[BUILDING_ID]
+        if not b1 then
+            error("no_building", 0)
+        end
+        b1.factoryLevel = (b1.factoryLevel or 0) + 1
+        return true
+    end)
+    if not ok then
+        return
+    end
+    state.factoryLevel += 1
+    state.coins = math.max(0, state.coins - cost)
+    flushCoins(player, false)
+    pushCoins(player) -- the new rate (with the bigger bonus) ships here
+    pushKandang(player)
+    local bonusPct = math.floor(DemoConfig.kandang.upgrade.bonusPerLevel * 100 + 0.5)
+    DemoRemotes.Moment:FireClient(player, {
+        kind = "info",
+        text = ("🏠 Kandang naik ke Lv%d! Produksi +%d%% per level."):format(state.factoryLevel, bonusPct),
+    })
+    print(("[Upgrade] %s kandang -> Lv%d (-%d coins)"):format(player.Name, state.factoryLevel, cost))
+end
+
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
     if promptToRecord[prompt] then
         handleCatch(prompt, player)
@@ -2000,6 +2121,8 @@ local function hydrate(player: Player, data: Types_PlayerData)
         -- credits production that happens AFTER hydrate (no offline double-count;
         -- offline coins are handled separately via pendingOffline).
         lastCoinAttributeAt = os.clock(),
+        -- ECONOMY SINK: cache the persisted kandang level for the rate math.
+        factoryLevel = (data.base.buildings[BUILDING_ID] and data.base.buildings[BUILDING_ID].factoryLevel) or 0,
     }
     states[player] = state
 
@@ -2222,9 +2345,10 @@ ProximityPromptService.PromptTriggered:Connect(onPromptTriggered)
 DemoRemotes.DeployToStand.OnServerEvent:Connect(handleDeployToStand)
 -- COMBAT (Tahap 2): summon an owned Brainrot as a temporary auto-battling fighter.
 DemoRemotes.SummonFighter.OnServerEvent:Connect(handleSummon)
--- KANDANG MENU: snapshot request + tap-to-recall.
+-- KANDANG MENU: snapshot request + tap-to-recall + upgrade sink.
 DemoRemotes.RequestKandang.OnServerEvent:Connect(handleRequestKandang)
 DemoRemotes.RecallDeployed.OnServerEvent:Connect(handleRecallDeployed)
+DemoRemotes.UpgradeKandang.OnServerEvent:Connect(handleUpgradeKandang)
 -- AUTO-COLLECT: the Collect remote stays registered (handleCollect is a no-op)
 -- but is intentionally NOT wired to OnServerEvent — coins rise automatically.
 -- Reference the no-op so it is not flagged unused while documenting the removal.

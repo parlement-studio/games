@@ -1061,7 +1061,8 @@ DemoClient.PlaceMenuRequested:Connect(openPlaceMenu)
 local KANDANG_WIDTH = 420
 local KANDANG_HEIGHT = 560
 local KANDANG_TITLE_HEIGHT = 44
-local KANDANG_LIST_TOP = 56
+local KANDANG_UPGRADE_HEIGHT = 48 -- the upgrade-button row under the title (>=44px tap)
+local KANDANG_LIST_TOP = 56 + KANDANG_UPGRADE_HEIGHT + 8
 local KANDANG_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
 local KANDANG_ROW_HEIGHT = 56
 local KANDANG_SECTION_HEIGHT = 30
@@ -1121,6 +1122,26 @@ local kandangClose = apply(Instance.new("TextButton"), {
     ZIndex = 43,
     Parent = kandangPanel,
 }, { corner(10), padding(8) })
+
+-- ECONOMY SINK: the Upgrade Kandang button (under the title, above the list).
+-- Text/color are data-driven from the server snapshot in renderKandang():
+-- green when affordable, dim when not, grey MAX at the level cap. Tapping
+-- sends the intent; the SERVER validates funds/cap and replies with a fresh
+-- snapshot + a Moment banner.
+local kandangUpgradeBtn = apply(Instance.new("TextButton"), {
+    Name = "Upgrade",
+    Position = UDim2.fromOffset(0, 56),
+    Size = UDim2.new(1, 0, 0, KANDANG_UPGRADE_HEIGHT),
+    BackgroundColor3 = Color.PanelLight,
+    BorderSizePixel = 0,
+    AutoButtonColor = true,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "⬆️ Upgrade Kandang",
+    ZIndex = 42,
+    Parent = kandangPanel,
+}, { corner(12), padding(8) })
 
 local kandangList = apply(Instance.new("ScrollingFrame"), {
     Name = "List",
@@ -1259,7 +1280,26 @@ local function renderKandang()
 
     local capacity = payload.capacity or 6
     local deployedCount = #payload.deployed
-    kandangTitle.Text = string.format("🏠 KANDANG (%d/%d)", deployedCount, capacity)
+    local level = payload.level or 0
+    kandangTitle.Text = string.format("🏠 KANDANG Lv%d (%d/%d)", level, deployedCount, capacity)
+
+    -- Upgrade button (data-driven; the server re-validates every tap).
+    local nextCost = payload.nextCost
+    if nextCost == nil then
+        kandangUpgradeBtn.Text = "🏠 Kandang Lv MAX"
+        kandangUpgradeBtn.BackgroundColor3 = Color.SlotEmpty
+        kandangUpgradeBtn.AutoButtonColor = false
+    else
+        local bonusPct = math.floor((payload.bonusPerLevel or 0) * 100 + 0.5)
+        kandangUpgradeBtn.Text =
+            string.format("⬆️ Upgrade ke Lv%d (+%d%% produksi) — %d 🪙", level + 1, bonusPct, nextCost)
+        kandangUpgradeBtn.AutoButtonColor = true
+        if DemoClient.getDisplayCoins() >= nextCost then
+            kandangUpgradeBtn.BackgroundColor3 = Color3.fromRGB(42, 157, 113) -- affordable: green
+        else
+            kandangUpgradeBtn.BackgroundColor3 = Color.SlotEmpty -- not yet: dim
+        end
+    end
 
     local order = 0
     local function nextOrder()
@@ -1333,6 +1373,13 @@ end)
 
 rootTrove:Add(kandangClose.Activated:Connect(closeKandangMenu))
 rootTrove:Add(kandangBackdrop.Activated:Connect(closeKandangMenu))
+-- Upgrade tap: send the intent; the server replies with a snapshot (button +
+-- title re-render) plus a Moment banner (success / not-enough / max).
+rootTrove:Add(kandangUpgradeBtn.Activated:Connect(function()
+    if kandangOpen then
+        DemoClient.upgradeKandang()
+    end
+end))
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- COIN HUD render (AUTO-COLLECT) — the total climbs continuously on its own

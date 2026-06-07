@@ -22,4 +22,12 @@ return {
     -- Range: 0-10
     -- Default: 3 (capture-gdd §3.3.1, locked)
     freeCapturesOnboarding = 3,
+
+    -- Coins debited per catch AFTER the free onboarding captures run out.
+    -- AUTHORITATIVE value (EconomyConfig.captureCostCoins_REFERENCE mirrors it
+    -- for the inflation model; validate() warns on mismatch). The demo's pack
+    -- catch consumes this; Capture v2's per-area item prices will supersede it
+    -- (items-token-gdd, planned).
+    -- Range: 0-100000 | Default: 25 (capture-gdd §8.2)
+    captureCostCoins = 25,
 }

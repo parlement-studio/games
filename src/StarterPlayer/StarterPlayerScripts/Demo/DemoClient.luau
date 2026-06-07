@@ -81,6 +81,10 @@ export type KandangPayload = {
     capacity: number, -- total stands (6)
     deployed: { KandangSlot },
     free: { number }, -- empty stand indices, ascending
+    -- ECONOMY SINK (Upgrade Kandang):
+    level: number, -- current kandang (factory) level
+    nextCost: number?, -- coins for the next level; nil = level cap reached
+    bonusPerLevel: number, -- production multiplier gained per level (e.g. 0.15)
 }
 
 -- ── Module ─────────────────────────────────────────────────────────────────
@@ -212,6 +216,12 @@ end
 -- (menu "ambil"). Server validates ownership + rate-limits + owns the result.
 function DemoClient.recallDeployed(standIndex: number)
     DemoRemotes.RecallDeployed:FireServer(standIndex)
+end
+
+-- ECONOMY SINK: buy the next kandang level (menu upgrade button). The server
+-- validates funds + the level cap and replies with a fresh kandang snapshot.
+function DemoClient.upgradeKandang()
+    DemoRemotes.UpgradeKandang:FireServer()
 end
 
 -- COMBAT (Tahap 2 + PROGRESSION): summon a SPECIFIC owned Brainrot (by its roster

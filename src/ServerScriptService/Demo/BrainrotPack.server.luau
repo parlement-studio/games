@@ -57,6 +57,9 @@ local DemoFolder = Shared:WaitForChild("Demo")
 local PackConfig = require(DemoFolder:WaitForChild("PackConfig"))
 local RigGrounding = require(DemoFolder:WaitForChild("RigGrounding"))
 local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("ElementConfig"))
+-- ECONOMY SINK: the catch price shown on the prompt (the DemoServer mint
+-- bridge debits the same authoritative value; first catches are free).
+local CaptureConfig = require(Shared:WaitForChild("Config"):WaitForChild("CaptureConfig"))
 
 -- The CollectionService tag DemoServer's summon-combat target search reads.
 -- Single decoupling point between this prototype and the combat loop.
@@ -453,7 +456,9 @@ local function addPackCatchPrompt(model: Model, slot: Slot): boolean
     local prompt = Instance.new("ProximityPrompt")
     prompt.Name = "PackCatchPrompt"
     prompt.ActionText = PackConfig.catchActionText
-    prompt.ObjectText = string.upper(slot.personality)
+    -- Price hint on the prompt ("HYPER · 25🪙"); the server still authorizes
+    -- every catch (free-onboarding catches simply don't get charged).
+    prompt.ObjectText = ("%s · %d🪙"):format(string.upper(slot.personality), CaptureConfig.captureCostCoins)
     prompt.KeyboardKeyCode = Enum.KeyCode.F
     prompt.HoldDuration = PackConfig.catchHoldSec
     prompt.MaxActivationDistance = PackConfig.catchDistance

@@ -58,6 +58,11 @@ local CLIENT_TO_SERVER = {
     -- `standIndex` back into the bag (menu replacement for the old per-monster
     -- Recall prompt). Server validates ownership + rate-limits.
     "RecallDeployed",
+    -- ECONOMY SINK: UpgradeKandang() — buy the next kandang (factory) level.
+    -- Cost = EconomyConfig.upgradeCost("factory", level); production bonus =
+    -- DemoConfig.kandang.upgrade.bonusPerLevel per level. Server validates
+    -- funds + cap + rate-limits; persists base.buildings.b1.factoryLevel.
+    "UpgradeKandang",
 }
 
 local SERVER_TO_CLIENT = {
@@ -100,6 +105,7 @@ export type DemoRemotes = {
     SummonFighter: RemoteEvent,
     RequestKandang: RemoteEvent,
     RecallDeployed: RemoteEvent,
+    UpgradeKandang: RemoteEvent,
     StateUpdate: RemoteEvent,
     CrateOpened: RemoteEvent,
     Moment: RemoteEvent,

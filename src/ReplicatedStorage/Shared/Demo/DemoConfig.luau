@@ -338,6 +338,19 @@ return {
         -- targets, so monsters do not hug/clip the fence. Range: 0-8 | Default: 2.5
         marginStuds = 2.5,
 
+        -- ── KANDANG UPGRADE (the demo's PRIMARY coin sink) ─────────────────
+        -- Buying kandang levels multiplies ALL deployed production. Costs come
+        -- from the LOCKED EconomyConfig factory curve (200 * 1.35^n, cap 30) —
+        -- this section owns only the demo-side production bonus.
+        upgrade = {
+            -- Production multiplier gained per kandang level:
+            -- rate = baseRate * prodMult * (1 + bonusPerLevel * factoryLevel).
+            -- Payback check @4 deployed (~8/s): Lv1 costs 200, grants ~+1.2/s
+            -- -> ~3 min payback; the geometric cost curve stretches that fast.
+            -- Range: 0.05-0.5 | Default: 0.15
+            bonusPerLevel = 0.15,
+        },
+
         -- ── KANDANG MENU (single F interaction at the gate terminal) ───────
         -- One ProximityPrompt on the `KandangTerminal` part replaces BOTH the
         -- per-plate Place prompts AND the per-monster Recall prompts: it opens
