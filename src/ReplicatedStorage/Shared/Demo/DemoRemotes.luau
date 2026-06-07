@@ -51,6 +51,13 @@ local CLIENT_TO_SERVER = {
     -- `personality` as a temporary field fighter that auto-battles the nearest
     -- wild. Server validates ownership + rate-limits; the bag is NOT consumed.
     "SummonFighter",
+    -- KANDANG MENU: RequestKandang() — ask the server for a fresh kandang
+    -- snapshot (replied via OpenKandangMenu). Rate-limited server-side.
+    "RequestKandang",
+    -- KANDANG MENU: RecallDeployed(standIndex) — pull the monster deployed on
+    -- `standIndex` back into the bag (menu replacement for the old per-monster
+    -- Recall prompt). Server validates ownership + rate-limits.
+    "RecallDeployed",
 }
 
 local SERVER_TO_CLIENT = {
@@ -65,6 +72,15 @@ local SERVER_TO_CLIENT = {
     -- (it builds a friendly text from the payload); a dedicated remote keeps the
     -- combat-feedback stream distinct from the welcome-back Moment.
     "BattleEvent",
+    -- KANDANG MENU: OpenKandangMenu(payload) — open/refresh the kandang menu.
+    -- payload = {
+    --   capacity: number,                 -- total stands (6)
+    --   deployed: { { index, personality, element, level } }, -- occupied slots
+    --   free: { number },                 -- empty stand indices (ascending)
+    -- }
+    -- Sent when the player triggers the kandang terminal prompt, on
+    -- RequestKandang, and after every deploy/recall (live refresh while open).
+    "OpenKandangMenu",
 }
 
 local ALL_NAMES = {}
@@ -82,6 +98,8 @@ export type DemoRemotes = {
     Collect: RemoteEvent,
     DeployToStand: RemoteEvent,
     SummonFighter: RemoteEvent,
+    RequestKandang: RemoteEvent,
+    RecallDeployed: RemoteEvent,
     StateUpdate: RemoteEvent,
     CrateOpened: RemoteEvent,
     Moment: RemoteEvent,
@@ -89,6 +107,7 @@ export type DemoRemotes = {
     CoinUpdate: RemoteEvent,
     OpenPlaceMenu: RemoteEvent,
     BattleEvent: RemoteEvent,
+    OpenKandangMenu: RemoteEvent,
 }
 
 -- The module script instance is the parent for the RemoteEvents.

@@ -647,6 +647,11 @@ local KANDANG = DemoConfig.kandang
 -- Shared/Demo/RigGrounding.luau for the mechanism.
 local RigGrounding = require(DemoFolder:WaitForChild("RigGrounding"))
 
+-- KANDANG MENU forward reference: handleDeployToStand (defined before the
+-- kandang section) refreshes an open menu after a deploy. Bound to pushKandang
+-- once that function exists.
+local pushKandangRef: ((Player) -> ())? = nil
+
 -- The shared "Brainrot" collision group (no monster-vs-monster shoving) is
 -- normally registered by the pack prototype; register defensively here too so
 -- spawnDisplay's CollisionGroup assignment can never hit an unknown group.
@@ -794,6 +799,9 @@ end
 -- trigger resolves in O(1) and only the owner (matched in the handler) acts.
 -- Returns false if the model has no usable anchor part.
 local function addRecallPrompt(model: Model, player: Player, personality: string, index: number): boolean
+    if KANDANG.menu.enabled then
+        return true -- KANDANG MENU owns recall; per-monster prompts are retired
+    end
     local anchor = findAnchorPart(model)
     if not anchor then
         return false
@@ -817,6 +825,9 @@ end
 -- Registered in placePromptToStand (+ the reverse index) so a trigger resolves
 -- in O(1). Idempotent: if the stand already has a Place prompt, this no-ops.
 local function addPlacePrompt(index: number)
+    if KANDANG.menu.enabled then
+        return -- KANDANG MENU owns placement; per-plate prompts are retired
+    end
     if standToPlacePrompt[index] then
         return -- already present (idempotent)
     end
@@ -952,6 +963,11 @@ local function handleDeployToStand(player: Player, standIndex: unknown, personal
     -- One-time confirmation that this slot is now producing (BUG 2 visibility).
     local rate = DemoConfig.baseRatePerSlot * prodMult(personality)
     print("[Prod] slot " .. standIndex .. " " .. personality .. " +" .. rate .. "/s")
+    -- KANDANG MENU: refresh the snapshot so an open menu re-renders live.
+    -- (pushKandangRef is bound after the kandang section is defined below.)
+    if pushKandangRef then
+        pushKandangRef(player)
+    end
 end
 
 -- ── Collect (AUTO-COLLECT: deprecated no-op) ───────────────────────────────
@@ -1752,37 +1768,22 @@ end
 -- entry, and push fresh InventoryUpdate + CoinUpdate. The bag is DERIVED from the
 -- roster minus deployed/fighting ids, so clearing deployment makes it reappear.
 -- Owner-only.
-local function handleRecall(prompt: ProximityPrompt, player: Player)
-    local target = deployedPromptToSlot[prompt]
-    if not target then
-        return -- not a recall prompt; ignore
-    end
-    -- Owner-only: a different player triggering this prompt is rejected.
-    if target.player ~= player then
-        return
-    end
+-- CORE recall: free slot `index` for `player` (already validated + rate-limited
+-- by the caller). Shared by the legacy prompt path (handleRecall) and the
+-- kandang-menu RecallDeployed remote. Returns true on success.
+local function recallSlot(player: Player, index: number): boolean
     local state = states[player]
     if not state then
-        return
+        return false
     end
-    if not allowAction(state, "recall", DemoConfig.rateLimits.recall) then
-        return
-    end
-
-    local index = target.index
     local slot = state.slots[index]
     if not slot then
-        -- Slot already freed (e.g. double-trigger). De-register defensively.
-        deployedPromptToSlot[prompt] = nil
-        return
+        return false -- already freed (double-trigger / stale menu)
     end
-
-    -- De-register the prompt first so a queued re-trigger is ignored.
-    deployedPromptToSlot[prompt] = nil
 
     local personality = slot.personality
     if slot.model then
-        slot.model:Destroy() -- destroys the prompt with it
+        slot.model:Destroy() -- destroys any attached prompt with it
     end
     state.slots[index] = nil
 
@@ -1803,7 +1804,8 @@ local function handleRecall(prompt: ProximityPrompt, player: Player)
         setStandLabel(stand, "Empty", false)
     end
 
-    -- The stand is empty again: restore its Place prompt so it can be filled.
+    -- The stand is empty again: restore its Place prompt so it can be filled
+    -- (no-op while the kandang menu owns placement).
     addPlacePrompt(index)
 
     -- The roster entry is no longer deployed (deployment cleared above); the bag is
@@ -1811,6 +1813,28 @@ local function handleRecall(prompt: ProximityPrompt, player: Player)
     pushInventory(player)
     pushCoins(player)
     print("[Recall] " .. player.Name .. " recalled " .. personality .. " from slot " .. index)
+    return true
+end
+
+local function handleRecall(prompt: ProximityPrompt, player: Player)
+    local target = deployedPromptToSlot[prompt]
+    if not target then
+        return -- not a recall prompt; ignore
+    end
+    -- Owner-only: a different player triggering this prompt is rejected.
+    if target.player ~= player then
+        return
+    end
+    local state = states[player]
+    if not state then
+        return
+    end
+    if not allowAction(state, "recall", DemoConfig.rateLimits.recall) then
+        return
+    end
+    -- De-register the prompt first so a queued re-trigger is ignored.
+    deployedPromptToSlot[prompt] = nil
+    recallSlot(player, target.index)
 end
 
 -- ── Place (open the menu for a SPECIFIC empty stand) ───────────────────────
@@ -1832,6 +1856,113 @@ end
 -- Single PromptTriggered dispatcher: route to catch (wild creatures), recall
 -- (deployed creatures), or place (empty pedestals) by which map the prompt is
 -- in. A prompt in NONE of the maps is ignored, so unrelated prompts never react.
+-- ── KANDANG MENU (single F terminal at the paddock gate) ───────────────────
+-- One prompt replaces the per-plate Place prompts + per-monster Recall prompts.
+-- The menu is data-driven: the server snapshots the player's deployed slots +
+-- free stands and the client renders taruh/ambil actions against it.
+
+-- Build the OpenKandangMenu payload for `player` (deployed slots enriched with
+-- element/level from the authoritative roster, plus the free stand indices).
+local function buildKandangPayload(player: Player): { [string]: any }?
+    local state = states[player]
+    if not state then
+        return nil
+    end
+    local data = PlayerDataService.getData(player)
+    local deployed = {}
+    local free = {}
+    for index = 1, SHOWROOM.showroomStandCount do
+        local slot = state.slots[index]
+        if slot then
+            local entry = data and data.roster[slot.id]
+            table.insert(deployed, {
+                index = index,
+                personality = slot.personality,
+                element = entry and entry.element or nil,
+                level = entry and entry.level or 1,
+            })
+        else
+            table.insert(free, index)
+        end
+    end
+    return {
+        capacity = SHOWROOM.showroomStandCount,
+        deployed = deployed,
+        free = free,
+    }
+end
+
+-- Push a fresh kandang snapshot to `player` (open OR refresh — the client
+-- decides; a closed menu ignores refreshes, an open one re-renders).
+local function pushKandang(player: Player)
+    local payload = buildKandangPayload(player)
+    if payload then
+        DemoRemotes.OpenKandangMenu:FireClient(player, payload)
+    end
+end
+pushKandangRef = pushKandang
+
+-- The terminal prompt instance (created at startup when the menu is enabled).
+local kandangPrompt: ProximityPrompt? = nil
+
+local function setupKandangTerminal(): boolean
+    if not KANDANG.menu.enabled then
+        return false
+    end
+    local showroomModel = workspace:FindFirstChild(SHOWROOM.modelName)
+    local terminal = showroomModel and showroomModel:FindFirstChild(KANDANG.menu.terminalName)
+    if not terminal or not terminal:IsA("BasePart") then
+        warn("[Kandang][server] terminal part missing: " .. KANDANG.menu.terminalName)
+        return false
+    end
+    local prompt = Instance.new("ProximityPrompt")
+    prompt.Name = "KandangPrompt"
+    prompt.ActionText = KANDANG.menu.actionText
+    prompt.ObjectText = KANDANG.menu.objectText
+    prompt.KeyboardKeyCode = Enum.KeyCode.F
+    prompt.HoldDuration = KANDANG.menu.holdSec
+    prompt.MaxActivationDistance = KANDANG.menu.distance
+    prompt.RequiresLineOfSight = false
+    prompt.Parent = terminal
+    kandangPrompt = prompt
+    return true
+end
+
+-- C->S: the client asks for a fresh snapshot (menu open / post-action refresh).
+local function handleRequestKandang(player: Player)
+    local state = states[player]
+    if not state then
+        return
+    end
+    -- Reuse the recall bucket: the menu round-trips at human tap cadence.
+    if not allowAction(state, "kandang", DemoConfig.rateLimits.recall) then
+        return
+    end
+    pushKandang(player)
+end
+
+-- C->S: recall the monster on `standIndex` back into the bag (menu "ambil").
+local function handleRecallDeployed(player: Player, standIndex: unknown)
+    local state = states[player]
+    if not state then
+        return
+    end
+    if not allowAction(state, "recall", DemoConfig.rateLimits.recall) then
+        return
+    end
+    -- Validate the index (attacker-controlled arg).
+    if type(standIndex) ~= "number" or standIndex ~= math.floor(standIndex) then
+        return
+    end
+    if standIndex < 1 or standIndex > SHOWROOM.showroomStandCount then
+        return
+    end
+    -- Ownership is implicit: recallSlot only frees THIS player's state.slots.
+    if recallSlot(player, standIndex) then
+        pushKandang(player)
+    end
+end
+
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
     if promptToRecord[prompt] then
         handleCatch(prompt, player)
@@ -1839,6 +1970,11 @@ local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
         handleRecall(prompt, player)
     elseif placePromptToStand[prompt] then
         handlePlace(prompt, player)
+    elseif kandangPrompt ~= nil and prompt == kandangPrompt then
+        -- KANDANG MENU: open with a fresh snapshot.
+        if states[player] then
+            pushKandang(player)
+        end
     end
 end
 
@@ -2086,6 +2222,9 @@ ProximityPromptService.PromptTriggered:Connect(onPromptTriggered)
 DemoRemotes.DeployToStand.OnServerEvent:Connect(handleDeployToStand)
 -- COMBAT (Tahap 2): summon an owned Brainrot as a temporary auto-battling fighter.
 DemoRemotes.SummonFighter.OnServerEvent:Connect(handleSummon)
+-- KANDANG MENU: snapshot request + tap-to-recall.
+DemoRemotes.RequestKandang.OnServerEvent:Connect(handleRequestKandang)
+DemoRemotes.RecallDeployed.OnServerEvent:Connect(handleRecallDeployed)
 -- AUTO-COLLECT: the Collect remote stays registered (handleCollect is a no-op)
 -- but is intentionally NOT wired to OnServerEvent — coins rise automatically.
 -- Reference the no-op so it is not flagged unused while documenting the removal.
@@ -2135,3 +2274,9 @@ print("[Demo Capture] ready — " .. ready .. " creatures with catch prompts")
 -- which podium to fill (and which creature, via the menu the prompt opens).
 local placeReady = setupPlaceStands()
 print("[Demo Place] ready — " .. placeReady .. " empty stands with place prompts")
+
+-- KANDANG MENU: one F terminal at the paddock gate replaces the per-plate /
+-- per-monster prompts (those creators no-op while the menu is enabled).
+if setupKandangTerminal() then
+    print("[Kandang] terminal ready — menu interaction enabled")
+end

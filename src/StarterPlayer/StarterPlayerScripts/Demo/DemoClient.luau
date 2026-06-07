@@ -68,6 +68,21 @@ export type BattlePayload = {
     level: number?,
 }
 
+-- KANDANG MENU: one deployed slot as the server snapshots it.
+export type KandangSlot = {
+    index: number, -- stand index (1..capacity); the RecallDeployed target
+    personality: string,
+    element: string?, -- element badge (from the authoritative roster entry)
+    level: number,
+}
+
+-- KANDANG MENU: the OpenKandangMenu payload (open OR live refresh).
+export type KandangPayload = {
+    capacity: number, -- total stands (6)
+    deployed: { KandangSlot },
+    free: { number }, -- empty stand indices, ascending
+}
+
 -- ── Module ─────────────────────────────────────────────────────────────────
 local DemoClient = {}
 
@@ -102,6 +117,9 @@ DemoClient.PlaceMenuRequested = Signal.new()
 -- time the server sends a BattleEvent (a fighter WON a fight or was KO'd). The UI
 -- shows it via the SAME transient Moment banner (no separate combat UI needed).
 DemoClient.BattleFeedback = Signal.new()
+-- KANDANG MENU: fires with (payload: KandangPayload) when the server opens or
+-- refreshes the kandang menu (terminal prompt / RequestKandang / post-action).
+DemoClient.KandangUpdated = Signal.new()
 
 local trove = Trove.new()
 local started = false
@@ -142,6 +160,15 @@ function DemoClient.init()
     end))
     print("[Place][client] OpenPlaceMenu handler connected")
 
+    -- KANDANG MENU: open/refresh snapshot from the server.
+    trove:Add(DemoRemotes.OpenKandangMenu.OnClientEvent:Connect(function(payload: KandangPayload)
+        if type(payload) ~= "table" or type(payload.deployed) ~= "table" or type(payload.free) ~= "table" then
+            return
+        end
+        DemoClient.KandangUpdated:Fire(payload)
+    end))
+    print("[Kandang][client] OpenKandangMenu handler connected")
+
     -- COMBAT (Tahap 2): translate a BattleEvent into a banner-ready payload and
     -- re-emit it on BattleFeedback (the UI shows it via the shared Moment banner).
     trove:Add(DemoRemotes.BattleEvent.OnClientEvent:Connect(function(payload: BattlePayload)
@@ -173,6 +200,18 @@ end
 -- (a row in the place menu); the server validates both and owns the result.
 function DemoClient.deployToStand(standIndex: number, personality: string)
     DemoRemotes.DeployToStand:FireServer(standIndex, personality)
+end
+
+-- KANDANG MENU: ask the server for a fresh kandang snapshot (replied via the
+-- KandangUpdated signal). Used by the UI when the bag changes while open.
+function DemoClient.requestKandang()
+    DemoRemotes.RequestKandang:FireServer()
+end
+
+-- KANDANG MENU: recall the monster deployed on `standIndex` back into the bag
+-- (menu "ambil"). Server validates ownership + rate-limits + owns the result.
+function DemoClient.recallDeployed(standIndex: number)
+    DemoRemotes.RecallDeployed:FireServer(standIndex)
 end
 
 -- COMBAT (Tahap 2 + PROGRESSION): summon a SPECIFIC owned Brainrot (by its roster

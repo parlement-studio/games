@@ -337,6 +337,28 @@ return {
         -- Inset (studs) from the paddock Floor edge when picking wander
         -- targets, so monsters do not hug/clip the fence. Range: 0-8 | Default: 2.5
         marginStuds = 2.5,
+
+        -- ── KANDANG MENU (single F interaction at the gate terminal) ───────
+        -- One ProximityPrompt on the `KandangTerminal` part replaces BOTH the
+        -- per-plate Place prompts AND the per-monster Recall prompts: it opens
+        -- a unified menu where the player places (taruh) bag monsters into the
+        -- first free slot and recalls (ambil) deployed ones with a tap.
+        menu = {
+            -- Master switch: false = legacy per-plate/per-monster prompts.
+            -- Boolean | Default: true
+            enabled = true,
+            -- Name of the invisible anchored Part (child of the Showroom
+            -- model, placed at the gate in Studio) that anchors the prompt.
+            -- String | Default: "KandangTerminal"
+            terminalName = "KandangTerminal",
+            -- Prompt strings (player-facing). ActionText | ObjectText.
+            actionText = "Buka Kandang",
+            objectText = "",
+            -- Hold duration on the prompt (seconds). Range: 0-2 | Default: 0
+            holdSec = 0,
+            -- Max activation distance (studs). Range: 4-32 | Default: 14
+            distance = 14,
+        },
     },
 
     -- ── WILD BRAINROT AI (server-authoritative roaming) ─────────────────────

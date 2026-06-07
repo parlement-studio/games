@@ -1049,6 +1049,292 @@ rootTrove:Add(placeBackdrop.Activated:Connect(closePlaceMenu))
 DemoClient.PlaceMenuRequested:Connect(openPlaceMenu)
 
 -- ════════════════════════════════════════════════════════════════════════════
+-- KANDANG MENU (modal) — opened by the single F terminal at the paddock gate.
+-- Two sections in one clean panel:
+--   DI KANDANG: deployed monsters — tap a row to AMBIL (recall to bag)
+--   DI TAS:     bag monsters       — tap a row to TARUH (deploy to the first
+--               free slot; rows show PENUH and stop responding when full)
+-- Server-authoritative: every tap is just an intent; the server validates and
+-- replies with a fresh snapshot (KandangUpdated) that re-renders the menu live.
+-- ════════════════════════════════════════════════════════════════════════════
+
+local KANDANG_WIDTH = 420
+local KANDANG_HEIGHT = 560
+local KANDANG_TITLE_HEIGHT = 44
+local KANDANG_LIST_TOP = 56
+local KANDANG_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
+local KANDANG_ROW_HEIGHT = 56
+local KANDANG_SECTION_HEIGHT = 30
+local KANDANG_BADGE_WIDTH = 86
+
+local kandangBackdrop = apply(Instance.new("TextButton"), {
+    Name = "KandangBackdrop",
+    Visible = false,
+    Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = Color.Backdrop,
+    BackgroundTransparency = 0.4,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Text = "",
+    ZIndex = 40,
+    Parent = screen,
+})
+
+local kandangPanel = apply(Instance.new("TextButton"), {
+    Name = "KandangPanel",
+    AutoButtonColor = false,
+    Text = "",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(KANDANG_WIDTH, KANDANG_HEIGHT),
+    BackgroundColor3 = Color.Panel,
+    BorderSizePixel = 0,
+    ZIndex = 41,
+    Parent = kandangBackdrop,
+}, { corner(20), stroke(Color.Stroke, 3), padding(14) })
+
+local kandangTitle = apply(Instance.new("TextLabel"), {
+    Name = "Title",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, 0),
+    Size = UDim2.new(1, -(KANDANG_CLOSE_SIZE + 8), 0, KANDANG_TITLE_HEIGHT),
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "🏠 KANDANG (0/6)",
+    ZIndex = 42,
+    Parent = kandangPanel,
+})
+
+local kandangClose = apply(Instance.new("TextButton"), {
+    Name = "Close",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.fromScale(1, 0),
+    Size = UDim2.fromOffset(KANDANG_CLOSE_SIZE, KANDANG_CLOSE_SIZE),
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "✕",
+    ZIndex = 43,
+    Parent = kandangPanel,
+}, { corner(10), padding(8) })
+
+local kandangList = apply(Instance.new("ScrollingFrame"), {
+    Name = "List",
+    Position = UDim2.fromOffset(0, KANDANG_LIST_TOP),
+    Size = UDim2.new(1, 0, 1, -KANDANG_LIST_TOP),
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 6,
+    CanvasSize = UDim2.new(),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ZIndex = 42,
+    Parent = kandangPanel,
+}, { corner(12), padding(8) })
+
+apply(Instance.new("UIListLayout"), {
+    FillDirection = Enum.FillDirection.Vertical,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6),
+    Parent = kandangList,
+})
+
+-- Trove for the menu's rows (cleared + rebuilt on every snapshot).
+local kandangRowsTrove = rootTrove:Extend()
+
+-- Menu state: the last server snapshot + open flag. `kandangClosedAt` guards
+-- against a stale post-action refresh re-opening a just-closed menu.
+local kandangOpen = false
+local kandangLast: DemoClient.KandangPayload? = nil
+local kandangClosedAt = 0
+
+local function closeKandangMenu()
+    kandangOpen = false
+    kandangClosedAt = os.clock()
+    kandangBackdrop.Visible = false
+    kandangRowsTrove:Clean()
+end
+
+-- One section header line ("DI KANDANG — tap untuk ambil").
+local function kandangSection(text: string, order: number)
+    kandangRowsTrove:Add(apply(Instance.new("TextLabel"), {
+        Name = "Section",
+        LayoutOrder = order,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, KANDANG_SECTION_HEIGHT),
+        FontFace = Font.Heavy,
+        TextColor3 = Color.TextDim,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = text,
+        ZIndex = 43,
+        Parent = kandangList,
+    }))
+end
+
+-- One tappable row: personality emoji tile + label + action badge.
+-- `badgeColor` nil = personality color; `onTap` nil = inert (e.g. PENUH).
+local function kandangRow(
+    order: number,
+    personality: string,
+    label: string,
+    badgeText: string,
+    badgeColor: Color3?,
+    onTap: (() -> ())?
+)
+    local theme = UITheme.personality(personality)
+    local row = kandangRowsTrove:Add(apply(Instance.new("TextButton"), {
+        Name = "Row",
+        LayoutOrder = order,
+        AutoButtonColor = onTap ~= nil,
+        Text = "",
+        Size = UDim2.new(1, 0, 0, KANDANG_ROW_HEIGHT),
+        BackgroundColor3 = Color.PanelLight,
+        BackgroundTransparency = if onTap then 0 else 0.4,
+        BorderSizePixel = 0,
+        ZIndex = 42,
+        Parent = kandangList,
+    }, { corner(10), padding(6) }))
+    if onTap then
+        kandangRowsTrove:Add(row.Activated:Connect(onTap))
+    end
+
+    apply(Instance.new("TextLabel"), {
+        Name = "Emoji",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0, KANDANG_ROW_HEIGHT - 12, 1, 0),
+        FontFace = Font.Regular,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        Text = theme.emoji,
+        ZIndex = 43,
+        Parent = row,
+    })
+
+    apply(Instance.new("TextLabel"), {
+        Name = "Label",
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, KANDANG_ROW_HEIGHT, 0.5, 0),
+        Size = UDim2.new(1, -KANDANG_ROW_HEIGHT - KANDANG_BADGE_WIDTH - 8, 1, -16),
+        FontFace = Font.Bold,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = label,
+        ZIndex = 43,
+        Parent = row,
+    })
+
+    apply(Instance.new("TextLabel"), {
+        Name = "Badge",
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.fromScale(1, 0.5),
+        Size = UDim2.fromOffset(KANDANG_BADGE_WIDTH, KANDANG_ROW_HEIGHT - 20),
+        BackgroundColor3 = badgeColor or theme.color,
+        BackgroundTransparency = if onTap then 0 else 0.5,
+        BorderSizePixel = 0,
+        FontFace = Font.Heavy,
+        TextColor3 = Color.TextOnBright,
+        TextScaled = true,
+        Text = badgeText,
+        ZIndex = 43,
+        Parent = row,
+    }, { corner(8), padding(6) })
+end
+
+local AMBIL_COLOR = Color3.fromRGB(231, 111, 81) -- warm red: take OUT
+local TARUH_COLOR = Color3.fromRGB(42, 157, 113) -- green: put IN
+
+-- Render the whole menu from the last snapshot + the live bag.
+local function renderKandang()
+    local payload = kandangLast
+    if not payload then
+        return
+    end
+    kandangRowsTrove:Clean()
+
+    local capacity = payload.capacity or 6
+    local deployedCount = #payload.deployed
+    kandangTitle.Text = string.format("🏠 KANDANG (%d/%d)", deployedCount, capacity)
+
+    local order = 0
+    local function nextOrder()
+        order += 1
+        return order
+    end
+
+    -- ── DI KANDANG ──
+    kandangSection("DI KANDANG — tap untuk ambil", nextOrder())
+    if deployedCount == 0 then
+        kandangSection("   (kosong — taruh monster dari tasmu)", nextOrder())
+    end
+    for _, slot in payload.deployed do
+        local index = slot.index
+        local label = string.format(
+            "%s %s  ⭐ Lv%d",
+            string.upper(slot.personality),
+            elementEmoji(slot.element),
+            slot.level or 1
+        )
+        kandangRow(nextOrder(), slot.personality, label, "AMBIL", AMBIL_COLOR, function()
+            DemoClient.recallDeployed(index)
+        end)
+    end
+
+    -- ── DI TAS ──
+    kandangSection("DI TAS — tap untuk taruh", nextOrder())
+    local inventory = DemoClient.Inventory
+    if #inventory == 0 then
+        kandangSection("   (tas kosong — pergi tangkap monster!)", nextOrder())
+    end
+    local firstFree: number? = payload.free[1]
+    for _, item in inventory do
+        local personality = item.personality
+        local label =
+            string.format("%s %s  ⭐ Lv%d", string.upper(personality), elementEmoji(item.element), item.level)
+        if firstFree then
+            local target = firstFree
+            kandangRow(nextOrder(), personality, label, "TARUH", TARUH_COLOR, function()
+                DemoClient.deployToStand(target, personality)
+            end)
+        else
+            kandangRow(nextOrder(), personality, label, "PENUH", nil, nil)
+        end
+    end
+end
+
+-- Snapshot arrives: refresh if open; open if this is a fresh user intent
+-- (suppress the stale post-action push that can trail a just-closed menu).
+DemoClient.KandangUpdated:Connect(function(payload)
+    kandangLast = payload
+    if kandangOpen then
+        renderKandang()
+        return
+    end
+    if os.clock() - kandangClosedAt < 1 then
+        return -- trailing refresh after close; ignore
+    end
+    kandangOpen = true
+    renderKandang()
+    kandangBackdrop.Visible = true
+end)
+
+-- The bag changed while the menu is open (deploy/recall round-trip landed):
+-- ask the server for a fresh slot snapshot so both sections stay in sync.
+DemoClient.InventoryChanged:Connect(function()
+    if kandangOpen then
+        DemoClient.requestKandang()
+    end
+end)
+
+rootTrove:Add(kandangClose.Activated:Connect(closeKandangMenu))
+rootTrove:Add(kandangBackdrop.Activated:Connect(closeKandangMenu))
+
+-- ════════════════════════════════════════════════════════════════════════════
 -- COIN HUD render (AUTO-COLLECT) — the total climbs continuously on its own
 -- ════════════════════════════════════════════════════════════════════════════
 
