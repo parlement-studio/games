@@ -444,6 +444,15 @@ return {
         restoreSec = 0.4,
         -- Net arc height (studs above the straight line). Range: 1-8 | Default: 4
         arcHeight = 4,
+        -- THROW ANIMATION (Jalur A): a keyframe throw plays on the catcher's
+        -- right arm via the Animator. Leave throwAnimationId = "" to use the
+        -- code-authored KeyframeSequence (ThrowAnimation.luau) registered at
+        -- runtime; set it to a published "rbxassetid://…" to use an uploaded
+        -- asset instead. throwReleaseSec = when (into the anim) the net leaves
+        -- the hand — the projectile launches at that moment.
+        throwEnabled = true,
+        throwAnimationId = "",
+        throwReleaseSec = 0.2,
     },
 
     -- ── WILD BRAINROT AI (server-authoritative roaming) ─────────────────────

@@ -29,6 +29,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local DemoFolder = Shared:WaitForChild("Demo")
 local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
+local ThrowAnimation = require(DemoFolder:WaitForChild("ThrowAnimation"))
 local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("ElementConfig"))
 
 local CINE = DemoConfig.catchCinematic
@@ -214,10 +215,14 @@ local function playCinematic(model: Model, element: any)
     local monsterPos = model:GetPivot().Position
     local target = framingCFrame(monsterPos)
     local color = elementColor(element)
+    local throwTrack: AnimationTrack? = nil
 
     -- Always-restore guard: even if any step errors or the model vanishes, the
-    -- camera goes back to gameplay.
+    -- camera goes back to gameplay (and a still-playing throw is stopped).
     local function restore()
+        if throwTrack then
+            throwTrack:Stop(0.15)
+        end
         local fovTween = TweenService:Create(
             camera,
             TweenInfo.new(CINE.restoreSec, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
@@ -239,7 +244,23 @@ local function playCinematic(model: Model, element: any)
         )
         dolly:Play()
 
-        -- 2) Net throw.
+        -- 2) THROW ANIMATION (Jalur A) + net. Play the keyframe throw on the
+        -- catcher's arm, wait until the release point, THEN launch the net from
+        -- the actual (mid-throw) hand position so the toss reads naturally.
+        if CINE.throwEnabled then
+            local charNow = LocalPlayer.Character
+            local hum = charNow and charNow:FindFirstChildWhichIsA("Humanoid")
+            local animator = hum and hum:FindFirstChildWhichIsA("Animator")
+            local anim = ThrowAnimation.getAnimation(CINE.throwAnimationId)
+            if animator and anim then
+                local tr = animator:LoadAnimation(anim)
+                tr.Priority = Enum.AnimationPriority.Action
+                tr:Play()
+                throwTrack = tr
+                -- Wait out the wind-up so the net releases at the throw's apex.
+                task.wait(CINE.throwReleaseSec)
+            end
+        end
         local from = launchOrigin() or (monsterPos + Vector3.new(0, 6, 8))
         flyNet(from, monsterPos + Vector3.new(0, 1, 0), CINE.netFlightSec)
 
