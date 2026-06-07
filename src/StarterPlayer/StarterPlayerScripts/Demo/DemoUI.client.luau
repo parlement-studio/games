@@ -240,12 +240,15 @@ apply(Instance.new("TextLabel"), {
 -- ════════════════════════════════════════════════════════════════════════════
 local TOPBAR_HEIGHT = 48
 local TOPBAR_BTN_WIDTH = 118
+local TOPBAR_GAP = 12 -- breathing room between launcher buttons (owner feedback)
 
 local topBar = apply(Instance.new("Frame"), {
     Name = "TopBar",
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, -16, 0, 16),
-    Size = UDim2.fromOffset(TOPBAR_BTN_WIDTH * 5 + 6 * 4 + 20, TOPBAR_HEIGHT),
+    -- FLUSH to the top edge (owner feedback: "mentokin ke atas") — y = 0;
+    -- CoreUISafeInsets already keeps us clear of the Roblox system bar.
+    Position = UDim2.new(1, -16, 0, 0),
+    Size = UDim2.fromOffset(TOPBAR_BTN_WIDTH * 5 + TOPBAR_GAP * 4 + 20, TOPBAR_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BackgroundTransparency = 0.15,
     BorderSizePixel = 0,
@@ -255,7 +258,7 @@ local topBar = apply(Instance.new("Frame"), {
 apply(Instance.new("UIListLayout"), {
     FillDirection = Enum.FillDirection.Horizontal,
     SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 6),
+    Padding = UDim.new(0, TOPBAR_GAP),
     Parent = topBar,
 })
 
@@ -361,7 +364,7 @@ local SUMMON_REFRESH_SEC = 0.25
 local summonPanel = apply(Instance.new("Frame"), {
     Name = "SummonPanel",
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, -16, 0, 16 + TOPBAR_HEIGHT + 8),
+    Position = UDim2.new(1, -16, 0, TOPBAR_HEIGHT + 8), -- follows the flush-top bar
     Size = UDim2.fromOffset(SUMMON_PANEL_WIDTH, 44 + (SUMMON_ROW_HEIGHT + 6) * SUMMON_MAX + 10),
     BackgroundColor3 = Color.Panel,
     BackgroundTransparency = 0.1,
