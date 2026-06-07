@@ -101,12 +101,21 @@ local baseCoins = 0
 local ratePerSec = 0
 local lastAt = os.clock()
 
--- MONOTONIC display latch. Coins only ever go UP server-side, so the SHOWN
--- number must never visibly drop. `displayShown` is the highest value the HUD
--- has presented; both the CoinUpdate handler and getDisplayCoins() ratchet it
--- upward only. This removes the flicker where a fresh (slightly lower) server
--- snapshot would otherwise undercut the already-predicted total.
+-- Display latch with SPEND-AWARE downward snap. Historically coins only went
+-- UP (faucet-only demo) so the latch was strictly monotonic — that HID every
+-- spend once sinks shipped (paid catches, Upgrade Kandang): the HUD never
+-- showed money leaving. Now:
+--   * tiny dips (server snapshot slightly below the climbing prediction —
+--     ordinary push latency) are still ratcheted away (no flicker), but
+--   * a dip LARGER than the prediction-overshoot bound (ratePerSec * ~1.5s
+--     + 1) means a real SPEND landed server-side -> snap DOWN immediately so
+--     the player SEES the cost leave their wallet.
 local displayShown = 0
+
+-- Seconds of prediction overshoot the anti-flicker ratchet tolerates before a
+-- lower server snapshot is treated as a real spend. Pushes arrive ~1/s; 1.5
+-- adds headroom for jitter. Range: 1.0-3.0 | Default: 1.5
+local SPEND_SNAP_HEADROOM_SEC = 1.5
 
 -- Public signals (the UI connects to these).
 -- InventoryChanged fires with (inventory: Inventory).
@@ -148,9 +157,11 @@ function DemoClient.init()
         baseCoins = DemoClient.Coins
         ratePerSec = snapshot.rate or 0
         lastAt = os.clock()
-        -- Ratchet the shown value UP only; never snap down below what the HUD
-        -- has already displayed (server coins are monotonic non-decreasing).
-        if baseCoins > displayShown then
+        -- Ratchet UP for ordinary climbing; SNAP DOWN when the gap exceeds the
+        -- prediction-overshoot bound (a sink fired server-side — show it!).
+        -- In-between dips (small, within overshoot) keep the old latch.
+        local overshootBound = ratePerSec * SPEND_SNAP_HEADROOM_SEC + 1
+        if baseCoins > displayShown or displayShown - baseCoins > overshootBound then
             displayShown = baseCoins
         end
         print(("[Coin][client] coins=%d rate=%.2f/s"):format(DemoClient.Coins, ratePerSec))
@@ -236,9 +247,9 @@ end
 -- AUTO-COLLECT: the live coin total to display RIGHT NOW. Extrapolates from the
 -- last server total (`baseCoins`) at `ratePerSec` since `lastAt`, so the HUD
 -- climbs smoothly between server pushes. The prediction can only RAISE the
--- latched `displayShown`, never lower it, so the shown number is monotonic
--- non-decreasing (no down-then-up flicker between pushes). Floored to a whole
--- coin for display only; drift stays latency-bounded since `rate` is exact.
+-- latched `displayShown` (downward movement happens exclusively via the
+-- CoinUpdate spend-snap above, keyed to real server totals). Floored to a
+-- whole coin for display only; drift stays latency-bounded since `rate` is exact.
 function DemoClient.getDisplayCoins(): number
     local predicted = baseCoins + ratePerSec * (os.clock() - lastAt)
     if predicted > displayShown then
