@@ -114,6 +114,58 @@ return function()
             expect(entry.element).never.to.equal("Shadow")
             expect(Schema.isValidElement(entry.element)).to.equal(true)
         end)
+
+        it("rolls a WILD rarity (Common/Uncommon only) when args omit it (R1)", function()
+            -- Act + Assert: 30 mints — never a boss-tier rarity from grass.
+            for _ = 1, 30 do
+                local entry =
+                    Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+                expect(entry.rarity == "Common" or entry.rarity == "Uncommon").to.equal(true)
+            end
+        end)
+
+        it("keeps a supplied VALID rarity (boss-drop path, e.g. Rare)", function()
+            -- Act
+            local entry = Schema.newBrainrot({
+                species = 1,
+                personality = "Loyal",
+                rarity = "Rare",
+                source = "manual",
+                hotspotId = "boss",
+            })
+
+            -- Assert
+            expect(entry.rarity).to.equal("Rare")
+        end)
+
+        it("falls back to the wild roll on a supplied INVALID rarity", function()
+            -- Act
+            local entry = Schema.newBrainrot({
+                species = 1,
+                personality = "Loyal",
+                rarity = "Mythic" :: any,
+                source = "manual",
+                hotspotId = "",
+            })
+
+            -- Assert: not the garbage value; a rollable wild tier instead.
+            expect(entry.rarity).never.to.equal("Mythic")
+            expect(entry.rarity == "Common" or entry.rarity == "Uncommon").to.equal(true)
+        end)
+    end)
+
+    describe("Schema.isValidRarity", function()
+        it("accepts every valid rarity enum value", function()
+            for _, r in ipairs(Schema.RARITIES) do
+                expect(Schema.isValidRarity(r)).to.equal(true)
+            end
+        end)
+
+        it("rejects an invalid or non-string rarity", function()
+            expect(Schema.isValidRarity("Mythic")).to.equal(false)
+            expect(Schema.isValidRarity(42)).to.equal(false)
+            expect(Schema.isValidRarity(nil)).to.equal(false)
+        end)
     end)
 
     describe("Schema.isValidElement", function()
@@ -358,6 +410,84 @@ return function()
                     return entry.element
                 end
                 return ElementConfig.rollElement()
+            end)
+        end)
+
+        it("BACKFILLS a missing rarity on a legacy entry with a WILD roll (R5)", function()
+            -- Arrange: a pre-rarity roster entry.
+            local legacy = {
+                coins = 1,
+                roster = {
+                    ["guid-old"] = { id = "guid-old", species = 3, personality = "Hyper", element = "Fire" },
+                },
+            }
+
+            -- Act
+            local d = Migrations.migrate(legacy)
+
+            -- Assert: a rollable wild tier (never a boss tier from backfill).
+            local rarity = d.roster["guid-old"].rarity
+            expect(rarity == "Common" or rarity == "Uncommon").to.equal(true)
+        end)
+
+        it("KEEPS a valid stored rarity on re-migration (idempotency; permanent per R5)", function()
+            -- Arrange: an entry that already carries Rare (boss drop).
+            local legacy = {
+                coins = 1,
+                roster = {
+                    ["guid-rare"] = {
+                        id = "guid-rare",
+                        species = 2,
+                        personality = "Lazy",
+                        element = "Water",
+                        rarity = "Rare",
+                    },
+                },
+            }
+
+            -- Act: migrate twice (load, save, load again).
+            local once = Migrations.migrate(legacy)
+            local twice = Migrations.migrate(once)
+
+            -- Assert: Rare survives both passes — never re-rolled.
+            expect(once.roster["guid-rare"].rarity).to.equal("Rare")
+            expect(twice.roster["guid-rare"].rarity).to.equal("Rare")
+        end)
+
+        it("RE-ROLLS an invalid stored rarity via the repair hook", function()
+            -- Arrange: corrupted enum + deterministic injected repair.
+            local legacy = {
+                coins = 1,
+                roster = {
+                    ["guid-bad-r"] = {
+                        id = "guid-bad-r",
+                        species = 1,
+                        personality = "Rebel",
+                        element = "Volt",
+                        rarity = "Mythic",
+                    },
+                },
+            }
+            Migrations.setRarityRepair(function(entry)
+                if Schema.isValidRarity(entry.rarity) then
+                    return entry.rarity
+                end
+                return "Uncommon"
+            end)
+
+            -- Act
+            local d = Migrations.migrate(legacy)
+
+            -- Assert: the corrupt value was replaced by the injected repair.
+            expect(d.roster["guid-bad-r"].rarity).to.equal("Uncommon")
+
+            -- Cleanup: restore the production repair (valid-keep + wild roll).
+            local RarityConfig = require(ReplicatedStorage.Shared.Config.RarityConfig)
+            Migrations.setRarityRepair(function(entry)
+                if Schema.isValidRarity(entry.rarity) then
+                    return entry.rarity
+                end
+                return RarityConfig.rollRarity()
             end)
         end)
     end)

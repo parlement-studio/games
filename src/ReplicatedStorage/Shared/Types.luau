@@ -25,6 +25,13 @@ export type Personality = "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
 -- advantage circle + multipliers live in Shared/Config/ElementConfig.luau.
 export type Element = "Fire" | "Nature" | "Water" | "Volt" | "Wind"
 
+-- Rarity enum (design/decisions/2026-06-07-rarity-droprate.md R1-R5, LOCKED).
+-- Rarity-by-SOURCE (Vision Pivot Decision 8): wild catches roll Common 80% /
+-- Uncommon 20% server-side at mint; Rare+ only ever arrive via boss-drop
+-- paths that SUPPLY the rarity explicitly. PERMANENT once set (like element).
+-- Weights/multipliers live in Shared/Config/RarityConfig.luau.
+export type Rarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
+
 -- Per-Brainrot lifetime counters + capture provenance.
 export type BrainrotHistory = {
     coins: number, -- lifetime Meme Coins this Brainrot has produced (Idle #3)
@@ -42,6 +49,7 @@ export type BrainrotEntry = {
     species: number, -- numeric species id (not a display name)
     personality: Personality, -- persisted enum
     element: Element, -- persisted enum; rolled at capture mint, PERMANENT (element doc E3/E4)
+    rarity: Rarity, -- persisted enum; wild roll 80/20 at mint OR supplied by a boss-drop path, PERMANENT (rarity doc R1/R5)
     level: number, -- progression; default 1
     xp: number, -- accumulated XP; default 0
     evoStage: number, -- evolution stage; 0 = base
@@ -151,6 +159,10 @@ export type NewBrainrotArgs = {
     species: number,
     personality: Personality,
     element: Element?,
+    -- OPTIONAL: nil = wild-catch roll (80/20). Boss-drop paths supply the tier
+    -- explicitly (e.g. "Rare" from a Colony Boss); validated at mint, an
+    -- invalid value falls back to the wild roll (never trusted).
+    rarity: Rarity?,
     source: string, -- "manual" | "auto"
     hotspotId: string,
 }

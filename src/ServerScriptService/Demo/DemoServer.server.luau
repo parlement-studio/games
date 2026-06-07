@@ -49,6 +49,9 @@ local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("Elemen
 -- factory upgrade curve (EconomyConfig.upgradeCost) consumed by Upgrade Kandang.
 local CaptureConfig = require(Shared:WaitForChild("Config"):WaitForChild("CaptureConfig"))
 local EconomyConfig = require(Shared:WaitForChild("Config"):WaitForChild("EconomyConfig"))
+-- RARITY (rarity doc R3): statMultFor multiplies fighter HP + damage as one
+-- factor alongside levelScale/personality/elementMod. Defensive 1.0 fallback.
+local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("RarityConfig"))
 local PlayerDataService = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("PlayerDataService"))
 local Schema = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("Schema"))
 
@@ -85,6 +88,7 @@ type InventoryItem = {
     id: string, -- persisted roster GUID (also the SUMMON target)
     personality: string, -- canonical key: "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
     element: string, -- persisted element enum ("Fire"|"Nature"|"Water"|"Volt"|"Wind"), display badge
+    rarity: string, -- persisted rarity enum ("Common".."Legendary"), badge tint (rarity doc R3)
     level: number, -- current progression level of this Brainrot (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level (xpCurveBase * level)
@@ -122,6 +126,7 @@ type FighterRecord = {
     brainrotId: string,
     level: number,
     element: string, -- element SNAPSHOT from the summoned entry (element doc E3; drives elementMod)
+    rarity: string, -- rarity SNAPSHOT from the summoned entry (rarity doc R3; drives statMult)
     model: Model,
     nextCombatAt: number,
     nextSeekAt: number,
@@ -398,14 +403,17 @@ local function pushInventory(player: Player)
             -- in the file; the formulas are kept identical on purpose.
             local scale = levelScale(entry.level)
             local powerMult = if combat.personalityDamageScales then prodMult(entry.personality) else 1
-            local hp = math.round(combat.fighterBaseHP * scale)
-            local power = math.round(combat.fighterBaseDamagePerTick * scale * powerMult)
+            -- RARITY (R3): one moderate tier factor on both stats (C 1.0 .. L 2.0).
+            local rarityMult = RarityConfig.statMultFor(entry.rarity)
+            local hp = math.round(combat.fighterBaseHP * scale * rarityMult)
+            local power = math.round(combat.fighterBaseDamagePerTick * scale * powerMult * rarityMult)
             local wins = (entry.history and entry.history.rwon) or 0
             local coinsMade = math.floor((entry.history and entry.history.coins) or 0)
             table.insert(payload, {
                 id = id,
                 personality = entry.personality,
                 element = entry.element,
+                rarity = entry.rarity,
                 level = entry.level,
                 xp = entry.xp,
                 xpToNext = PROGRESSION.xpCurveBase * entry.level,
@@ -1185,18 +1193,19 @@ local function scaledDamage(base: number, personality: string): number
 end
 
 -- PROGRESSION: a FIGHTER's per-tick damage at a given level + personality
--- (battle-gdd F2): fighterBaseDamagePerTick * levelScale(level) * personalityScale.
--- LEVEL boosts combat damage; personality keeps its existing flavor multiplier.
-local function fighterDamage(level: number, personality: string): number
+-- (battle-gdd F2): fighterBaseDamagePerTick * levelScale(level) * personalityScale
+-- * rarityStatMult (rarity doc R3, moderate C 1.0 .. L 2.0; defensive 1.0 on
+-- nil/invalid). LEVEL boosts damage; personality keeps its flavor multiplier.
+local function fighterDamage(level: number, personality: string, rarity: any): number
     local personalityMult = if COMBAT.personalityDamageScales then prodMult(personality) else 1
-    return COMBAT.fighterBaseDamagePerTick * levelScale(level) * personalityMult
+    return COMBAT.fighterBaseDamagePerTick * levelScale(level) * personalityMult * RarityConfig.statMultFor(rarity)
 end
 
 -- PROGRESSION: a FIGHTER's derived Max HP at a given level (battle-gdd F2):
--- round(fighterBaseHP * levelScale(level)). LEVEL boosts HP; rounded to a whole
--- HP so the built-in health bar reads cleanly.
-local function fighterMaxHP(level: number): number
-    return math.round(COMBAT.fighterBaseHP * levelScale(level))
+-- round(fighterBaseHP * levelScale(level) * rarityStatMult). LEVEL + rarity
+-- boost HP; rounded to a whole HP so the built-in health bar reads cleanly.
+local function fighterMaxHP(level: number, rarity: any): number
+    return math.round(COMBAT.fighterBaseHP * levelScale(level) * RarityConfig.statMultFor(rarity))
 end
 
 -- FOLLOW FORMATION: a fighter is "living" (counts toward a formation slot) iff
@@ -1467,6 +1476,8 @@ local function handleSummon(player: Player, brainrotId: unknown)
     -- ELEMENT: snapshot from the authoritative entry (rolled at capture mint,
     -- permanent per element doc E4) — drives this fighter's elementMod.
     local element = entry.element
+    -- RARITY: snapshot likewise (rarity doc R3) — drives this fighter's statMult.
+    local rarity = entry.rarity
 
     -- Place in front of the player's character. Bail gracefully if no character.
     local character = player.Character
@@ -1494,8 +1505,8 @@ local function handleSummon(player: Player, brainrotId: unknown)
         fighter:Destroy()
         return
     end
-    -- PROGRESSION: derive Max HP from the Brainrot's level (battle-gdd F2).
-    local maxHP = fighterMaxHP(level)
+    -- PROGRESSION: derive Max HP from the Brainrot's level + rarity (F2 + R3).
+    local maxHP = fighterMaxHP(level, rarity)
     humanoid.WalkSpeed = COMBAT.fighterWalkSpeed
     humanoid.MaxHealth = maxHP
     humanoid.Health = maxHP
@@ -1540,6 +1551,7 @@ local function handleSummon(player: Player, brainrotId: unknown)
         brainrotId = brainrotId,
         level = level,
         element = element,
+        rarity = rarity,
         model = fighter,
         nextCombatAt = 0,
         nextSeekAt = 0,
@@ -1729,9 +1741,11 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                         wildDamageMult = 1
                     end
 
-                    -- Wild takes the fighter's LEVEL+personality-scaled damage
-                    -- (battle-gdd F2: level boosts combat damage) times elementMod.
-                    wildHumanoid:TakeDamage(fighterDamage(record.level, record.personality) * fighterVsWild)
+                    -- Wild takes the fighter's LEVEL+personality+rarity-scaled
+                    -- damage (battle-gdd F2 + rarity R3) times elementMod.
+                    wildHumanoid:TakeDamage(
+                        fighterDamage(record.level, record.personality, record.rarity) * fighterVsWild
+                    )
                     -- Fighter takes the wild's (personality-only) damage back times
                     -- its DamageMult (boss) times the REVERSE elementMod; the wild
                     -- is treated as level 1 for now.
@@ -1939,6 +1953,7 @@ local function buildKandangPayload(player: Player): { [string]: any }?
                 index = index,
                 personality = slot.personality,
                 element = entry and entry.element or nil,
+                rarity = entry and entry.rarity or nil,
                 level = entry and entry.level or 1,
             })
         else

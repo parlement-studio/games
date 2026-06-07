@@ -46,6 +46,9 @@ local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
 -- ElementConfig is replicated read-only: the UI reads ONLY the display table
 -- (emoji badge per element). Resolution values (mods/beats) are server-applied.
 local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("ElementConfig"))
+-- RarityConfig likewise: the UI reads ONLY the display table (name + tier tint
+-- per rarity doc R3). statMult/evolveCostMult are server-applied.
+local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("RarityConfig"))
 
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
 local DemoClient = require(script.Parent:WaitForChild("DemoClient"))
@@ -56,6 +59,32 @@ local apply = UITheme.apply
 local function elementEmoji(element: any): string
     local display = ElementConfig.display[element]
     return if display then display.emoji else ""
+end
+
+-- RARITY badges (rarity doc R3). Common stays visually quiet (the default
+-- look); Uncommon+ get the tier tint so a good roll reads at a glance.
+local RARITY_FALLBACK = Color3.fromHex("#9CA3AF")
+
+-- Tier tint as a Color3 (card stroke etc.); grey fallback on nil/unknown.
+local function rarityColor(rarity: any): Color3
+    local display = RarityConfig.display[rarity]
+    if display then
+        return Color3.fromHex(display.color)
+    end
+    return RARITY_FALLBACK
+end
+
+-- RichText suffix for row labels: "" for Common/unknown (quiet), a colored
+-- "◆Rare"-style tag for Uncommon+. Callers must set RichText = true.
+local function rarityTag(rarity: any): string
+    if rarity == nil or rarity == "Common" then
+        return ""
+    end
+    local display = RarityConfig.display[rarity]
+    if not display then
+        return ""
+    end
+    return (' <font color="%s">◆%s</font>'):format(display.color, display.name)
 end
 local corner = UITheme.corner
 local stroke = UITheme.stroke
@@ -385,7 +414,9 @@ local function buildCard(
         BorderSizePixel = 0,
         ZIndex = zBase,
         Parent = parent,
-    }, { corner(12), stroke(Color.Stroke, 2), padding(4) }))
+        -- RARITY (R3): the card BORDER carries the tier tint — Common reads
+        -- like the old neutral stroke, Uncommon+ pop their color at a glance.
+    }, { corner(12), stroke(rarityColor(item.rarity), 3), padding(4) }))
     trove:Add(card.Activated:Connect(onTap))
 
     -- Big personality emoji at the top of the card.
@@ -486,11 +517,13 @@ local function buildRow(
         TextColor3 = Color.Text,
         TextScaled = true,
         TextXAlignment = Enum.TextXAlignment.Left,
+        RichText = true, -- RARITY tag is a colored <font> span
         Text = string.format(
-            "%s Monster %s ⭐ Lv%d",
+            "%s Monster %s ⭐ Lv%d%s",
             string.upper(item.personality),
             elementEmoji(item.element),
-            item.level
+            item.level,
+            rarityTag(item.rarity)
         ),
         ZIndex = childZ,
         Parent = row,
@@ -582,6 +615,7 @@ local sheetHeader = apply(Instance.new("TextLabel"), {
     TextColor3 = Color.Text,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
+    RichText = true, -- RARITY tag is a colored <font> span
     Text = "🔥 HYPER  ⭐ Lv1",
     ZIndex = 52,
     Parent = sheetPanel,
@@ -785,11 +819,12 @@ local function openSheet(item: DemoClient.InventoryItem)
     local theme = UITheme.personality(item.personality)
 
     sheetHeader.Text = string.format(
-        "%s %s %s ⭐ Lv%d",
+        "%s %s %s ⭐ Lv%d%s",
         theme.emoji,
         string.upper(item.personality),
         elementEmoji(item.element),
-        item.level
+        item.level,
+        rarityTag(item.rarity)
     )
 
     -- XP bar: fill = xp / xpToNext clamped 0..1; "MAX" at the level ceiling.
@@ -1245,6 +1280,7 @@ local function kandangRow(
         TextColor3 = Color.Text,
         TextScaled = true,
         TextXAlignment = Enum.TextXAlignment.Left,
+        RichText = true, -- RARITY tag is a colored <font> span
         Text = label,
         ZIndex = 43,
         Parent = row,
@@ -1315,10 +1351,11 @@ local function renderKandang()
     for _, slot in payload.deployed do
         local index = slot.index
         local label = string.format(
-            "%s %s  ⭐ Lv%d",
+            "%s %s  ⭐ Lv%d%s",
             string.upper(slot.personality),
             elementEmoji(slot.element),
-            slot.level or 1
+            slot.level or 1,
+            rarityTag(slot.rarity)
         )
         kandangRow(nextOrder(), slot.personality, label, "AMBIL", AMBIL_COLOR, function()
             DemoClient.recallDeployed(index)
@@ -1334,8 +1371,13 @@ local function renderKandang()
     local firstFree: number? = payload.free[1]
     for _, item in inventory do
         local personality = item.personality
-        local label =
-            string.format("%s %s  ⭐ Lv%d", string.upper(personality), elementEmoji(item.element), item.level)
+        local label = string.format(
+            "%s %s  ⭐ Lv%d%s",
+            string.upper(personality),
+            elementEmoji(item.element),
+            item.level,
+            rarityTag(item.rarity)
+        )
         if firstFree then
             local target = firstFree
             kandangRow(nextOrder(), personality, label, "TARUH", TARUH_COLOR, function()

@@ -25,6 +25,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local CaptureConfig = require(ReplicatedStorage.Shared.Config.CaptureConfig)
 local ElementConfig = require(ReplicatedStorage.Shared.Config.ElementConfig)
 local PersistenceConfig = require(ReplicatedStorage.Shared.Config.PersistenceConfig)
+local RarityConfig = require(ReplicatedStorage.Shared.Config.RarityConfig)
 local Schema = require(script.Parent.Schema)
 
 type PlayerData = Types.PlayerData
@@ -66,6 +67,23 @@ end
 -- Lets a test (or a future service) inject a deterministic element repair.
 function Migrations.setElementRepair(fn: (entry: any) -> Types.Element)
     repairElement = fn
+end
+
+-- The rarity-repair hook (rarity doc R5; mirrors the element hook). A valid
+-- stored rarity is KEPT (permanent once set); a missing/invalid one is
+-- BACKFILLED with the WILD ROLL (80/20) — deliberately NOT a flat "Common"
+-- default, so a legacy roster doesn't become a wall of Commons in the future
+-- trade market. setRarityRepair exists for deterministic tests.
+local repairRarity: (entry: any) -> Types.Rarity = function(entry)
+    if Schema.isValidRarity(entry.rarity) then
+        return entry.rarity
+    end
+    return RarityConfig.rollRarity()
+end
+
+-- Lets a test (or a future service) inject a deterministic rarity repair.
+function Migrations.setRarityRepair(fn: (entry: any) -> Types.Rarity)
+    repairRarity = fn
 end
 
 -- Defensive backfill: runs every load. Cheap; makes partial/corrupt records
@@ -217,6 +235,7 @@ local function backfill(data: any)
         entry.species = entry.species or 0
         entry.personality = repairPersonality(entry)
         entry.element = repairElement(entry)
+        entry.rarity = repairRarity(entry)
         entry.level = entry.level or 1
         entry.xp = entry.xp or 0
         entry.evoStage = entry.evoStage or 0

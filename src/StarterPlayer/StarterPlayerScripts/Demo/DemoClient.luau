@@ -36,6 +36,7 @@ export type InventoryItem = {
     id: string, -- roster GUID; passed to DemoClient.summon to send out THIS Brainrot
     personality: string, -- "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
     element: string, -- "Fire" | "Nature" | "Water" | "Volt" | "Wind" (display badge only)
+    rarity: string, -- "Common".."Legendary" (display badge tint only)
     level: number, -- current progression level (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level
@@ -73,6 +74,7 @@ export type KandangSlot = {
     index: number, -- stand index (1..capacity); the RecallDeployed target
     personality: string,
     element: string?, -- element badge (from the authoritative roster entry)
+    rarity: string?, -- rarity badge tint (from the authoritative roster entry)
     level: number,
 }
 

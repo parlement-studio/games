@@ -17,6 +17,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local CaptureConfig = require(ReplicatedStorage.Shared.Config.CaptureConfig)
 local ElementConfig = require(ReplicatedStorage.Shared.Config.ElementConfig)
 local PersistenceConfig = require(ReplicatedStorage.Shared.Config.PersistenceConfig)
+local RarityConfig = require(ReplicatedStorage.Shared.Config.RarityConfig)
 
 type PlayerData = Types.PlayerData
 type BrainrotEntry = Types.BrainrotEntry
@@ -24,6 +25,7 @@ type BaseData = Types.BaseData
 type Building = Types.Building
 type Personality = Types.Personality
 type Element = Types.Element
+type Rarity = Types.Rarity
 type NewBrainrotArgs = Types.NewBrainrotArgs
 
 local Schema = {}
@@ -47,6 +49,10 @@ end
 -- ElementConfig.order; mirrored here so validators read one schema surface.
 Schema.ELEMENTS = ElementConfig.order
 
+-- Valid rarity enum values (rarity doc R1-R5). Single source of truth is
+-- RarityConfig.order; mirrored here so validators read one schema surface.
+Schema.RARITIES = RarityConfig.order
+
 -- ── Pure helpers ────────────────────────────────────────────────────────
 
 -- Counts the keys of a map (used to self-heal a drifted rosterCount cache).
@@ -66,6 +72,11 @@ end
 -- True iff the value is a valid Element enum string (delegates to the config).
 function Schema.isValidElement(value: any): boolean
     return ElementConfig.isValidElement(value)
+end
+
+-- True iff the value is a valid Rarity enum string (delegates to the config).
+function Schema.isValidRarity(value: any): boolean
+    return RarityConfig.isValidRarity(value)
 end
 
 -- ── Default builders ──────────────────────────────────────────────────────
@@ -145,6 +156,10 @@ end
 -- ElementConfig.rollWeights) when the caller does not supply one — the standard
 -- capture path. A supplied-but-INVALID value is re-rolled, never trusted (the
 -- args may have crossed a remote boundary upstream).
+--
+-- `rarity` (rarity doc R1/R5): same contract — nil = wild-catch roll (80/20
+-- via RarityConfig.rollWeights); a boss-drop path supplies its tier explicitly
+-- (e.g. "Rare"); a supplied-but-INVALID value falls back to the wild roll.
 function Schema.newBrainrot(args: NewBrainrotArgs): BrainrotEntry
     local element: Element
     if args.element ~= nil and ElementConfig.isValidElement(args.element) then
@@ -152,11 +167,18 @@ function Schema.newBrainrot(args: NewBrainrotArgs): BrainrotEntry
     else
         element = ElementConfig.rollElement()
     end
+    local rarity: Rarity
+    if args.rarity ~= nil and RarityConfig.isValidRarity(args.rarity) then
+        rarity = args.rarity :: Rarity
+    else
+        rarity = RarityConfig.rollRarity()
+    end
     return {
         id = HttpService:GenerateGUID(false),
         species = args.species,
         personality = args.personality,
         element = element,
+        rarity = rarity,
         level = 1,
         xp = 0,
         evoStage = 0,
@@ -270,6 +292,9 @@ function Schema.validate(data: any): (boolean, string?)
         end
         if not Schema.isValidElement(entry.element) then
             return false, "invalid element on entry " .. tostring(id)
+        end
+        if not Schema.isValidRarity(entry.rarity) then
+            return false, "invalid rarity on entry " .. tostring(id)
         end
     end
     return true, nil
