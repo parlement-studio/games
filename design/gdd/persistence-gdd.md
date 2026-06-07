@@ -1,5 +1,7 @@
 # Data Persistence & Roster Core GDD
 
+> 🔄 **REBRAND NOTICE (2026-06-07)**: Tema diganti per `design/decisions/2026-06-07-monster-relic-rebrand.md` — kreatur "Brainrot" → **Monster Relic**, player = **Relic Hunter**, setting = reruntuhan peradaban kuno. **Schema, data, dan mekanik dokumen ini TIDAK berubah** (field/key DataStore seperti `BrainrotEntry` tetap — rename identifier kode menyusul per-sistem, key live TIDAK di-migrasi). Baca semua referensi "Brainrot" sebagai "Monster Relic" via tabel pemetaan §4 rebrand doc.
+
 > ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **extension required**: a new **§11 Cross-Place TeleportData Handoff** is needed for multi-place Roblox Universe architecture (per System #27 World Universe). Player state must traverse Lobby ↔ Areas ↔ Super Boss zones ↔ Raid Dungeons ↔ Kandang cleanly. Current §1–§10 content remains canonical and shipped. See `design/decisions/2026-05-29-vision-pivot.md` and `design/gdd/systems-index.md` v3.0 for context.
 
 **Version**: 1.4.1

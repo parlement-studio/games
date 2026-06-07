@@ -1,15 +1,19 @@
-# Systems Index — Brainrot Inc.
+# Systems Index — Brainrot Inc. (rebrand tematik: Monster Relic)
 
-**Version**: 3.0 (Vision Pivot rewrite)
-**Last Updated**: 2026-05-29
+**Version**: 3.1 (Monster Relic rebrand)
+**Last Updated**: 2026-06-07
 **Author**: game-designer
-**Status**: Locked post-pivot
+**Status**: Locked post-pivot + post-rebrand
 
-> **Anchor**: `design/decisions/2026-05-29-vision-pivot.md` — this systems index is the implementation map for the locked vision pivot.
+> **Anchors**:
+> 1. `design/decisions/2026-05-29-vision-pivot.md` — mekanik (8 locked decisions): multi-place universe, item capture, 3-tier boss, dst.
+> 2. `design/decisions/2026-06-07-monster-relic-rebrand.md` — tema/lore: kreatur = **Monster Relic**, player = **Relic Hunter**, setting = **reruntuhan peradaban kuno**. Setiap kemunculan "Brainrot" (kreatur) di dokumen ini dibaca sebagai **Monster Relic**; nama bertema lama (CEO Brainrot, The Feed, Meme Coins) dibaca via tabel pemetaan §4 rebrand doc.
 >
 > **What this index represents**: the **canonical current state** of the game system catalogue post-2026-05-29 vision pivot. Prior versions (v1/v2) tracked an idle-game + NPC-raid + future-PvP vision that has been **superseded**. See git history for prior content; see the Vision Pivot Doc for the audit trail of what changed and why.
 
 > **Revision note (2026-05-29, v3.0 rewrite)**: **Game vision pivot**. New genre: multi-place creature hunter (Pokémon GO + Adopt Me DNA) with idle Kandang economy + 3-tier boss progression + peer-to-peer trade. **5 systems obsoleted** (Battle #5, Raid #6, Raid Shield #7, PvP Raid #18, Revenge #19 — see Cancelled Systems section). **7 new MVP systems** added (World Universe, Kandang, Boss System, Capture v2, Items+Token, Party+Matchmaking, Trade Marketplace). **System numbers retained for stable identifier integrity** — cancelled systems keep their slot with `(CANCELLED)` marker.
+
+> **Revision note (2026-06-07, v3.1 rebrand)**: **Tema diganti, mekanik tetap.** Kreatur "Brainrot" → **Monster Relic**; player fantasy → **Relic Hunter**; setting "The Feed" → **reruntuhan peradaban kuno** (Relic Inti meledak ratusan tahun lalu; monster liar + monster penjaga kuil/gerbang/harta). Tier 2 boss kandidat nama baru: **Temple Guardian** (menggantikan kandidat "CEO Brainrot"); Raid Dungeon → kandidat **Ancient Vault**; token → kandidat **Relic Key**; "Meme Coins" → nama currency TBD. **Open decision baru: Element system** (lore menyebut monster ber-elemen — mekanik type-chart atau flavor saja? blokir boss-system-gdd). Tidak ada perubahan status/prioritas/dependency sistem apa pun. Lihat `design/decisions/2026-06-07-monster-relic-rebrand.md`.
 
 ## Summary
 
@@ -22,7 +26,7 @@
 
 **Legend** — Priority tiers: P0 = foundation/blocker, P1 = core MVP, P2 = MVP-supporting, P3 = Phase 2. Risk: L/M/H.
 
-**World context** (post-pivot): Setting = "The Feed" (internet-as-place). Hub = **Lobby place** (social square, shop, trade, leaderboard, party formation). Players teleport to **Areas** for hunting wild Brainrots + Colony Boss, to **Super Boss zones** for Tier-2 boss encounters, to **Raid Dungeons** for token-gated Tier-3 raids, and to their **Kandang** (private sub-place) for idle production.
+**World context** (post-rebrand 2026-06-07): Setting = **reruntuhan peradaban kuno** yang runtuh akibat ledakan **Relic Inti** — makhluk hidup di sekitarnya berubah menjadi **Monster Relic** (liar di reruntuhan, atau penjaga kuil/gerbang/harta). Player = **Relic Hunter**. Hub = **Hunter Camp** (Lobby place — social square, shop, trade, leaderboard, party formation; nama final TBD). Players teleport to **Areas** (zona reruntuhan bertema) for hunting wild Monsters + Colony Boss (gate guardian), to **Temple zones** for Tier-2 Guardian encounters, to **Ancient Vaults** for token-gated Tier-3 raids (treasure guardians), and to their **Kandang** (private sub-place) for idle production.
 
 ---
 

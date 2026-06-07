@@ -1,5 +1,7 @@
 # Capture System GDD (Explore + Manual Catch) — **WILL BE REWRITTEN**
 
+> 🔄 **REBRAND NOTICE (2026-06-07)**: Tema diganti per `design/decisions/2026-06-07-monster-relic-rebrand.md` — kreatur "Brainrot" → **Monster Relic**, player = **Relic Hunter**. `capture-v2-gdd.md` (rewrite yang sudah direncanakan) harus ditulis langsung dengan terminologi baru: Areas = zona reruntuhan, capture item names TBD (kandidat `Relic Charm` per-area, menggantikan `Forest Item`/`Cave Item`/`Sky Item`).
+
 > ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD is **scheduled for full rewrite** as `capture-v2-gdd.md` per the Vision Pivot 2026-05-29. New model:
 > - **Item-based instant capture** (no fight required for capture itself; Pet AI is for boss combat only) — per Vision Pivot Decision 2.
 > - **Area-tier items**: `Forest Item` / `Cave Item` / `Sky Item` / etc., bought in Lobby shop (coin sink), used in respective Area sub-places.

@@ -1,5 +1,7 @@
 # Field Combat / Pet AI GDD (Real-Time Hub Combat — **PROMOTED TO PILLAR**)
 
+> 🔄 **REBRAND NOTICE (2026-06-07)**: Tema diganti per `design/decisions/2026-06-07-monster-relic-rebrand.md` — kreatur "Brainrot" → **Monster Relic**. Boss tiers dapat identitas lore baru: Tier 1 Colony Boss = **penjaga gerbang**, Tier 2 "CEO Brainrot" → kandidat **Temple Guardian** (penjaga kuil), Tier 3 Raid Boss = **penjaga harta** di Ancient Vault. **⚠️ Open decision BARU yang memblokir ekstensi 3-tier**: lore menyebut monster ber-**elemen** — apakah Element jadi mekanik combat (type chart weakness/resist) atau flavor saja? Putuskan sebelum scaling rules 3-tier ditulis (rebrand doc §7).
+
 > ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD has been **PROMOTED to PILLAR combat engine** per the Vision Pivot 2026-05-29. Pet AI is now the **sole combat engine for ALL boss tiers** (Battle #5 is cancelled). Extensions needed:
 > - **3-tier boss combat scaling rules**: Tier 1 Colony Boss (solo-able in shared Area), Tier 2 Super Boss / CEO Brainrot (party-instanced sub-place), Tier 3 Raid Boss (token-gated Dungeon, solo or party).
 > - **Migration from Battle #5** (archived): `levelScale(L)` formula, the 5 personality battle tags + params, KnockedOut vocabulary lock — all now solely owned here.

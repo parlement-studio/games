@@ -1,5 +1,7 @@
 # Economy / Currency (Meme Coins) GDD
 
+> 🔄 **REBRAND NOTICE (2026-06-07)**: Tema diganti per `design/decisions/2026-06-07-monster-relic-rebrand.md`. **Nama currency "Meme Coins" sekarang TBD** (kandidat: `Relic Shards`, `Ancient Coins`) — semua mekanik wallet/faucet/sink/ladder TIDAK berubah, hanya label. Premium currency Phase 2 "Brain Cells" juga TBD (kandidat: `Relic Cores`). Token Tier-3 kandidat baru: **Relic Key**. Field kode (`coins`, `gems`) tetap.
+
 > ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **extensions and obsoletions**:
 > - **NEW sections needed**: §11 Capture Items Shop (faucet from Lobby shop) + §12 Raid Token Economy (gated entry for Tier 3 Boss).
 > - **OBSOLETED**: `raidLootPct = 0.20` lock (§8.3 + Open Q #2) — boss raid uses different loot mechanic.

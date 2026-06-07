@@ -6,6 +6,8 @@
 
 > **Read this first.** This document is the **single source of truth** for the post-2026-05-29 game vision. Any GDD update, code change, or feature decision after this date MUST reconcile against the 8 locked decisions below. Disagreement = update this doc (with explicit revision), then propagate.
 
+> **🔄 REVISION (2026-06-07) — Tema/lore diganti, mekanik tetap.** Lapisan tema dokumen ini ("Brainrot", "The Feed" internet-as-place, "CEO Brainrot", framing manager) **DIGANTI** oleh `design/decisions/2026-06-07-monster-relic-rebrand.md`: kreatur = **Monster Relic**, player = **Relic Hunter**, setting = **reruntuhan peradaban kuno**. Kedelapan keputusan mekanik di bawah **tetap berlaku penuh** — baca nama-nama bertema Brainrot di dokumen ini melalui tabel pemetaan §4 rebrand doc.
+
 ---
 
 ## 1. Executive summary
@@ -298,6 +300,7 @@ These need fresh GDDs. **Priority order** for design work (each blocks the next)
 | Date | Change | By |
 |---|---|---|
 | 2026-05-29 | Vision pivot decided in design conversation. 8 decisions locked. This doc authored. | Owner + Claude |
+| 2026-06-07 | **Theme rebrand**: Brainrot → Monster Relic, The Feed → reruntuhan kuno, player = Relic Hunter. Mekanik (8 decisions) tidak berubah. See `2026-06-07-monster-relic-rebrand.md`. | Owner + Claude |
 | (TBD) | systems-index v3.0 restructure | (next session) |
 | (TBD) | Obsoleted GDDs moved to archive | (next session) |
 | (TBD) | New foundation GDDs authored | (subsequent sessions) |

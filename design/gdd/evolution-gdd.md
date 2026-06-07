@@ -1,5 +1,7 @@
 # Work-Based Evolution + Level/XP Progression GDD
 
+> 🔄 **REBRAND NOTICE (2026-06-07)**: Tema diganti per `design/decisions/2026-06-07-monster-relic-rebrand.md` — kreatur "Brainrot" → **Monster Relic**, setting = reruntuhan kuno. **Semua mekanik evolusi + Level/XP TIDAK berubah.** Evolusi sekarang punya justifikasi lore natural: Monster Relic "berkembang menjadi berbagai spesies" pasca-ledakan Relic Inti. Open decision Element (rebrand doc §7) mungkin menambah axis baru di evolusi multi-branch Phase 2.
+
 > ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **minor reconciliation**:
 > - **XP source consolidated**: previously Raid wins (Battle #5) + Field Combat wins (Pet AI #25). Now **all combat-win XP routes through Pet AI #25** (sole pillar combat engine; Battle #5 cancelled). The Axis B Level/XP curve + formula + values unchanged.
 > - **Axis A milestone source `history.rwon`** (raids won) — semantics adapted: was "wins as raid attacker"; now "Tier 1 Colony Boss kills" + "Tier 2 Super Boss kills" + "Tier 3 Raid Boss kills" (combined). Per-tier separation may be added in a future revision if Evolution wants to gate per-tier milestones.

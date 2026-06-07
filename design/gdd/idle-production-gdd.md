@@ -1,5 +1,7 @@
 # Idle Production (Online + Offline) GDD — **WILL BE REWRITTEN as Kandang**
 
+> 🔄 **REBRAND NOTICE (2026-06-07)**: Tema diganti per `design/decisions/2026-06-07-monster-relic-rebrand.md` — kreatur "Brainrot" → **Monster Relic**. Nama **"Kandang" TETAP** (masih cocok: kandang monster milik Relic Hunter). Semua math produksi + multiplier personality + offline accrual TIDAK berubah. `kandang-gdd.md` (rewrite yang sudah direncanakan) ditulis langsung dengan terminologi baru.
+
 > ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD is **scheduled for rewrite + rename** as `kandang-gdd.md` per the Vision Pivot 2026-05-29. Changes:
 > - **Renamed**: "Showroom" → **"Kandang"** (utilitarian cage/pen vs display-flex showcase).
 > - **Demoted from pillar to "progress helper"**: idle production is no longer the spine of the game (hunting + boss raids are). Idle still accrues coins passively but is **NOT** the primary engagement loop.

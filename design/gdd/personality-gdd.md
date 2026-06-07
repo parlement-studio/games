@@ -1,5 +1,7 @@
 # Personality System GDD
 
+> 🔄 **REBRAND NOTICE (2026-06-07)**: Tema diganti per `design/decisions/2026-06-07-monster-relic-rebrand.md` — kreatur "Brainrot" → **Monster Relic**. **Sistem ini survive utuh**: 5 personality (Hyper/Lazy/Chaotic/Loyal/Rebel) netral tema, semua trait/formula/kode tetap. Catatan: lore baru menyebut monster ber-**elemen** — Element adalah axis TERPISAH dari Personality (open decision, lihat rebrand doc §7), bukan pengganti.
+
 > ⚠️ **POST-PIVOT NOTICE (2026-05-29)**: This GDD survives the Vision Pivot 2026-05-29 with **minor reconciliation**:
 > - **Battle behavior tag consumer changed**: previously consumed by both Battle #5 (turn-based) + Pet AI #25 (real-time, shared contract). Now **Pet AI #25 is sole consumer** (Battle #5 cancelled). The 5 tags + params + values remain unchanged; only the runtime dispatch surface is single-engine.
 > - **All other locks preserved**: 5 personality enum (Hyper/Lazy/Chaotic/Loyal/Rebel), trait table (production multipliers, break/walkout/morale params), `getBattleBehavior(id)` API, runtime state machine, F1–F5 formulas, roll weights + reroll mechanics.
