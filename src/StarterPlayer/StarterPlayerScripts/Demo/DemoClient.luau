@@ -40,6 +40,8 @@ export type InventoryItem = {
     evoStage: number, -- evolution stage (0..3); drives the ✨/🌟/💫 badge
     evolveCost: number?, -- server-computed coins for the NEXT stage; nil = MAX
     evolveMilestone: number?, -- level gate for the NEXT stage; nil = MAX
+    status: string, -- "bag" | "kandang" | "summon" (list shows ALL monsters now)
+    capturedAt: number, -- capture timestamp (sort "Terbaru")
     level: number, -- current progression level (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level

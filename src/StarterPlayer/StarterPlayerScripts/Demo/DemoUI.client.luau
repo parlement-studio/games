@@ -58,6 +58,11 @@ local DemoClient = require(script.Parent:WaitForChild("DemoClient"))
 
 local apply = UITheme.apply
 
+-- LY: layout constants + display registries live in ONE table instead of
+-- dozens of top-level locals — Luau caps a chunk at 200 local registers and
+-- this script was over it (UI failed to compile at all).
+local LY = {}
+
 -- Emoji badge for an element key; "" for nil/unknown so labels never break.
 local function elementEmoji(element: any): string
     local display = ElementConfig.display[element]
@@ -66,7 +71,7 @@ end
 
 -- RARITY badges (rarity doc R3). Common stays visually quiet (the default
 -- look); Uncommon+ get the tier tint so a good roll reads at a glance.
-local RARITY_FALLBACK = Color3.fromHex("#9CA3AF")
+LY.RARITY_FALLBACK = Color3.fromHex("#9CA3AF")
 
 -- Tier tint as a Color3 (card stroke etc.); grey fallback on nil/unknown.
 local function rarityColor(rarity: any): Color3
@@ -74,7 +79,7 @@ local function rarityColor(rarity: any): Color3
     if display then
         return Color3.fromHex(display.color)
     end
-    return RARITY_FALLBACK
+    return LY.RARITY_FALLBACK
 end
 
 -- RichText suffix for row labels: "" for Common/unknown (quiet), a colored
@@ -91,10 +96,10 @@ local function rarityTag(rarity: any): string
 end
 
 -- EVOLUTION stage badge (S2): "" at stage 0, ✨/🌟/💫 for stages 1-3.
-local STAGE_EMOJI = { "✨", "🌟", "💫" }
+LY.STAGE_EMOJI = { "✨", "🌟", "💫" }
 local function stageEmoji(stage: any): string
     if type(stage) == "number" and stage >= 1 then
-        return STAGE_EMOJI[math.min(math.floor(stage), #STAGE_EMOJI)]
+        return LY.STAGE_EMOJI[math.min(math.floor(stage), #LY.STAGE_EMOJI)]
     end
     return ""
 end
@@ -105,60 +110,55 @@ local Color = UITheme.Color
 local Font = UITheme.Font
 
 -- ── Layout constants (no magic numbers buried in calls) ─────────────────────
-local TOGGLE_KEY = Enum.KeyCode.B
-local PANEL_WIDTH = 360
-local PANEL_HEIGHT = 460
--- INVENTORY GRID: finger-sized cards laid out by a UIGridLayout that reflows.
--- A card is a square personality-color tile (emoji + short name + ⭐ Lv badge);
--- tapping it opens the stat sheet. >=72px keeps a comfortable tap target.
-local CARD_SIZE = 84 -- square card edge (>=72px finger target)
-local CARD_GAP = 8 -- spacing between cards in the grid
-local CARD_EMOJI_HEIGHT = 40 -- height of the big emoji block at the card top
-local CARD_NAME_HEIGHT = 16 -- personality short-name line under the emoji
-local CARD_BADGE_HEIGHT = 18 -- ⭐ Lv N badge line at the card bottom
+LY.TOGGLE_KEY = Enum.KeyCode.B
+LY.PANEL_WIDTH = 360
+LY.PANEL_HEIGHT = 460
+-- MONSTER GRID: wide rarity-bordered cards (mock), 3 per row via a scale-based
+-- UIGridLayout; tapping opens the stat sheet.
+LY.CARD_GAP = 8 -- spacing between cards in the grid
 -- Inventory panel ✕ close button (bumped to a >=44px touch target for mobile).
-local PANEL_CLOSE_SIZE = 44
+LY.PANEL_CLOSE_SIZE = 44
 
 -- ── STAT SHEET (per-monster detail modal) ──────────────────────────────────
 -- A centered, closeable modal opened by tapping an inventory card. Minimalist:
 -- header (emoji + name + ⭐ Lv + ✕), an XP bar, an HP/Power stat row, the effect
 -- one-liner + lifetime flavor (wins / coins made), then the action buttons.
-local SHEET_WIDTH = 380
-local SHEET_HEIGHT = 424 -- +64 for the EVOLVE row (S2 sink) above the actions
-local SHEET_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
-local SHEET_HEADER_HEIGHT = 44
-local SHEET_XP_TOP = 56 -- y of the XP bar block
-local SHEET_XP_HEIGHT = 28 -- XP bar block height
-local SHEET_XP_FILL_HEIGHT = 14 -- the filled track inside the XP block
-local SHEET_STATS_TOP = 100 -- y of the HP/Power stat row
-local SHEET_STATS_HEIGHT = 40
-local SHEET_EFFECT_TOP = 152 -- y of the effect one-liner
-local SHEET_EFFECT_HEIGHT = 28
-local SHEET_FLAVOR_TOP = 184 -- y of the wins / coins-made line
-local SHEET_FLAVOR_HEIGHT = 26
-local SHEET_ACTIONS_HEIGHT = 52 -- height of the bottom action-button row (>=44px)
-local SHEET_ACTION_GAP = 12 -- gap between the two action buttons
-local SHEET_DIVIDER_HEIGHT = 2 -- thin divider rule between sections
+LY.SHEET_WIDTH = 380
+LY.SHEET_HEIGHT = 424 -- +64 for the EVOLVE row (S2 sink) above the actions
+LY.SHEET_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
+LY.SHEET_HEADER_HEIGHT = 44
+LY.SHEET_XP_TOP = 56 -- y of the XP bar block
+LY.SHEET_XP_HEIGHT = 28 -- XP bar block height
+LY.SHEET_XP_FILL_HEIGHT = 14 -- the filled track inside the XP block
+LY.SHEET_STATS_TOP = 100 -- y of the HP/Power stat row
+LY.SHEET_STATS_HEIGHT = 40
+LY.SHEET_EFFECT_TOP = 152 -- y of the effect one-liner
+LY.SHEET_EFFECT_HEIGHT = 28
+LY.SHEET_FLAVOR_TOP = 184 -- y of the wins / coins-made line
+LY.SHEET_FLAVOR_HEIGHT = 26
+LY.SHEET_ACTIONS_HEIGHT = 52 -- height of the bottom action-button row (>=44px)
+LY.SHEET_ACTION_GAP = 12 -- gap between the two action buttons
+LY.SHEET_DIVIDER_HEIGHT = 2 -- thin divider rule between sections
 -- EVOLVE row (S2 sink): full-width button stacked ABOVE the action row.
-local SHEET_EVOLVE_HEIGHT = 52
+LY.SHEET_EVOLVE_HEIGHT = 52
 
 -- (Mobile bag FAB constants removed with the button — the top bar is the
 -- single launcher surface per owner feedback; B key remains.)
 
 -- Place menu (modal opened from a podium's Place (F) prompt).
-local PLACE_WIDTH = 380
-local PLACE_HEIGHT = 480
-local PLACE_TITLE_HEIGHT = 40
-local PLACE_LIST_TOP = 76
-local PLACE_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
+LY.PLACE_WIDTH = 380
+LY.PLACE_HEIGHT = 480
+LY.PLACE_TITLE_HEIGHT = 40
+LY.PLACE_LIST_TOP = 76
+LY.PLACE_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
 
 -- Coin HUD (middle-left; top-right is the inventory button). AUTO-COLLECT: no
 -- COLLECT button — just the climbing 🪙 total + a small "+N/s" rate line.
-local HUD_WIDTH = 240
-local HUD_HEIGHT = 72
+LY.HUD_WIDTH = 240
+LY.HUD_HEIGHT = 72
 -- How often (seconds) the climbing coin counter is refreshed from the local
 -- extrapolation. ~10 Hz keeps it smooth without burning frames on mobile.
-local HUD_REFRESH_SEC = 0.1
+LY.HUD_REFRESH_SEC = 0.1
 
 -- ── Top-level lifetime ───────────────────────────────────────────────────────
 local rootTrove = Trove.new()
@@ -251,9 +251,9 @@ apply(Instance.new("TextLabel"), {
 -- straight onto their tab; Galery / Mission are PLACEHOLDERS (visible, dimmed,
 -- no handler — "taruh saja tetapi tidak perlu di-on togglenya").
 -- ════════════════════════════════════════════════════════════════════════════
-local TOPBAR_HEIGHT = 48
-local TOPBAR_BTN_WIDTH = 118
-local TOPBAR_GAP = 12 -- breathing room between launcher buttons (owner feedback)
+LY.TOPBAR_HEIGHT = 48
+LY.TOPBAR_BTN_WIDTH = 118
+LY.TOPBAR_GAP = 12 -- breathing room between launcher buttons (owner feedback)
 
 local topBar = apply(Instance.new("Frame"), {
     Name = "TopBar",
@@ -261,7 +261,7 @@ local topBar = apply(Instance.new("Frame"), {
     -- ABSOLUTE top-right corner (owner: "mentokin saja kanan atas") — lives on
     -- the inset-IGNORING edgeGui, so 0,0 really is the screen corner.
     Position = UDim2.fromScale(1, 0),
-    Size = UDim2.fromOffset(TOPBAR_BTN_WIDTH * 5 + TOPBAR_GAP * 4 + 20, TOPBAR_HEIGHT),
+    Size = UDim2.fromOffset(LY.TOPBAR_BTN_WIDTH * 5 + LY.TOPBAR_GAP * 4 + 20, LY.TOPBAR_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BackgroundTransparency = 0.15,
     BorderSizePixel = 0,
@@ -271,7 +271,7 @@ local topBar = apply(Instance.new("Frame"), {
 apply(Instance.new("UIListLayout"), {
     FillDirection = Enum.FillDirection.Horizontal,
     SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, TOPBAR_GAP),
+    Padding = UDim.new(0, LY.TOPBAR_GAP),
     Parent = topBar,
 })
 
@@ -280,7 +280,7 @@ local function makeTopButton(order: number, text: string, active: boolean): Text
         Name = "Top" .. order,
         LayoutOrder = order,
         AutoButtonColor = active,
-        Size = UDim2.fromOffset(TOPBAR_BTN_WIDTH, TOPBAR_HEIGHT - 12),
+        Size = UDim2.fromOffset(LY.TOPBAR_BTN_WIDTH, LY.TOPBAR_HEIGHT - 12),
         BackgroundColor3 = if active then Color.CrateButton else Color.SlotEmpty,
         BackgroundTransparency = if active then 0 else 0.4,
         BorderSizePixel = 0,
@@ -306,7 +306,7 @@ local coinHud = apply(Instance.new("Frame"), {
     Name = "CoinHud",
     AnchorPoint = Vector2.new(0, 0),
     Position = UDim2.fromOffset(16, 16),
-    Size = UDim2.fromOffset(HUD_WIDTH, HUD_HEIGHT),
+    Size = UDim2.fromOffset(LY.HUD_WIDTH, LY.HUD_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BorderSizePixel = 0,
     Parent = screen,
@@ -347,19 +347,19 @@ local rateLabel = apply(Instance.new("TextLabel"), {
 -- REPLICATED Fighter_* models directly (attributes + Humanoid HP) on a 4 Hz
 -- throttle — zero extra remote traffic, presentation only.
 -- ════════════════════════════════════════════════════════════════════════════
-local SUMMON_PANEL_WIDTH = 230
-local SUMMON_ROW_HEIGHT = 64
-local SUMMON_MAX = DemoConfig.combat.maxActiveFighters
-local SUMMON_REFRESH_SEC = 0.25
+LY.SUMMON_PANEL_WIDTH = 230
+LY.SUMMON_ROW_HEIGHT = 64
+LY.SUMMON_MAX = DemoConfig.combat.maxActiveFighters
+LY.SUMMON_REFRESH_SEC = 0.25
 
-local SUMMON_PANEL_FULL = 44 + (SUMMON_ROW_HEIGHT + 6) * SUMMON_MAX + 10
-local SUMMON_PANEL_COLLAPSED = 48 -- header-only height when hidden
+LY.SUMMON_PANEL_FULL = 44 + (LY.SUMMON_ROW_HEIGHT + 6) * LY.SUMMON_MAX + 10
+LY.SUMMON_PANEL_COLLAPSED = 48 -- header-only height when hidden
 
 local summonPanel = apply(Instance.new("Frame"), {
     Name = "SummonPanel",
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, 0, 0, TOPBAR_HEIGHT + 8), -- flush right, under the bar
-    Size = UDim2.fromOffset(SUMMON_PANEL_WIDTH, SUMMON_PANEL_FULL),
+    Position = UDim2.new(1, 0, 0, LY.TOPBAR_HEIGHT + 8), -- flush right, under the bar
+    Size = UDim2.fromOffset(LY.SUMMON_PANEL_WIDTH, LY.SUMMON_PANEL_FULL),
     BackgroundColor3 = Color.Panel,
     BackgroundTransparency = 0.1,
     BorderSizePixel = 0,
@@ -416,12 +416,12 @@ local summonEmpty = apply(Instance.new("TextLabel"), {
 -- name+badges on top and an HP bar + numbers below; hidden when unused.
 type SummonRow = { frame: Frame, name: TextLabel, hpFill: Frame, hpText: TextLabel }
 local summonRows: { SummonRow } = {}
-for i = 1, SUMMON_MAX do
+for i = 1, LY.SUMMON_MAX do
     local frame = apply(Instance.new("Frame"), {
         Name = "SummonRow" .. i,
         Visible = false,
-        Position = UDim2.fromOffset(0, 40 + (i - 1) * (SUMMON_ROW_HEIGHT + 6)),
-        Size = UDim2.new(1, 0, 0, SUMMON_ROW_HEIGHT),
+        Position = UDim2.fromOffset(0, 40 + (i - 1) * (LY.SUMMON_ROW_HEIGHT + 6)),
+        Size = UDim2.new(1, 0, 0, LY.SUMMON_ROW_HEIGHT),
         BackgroundColor3 = Color.PanelLight,
         BorderSizePixel = 0,
         ZIndex = 15,
@@ -478,7 +478,7 @@ end
 local summonAccum = 0
 rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
     summonAccum += dt
-    if summonAccum < SUMMON_REFRESH_SEC then
+    if summonAccum < LY.SUMMON_REFRESH_SEC then
         return
     end
     summonAccum = 0
@@ -487,7 +487,7 @@ rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
     end
     local found = 0
     for _, m in workspace:GetChildren() do
-        if found >= SUMMON_MAX then
+        if found >= LY.SUMMON_MAX then
             break
         end
         if m:IsA("Model") and m.Name:match("^Fighter_") then
@@ -509,7 +509,7 @@ rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
             end
         end
     end
-    for i = found + 1, SUMMON_MAX do
+    for i = found + 1, LY.SUMMON_MAX do
         summonRows[i].frame.Visible = false
     end
     summonEmpty.Visible = found == 0
@@ -519,8 +519,10 @@ end))
 rootTrove:Add(summonToggle.Activated:Connect(function()
     summonCollapsed = not summonCollapsed
     summonToggle.Text = if summonCollapsed then "▼" else "▲"
-    summonPanel.Size =
-        UDim2.fromOffset(SUMMON_PANEL_WIDTH, if summonCollapsed then SUMMON_PANEL_COLLAPSED else SUMMON_PANEL_FULL)
+    summonPanel.Size = UDim2.fromOffset(
+        LY.SUMMON_PANEL_WIDTH,
+        if summonCollapsed then LY.SUMMON_PANEL_COLLAPSED else LY.SUMMON_PANEL_FULL
+    )
     if summonCollapsed then
         for _, row in summonRows do
             row.frame.Visible = false
@@ -537,7 +539,7 @@ local panel = apply(Instance.new("Frame"), {
     Visible = false,
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT),
+    Size = UDim2.fromOffset(LY.PANEL_WIDTH, LY.PANEL_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BorderSizePixel = 0,
     ZIndex = 20,
@@ -550,7 +552,7 @@ apply(Instance.new("TextLabel"), {
     Name = "Title",
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, -(PANEL_CLOSE_SIZE + 8), 0, 40),
+    Size = UDim2.new(1, -(LY.PANEL_CLOSE_SIZE + 8), 0, 40),
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
@@ -564,7 +566,7 @@ local closeButton = apply(Instance.new("TextButton"), {
     Name = "Close",
     AnchorPoint = Vector2.new(1, 0),
     Position = UDim2.fromScale(1, 0),
-    Size = UDim2.fromOffset(PANEL_CLOSE_SIZE, PANEL_CLOSE_SIZE),
+    Size = UDim2.fromOffset(LY.PANEL_CLOSE_SIZE, LY.PANEL_CLOSE_SIZE),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     FontFace = Font.Heavy,
@@ -576,15 +578,15 @@ local closeButton = apply(Instance.new("TextButton"), {
 }, { corner(10), padding(8) })
 
 -- ── TAB BAR (Item / Monster / Skill) ────────────────────────────────────────
-local TAB_BAR_TOP = 44
-local TAB_BAR_HEIGHT = 40
-local CONTENT_TOP = TAB_BAR_TOP + TAB_BAR_HEIGHT + 8 -- content frames start here
+LY.TAB_BAR_TOP = 44
+LY.TAB_BAR_HEIGHT = 40
+LY.CONTENT_TOP = LY.TAB_BAR_TOP + LY.TAB_BAR_HEIGHT + 8 -- content frames start here
 
 local tabBar = apply(Instance.new("Frame"), {
     Name = "Tabs",
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(0, TAB_BAR_TOP),
-    Size = UDim2.new(1, 0, 0, TAB_BAR_HEIGHT),
+    Position = UDim2.fromOffset(0, LY.TAB_BAR_TOP),
+    Size = UDim2.new(1, 0, 0, LY.TAB_BAR_HEIGHT),
     ZIndex = 21,
     Parent = panel,
 })
@@ -595,7 +597,7 @@ apply(Instance.new("UIListLayout"), {
     Parent = tabBar,
 })
 
-local TAB_ACTIVE = Color3.fromRGB(42, 157, 113)
+LY.TAB_ACTIVE = Color3.fromRGB(42, 157, 113)
 local function makeTab(order: number, text: string): TextButton
     return apply(Instance.new("TextButton"), {
         Name = "Tab" .. order,
@@ -616,12 +618,87 @@ local tabItems = makeTab(1, "🎒 Item")
 local tabMonsters = makeTab(2, "🐾 Monster")
 local tabSkills = makeTab(3, "🌟 Skill")
 
--- ── MONSTER tab content: the original card grid ─────────────────────────────
+-- ── MONSTER tab content (per owner mock): controls row (element filter chips
+-- left + sort cycle right) above a WIDE-CARD grid (3 columns).
+LY.MONSTER_CONTROLS_HEIGHT = 40
+LY.MONSTER_GRID_TOP = LY.CONTENT_TOP + LY.MONSTER_CONTROLS_HEIGHT + 8
+LY.WIDE_CARD_HEIGHT = 116
+
+local monsterControls = apply(Instance.new("Frame"), {
+    Name = "MonsterControls",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, LY.CONTENT_TOP),
+    Size = UDim2.new(1, 0, 0, LY.MONSTER_CONTROLS_HEIGHT),
+    ZIndex = 21,
+    Parent = panel,
+})
+
+-- Filter chips (left): "Semua" + one circle per element.
+local filterRow = apply(Instance.new("Frame"), {
+    Name = "Filters",
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, -150, 1, 0),
+    ZIndex = 22,
+    Parent = monsterControls,
+})
+apply(Instance.new("UIListLayout"), {
+    FillDirection = Enum.FillDirection.Horizontal,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 8),
+    Parent = filterRow,
+})
+
+LY.FILTER_ACTIVE = Color3.fromRGB(59, 130, 246) -- mock: blue highlight
+local monsterFilter: string = "All"
+local monsterSort: string = "level" -- "level" | "rarity" | "new"
+local filterButtons: { [string]: TextButton } = {}
+
+local function makeFilterChip(order: number, key: string, text: string, width: number): TextButton
+    local chip = apply(Instance.new("TextButton"), {
+        Name = "Filter" .. key,
+        LayoutOrder = order,
+        AutoButtonColor = true,
+        Size = UDim2.fromOffset(width, LY.MONSTER_CONTROLS_HEIGHT - 4),
+        BackgroundColor3 = Color.SlotEmpty,
+        BorderSizePixel = 0,
+        FontFace = Font.Heavy,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        Text = text,
+        ZIndex = 23,
+        Parent = filterRow,
+    }, { corner(18), padding(6) })
+    filterButtons[key] = chip
+    return chip
+end
+makeFilterChip(1, "All", "Semua", 86)
+for i, elementKey in ipairs(ElementConfig.order) do
+    makeFilterChip(1 + i, elementKey, ElementConfig.display[elementKey].emoji, 44)
+end
+
+-- Sort cycle button (right): Level ↓ -> Rarity ↓ -> Terbaru -> ...
+local sortBtn = apply(Instance.new("TextButton"), {
+    Name = "SortBtn",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.fromScale(1, 0),
+    Size = UDim2.fromOffset(140, LY.MONSTER_CONTROLS_HEIGHT - 4),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "Level ↓",
+    ZIndex = 23,
+    Parent = monsterControls,
+}, { corner(10), padding(6) })
+
 local list = apply(Instance.new("ScrollingFrame"), {
     Name = "List",
-    Position = UDim2.fromOffset(0, CONTENT_TOP),
-    Size = UDim2.new(1, 0, 1, -CONTENT_TOP),
+    Position = UDim2.fromOffset(0, LY.MONSTER_GRID_TOP),
+    Size = UDim2.new(1, 0, 1, -LY.MONSTER_GRID_TOP),
     BackgroundColor3 = Color.SlotEmpty,
+    BackgroundTransparency = 0.5,
     BorderSizePixel = 0,
     ScrollBarThickness = 6,
     CanvasSize = UDim2.new(),
@@ -630,14 +707,12 @@ local list = apply(Instance.new("ScrollingFrame"), {
     Parent = panel,
 }, { corner(12), padding(8) })
 
--- GRID: cards reflow across the panel width and wrap to new rows; the scroll +
--- AutomaticCanvasSize handle many monsters. Centered horizontally so a partial
--- last row stays balanced.
+-- WIDE-CARD GRID (mock): 3 columns, scale-based cells so the 80% panel fills.
 apply(Instance.new("UIGridLayout"), {
-    CellSize = UDim2.fromOffset(CARD_SIZE, CARD_SIZE),
-    CellPadding = UDim2.fromOffset(CARD_GAP, CARD_GAP),
+    CellSize = UDim2.new(1 / 3, -LY.CARD_GAP, 0, LY.WIDE_CARD_HEIGHT),
+    CellPadding = UDim2.fromOffset(LY.CARD_GAP, LY.CARD_GAP),
     FillDirection = Enum.FillDirection.Horizontal,
-    HorizontalAlignment = Enum.HorizontalAlignment.Center,
+    HorizontalAlignment = Enum.HorizontalAlignment.Left,
     SortOrder = Enum.SortOrder.LayoutOrder,
     Parent = list,
 })
@@ -649,7 +724,7 @@ local emptyLabel = apply(Instance.new("TextLabel"), {
     Name = "Empty",
     BackgroundTransparency = 1,
     AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.new(0.5, 0, 0, CONTENT_TOP + 16),
+    Position = UDim2.new(0.5, 0, 0, LY.CONTENT_TOP + 16),
     Size = UDim2.new(1, -16, 0, 40),
     FontFace = Font.Bold,
     TextColor3 = Color.TextDim,
@@ -664,8 +739,8 @@ local emptyLabel = apply(Instance.new("TextLabel"), {
 local itemsList = apply(Instance.new("ScrollingFrame"), {
     Name = "ItemsList",
     Visible = false,
-    Position = UDim2.fromOffset(0, CONTENT_TOP),
-    Size = UDim2.new(1, 0, 1, -CONTENT_TOP),
+    Position = UDim2.fromOffset(0, LY.CONTENT_TOP),
+    Size = UDim2.new(1, 0, 1, -LY.CONTENT_TOP),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     ScrollBarThickness = 6,
@@ -785,8 +860,8 @@ end
 local skillsList = apply(Instance.new("ScrollingFrame"), {
     Name = "SkillsList",
     Visible = false,
-    Position = UDim2.fromOffset(0, CONTENT_TOP),
-    Size = UDim2.new(1, 0, 1, -CONTENT_TOP),
+    Position = UDim2.fromOffset(0, LY.CONTENT_TOP),
+    Size = UDim2.new(1, 0, 1, -LY.CONTENT_TOP),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     ScrollBarThickness = 6,
@@ -864,13 +939,23 @@ local function setTab(which: string)
     local isItems = which == "items"
     local isMonsters = which == "monsters"
     local isSkills = which == "skills"
+    -- MOCK: the Monster tab takes ~80% of the screen with a semi-transparent
+    -- backdrop; the other tabs keep the compact opaque panel.
+    if isMonsters then
+        panel.Size = UDim2.fromScale(0.8, 0.8)
+        panel.BackgroundTransparency = 0.25
+    else
+        panel.Size = UDim2.fromOffset(LY.PANEL_WIDTH, LY.PANEL_HEIGHT)
+        panel.BackgroundTransparency = 0
+    end
+    monsterControls.Visible = isMonsters
     itemsList.Visible = isItems
     list.Visible = isMonsters
     emptyLabel.Visible = isMonsters and emptyLabel.Visible -- re-evaluated by render()
     skillsList.Visible = isSkills
-    tabItems.BackgroundColor3 = if isItems then TAB_ACTIVE else Color.SlotEmpty
-    tabMonsters.BackgroundColor3 = if isMonsters then TAB_ACTIVE else Color.SlotEmpty
-    tabSkills.BackgroundColor3 = if isSkills then TAB_ACTIVE else Color.SlotEmpty
+    tabItems.BackgroundColor3 = if isItems then LY.TAB_ACTIVE else Color.SlotEmpty
+    tabMonsters.BackgroundColor3 = if isMonsters then LY.TAB_ACTIVE else Color.SlotEmpty
+    tabSkills.BackgroundColor3 = if isSkills then LY.TAB_ACTIVE else Color.SlotEmpty
     if isMonsters then
         -- emptyLabel visibility belongs to the monster grid only.
         emptyLabel.Visible = #DemoClient.Inventory == 0
@@ -901,6 +986,10 @@ local cardsTrove = rootTrove:Extend()
 -- stat sheet for this item). `trove` owns the card so the caller controls lifetime;
 -- `zBase` is the card's ZIndex (children sit at zBase+1). Cards are display-only —
 -- the actual Summon/Deploy actions live in the stat sheet.
+-- WIDE CARD (per owner mock): rarity-tinted border + dark body; element chip
+-- top-left, evo badge top-right, BIG element emoji center, personality
+-- small-caps + species name + Lv bottom-left, rarity-colored XP bar along the
+-- bottom, status icon (🏠/⚔) bottom-right when not in the bag.
 local function buildCard(
     parent: Instance,
     trove: typeof(rootTrove),
@@ -909,74 +998,158 @@ local function buildCard(
     zBase: number,
     onTap: () -> ()
 )
-    local theme = UITheme.personality(item.personality)
     local childZ = zBase + 1
+    local rColor = rarityColor(item.rarity)
 
     local card = trove:Add(apply(Instance.new("TextButton"), {
         Name = "Card",
         LayoutOrder = order,
         AutoButtonColor = true,
         Text = "",
-        BackgroundColor3 = theme.color,
+        BackgroundColor3 = Color.PanelLight,
+        BackgroundTransparency = 0.25, -- semi-transparent body (mock)
         BorderSizePixel = 0,
         ZIndex = zBase,
         Parent = parent,
-        -- RARITY (R3): the card BORDER carries the tier tint — Common reads
-        -- like the old neutral stroke, Uncommon+ pop their color at a glance.
-    }, { corner(12), stroke(rarityColor(item.rarity), 3), padding(4) }))
+    }, { corner(12), stroke(rColor, 2), padding(8) }))
     trove:Add(card.Activated:Connect(onTap))
 
-    -- Big personality emoji at the top of the card.
+    -- Element chip (top-left, small circle).
     apply(Instance.new("TextLabel"), {
-        Name = "Emoji",
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(1, 0, 0, CARD_EMOJI_HEIGHT),
+        Name = "ElementChip",
+        BackgroundColor3 = Color.Panel,
+        BackgroundTransparency = 0.2,
+        Size = UDim2.fromOffset(28, 28),
         FontFace = Font.Regular,
-        TextColor3 = Color.TextOnBright,
+        TextColor3 = Color.Text,
         TextScaled = true,
-        Text = theme.emoji,
+        Text = elementEmoji(item.element),
+        ZIndex = childZ,
+        Parent = card,
+    }, { corner(14), padding(3) })
+
+    -- Evo badge (top-right) — only when evolved.
+    if (item.evoStage or 0) > 0 then
+        apply(Instance.new("TextLabel"), {
+            Name = "EvoBadge",
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.fromScale(1, 0),
+            BackgroundColor3 = Color.Panel,
+            BackgroundTransparency = 0.2,
+            Size = UDim2.fromOffset(28, 28),
+            FontFace = Font.Regular,
+            TextColor3 = Color.Text,
+            TextScaled = true,
+            Text = stageEmoji(item.evoStage),
+            ZIndex = childZ,
+            Parent = card,
+        }, { corner(14), padding(3) })
+    end
+
+    -- BIG element emoji, centered (model ViewportFrame replaces this later).
+    apply(Instance.new("TextLabel"), {
+        Name = "Portrait",
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 2),
+        Size = UDim2.fromOffset(48, 48),
+        BackgroundTransparency = 1,
+        FontFace = Font.Regular,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        Text = elementEmoji(item.element),
         ZIndex = childZ,
         Parent = card,
     })
 
-    -- Personality short name under the emoji.
+    -- Bottom-left text block: PERSONALITY (small caps dim) / SpeciesName / Lv.
     apply(Instance.new("TextLabel"), {
-        Name = "Name",
+        Name = "Personality",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 0, 1, -42),
+        Size = UDim2.new(0.7, 0, 0, 12),
         BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(0, CARD_EMOJI_HEIGHT),
-        Size = UDim2.new(1, 0, 0, CARD_NAME_HEIGHT),
-        FontFace = Font.Heavy,
-        TextColor3 = Color.TextOnBright,
+        FontFace = Font.Bold,
+        TextColor3 = Color.TextDim,
         TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
         Text = string.upper(item.personality),
         ZIndex = childZ,
         Parent = card,
     })
-
-    -- ⭐ Lv N badge pinned to the card bottom.
     apply(Instance.new("TextLabel"), {
-        Name = "Level",
-        AnchorPoint = Vector2.new(0.5, 1),
-        Position = UDim2.fromScale(0.5, 1),
-        Size = UDim2.new(1, 0, 0, CARD_BADGE_HEIGHT),
-        BackgroundColor3 = Color.Panel,
-        BackgroundTransparency = 0.15,
-        FontFace = Font.Bold,
+        Name = "SpeciesName",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 0, 1, -24),
+        Size = UDim2.new(0.7, 0, 0, 18),
+        BackgroundTransparency = 1,
+        FontFace = Font.Heavy,
         TextColor3 = Color.Text,
         TextScaled = true,
-        Text = string.format("⭐ Lv%d %s%s", item.level, elementEmoji(item.element), stageEmoji(item.evoStage)),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = DemoConfig.speciesNames[item.element] or string.upper(item.personality),
         ZIndex = childZ,
         Parent = card,
-    }, { corner(6) })
+    })
+    apply(Instance.new("TextLabel"), {
+        Name = "Level",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 0, 1, -10),
+        Size = UDim2.new(0.5, 0, 0, 12),
+        BackgroundTransparency = 1,
+        FontFace = Font.Bold,
+        TextColor3 = Color.TextDim,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = ("Lv %d"):format(item.level),
+        ZIndex = childZ,
+        Parent = card,
+    })
+
+    -- XP bar along the bottom (fill tinted by rarity, per mock).
+    local xpTrack = apply(Instance.new("Frame"), {
+        Name = "XpTrack",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.fromScale(0, 1),
+        Size = UDim2.new(1, -32, 0, 5),
+        BackgroundColor3 = Color.SlotEmpty,
+        BorderSizePixel = 0,
+        ZIndex = childZ,
+        Parent = card,
+    }, { corner(3) })
+    local denom = if item.xpToNext > 0 then item.xpToNext else 1
+    apply(Instance.new("Frame"), {
+        Name = "XpFill",
+        Size = UDim2.fromScale(math.clamp(item.xp / denom, 0, 1), 1),
+        BackgroundColor3 = rColor,
+        BorderSizePixel = 0,
+        ZIndex = childZ + 1,
+        Parent = xpTrack,
+    }, { corner(3) })
+
+    -- Status icon bottom-right (🏠 kandang / ⚔ summon); bag = clean.
+    if item.status == "kandang" or item.status == "summon" then
+        apply(Instance.new("TextLabel"), {
+            Name = "Status",
+            AnchorPoint = Vector2.new(1, 1),
+            Position = UDim2.fromScale(1, 1),
+            Size = UDim2.fromOffset(24, 24),
+            BackgroundTransparency = 1,
+            FontFace = Font.Regular,
+            TextColor3 = Color.Text,
+            TextScaled = true,
+            Text = if item.status == "kandang" then "🏠" else "⚔",
+            ZIndex = childZ,
+            Parent = card,
+        })
+    end
 end
 
 -- Build one creature ROW into `parent` (used by the PLACE MENU, which keeps its
 -- list style): emoji + name + color-coded personality badge. Tappable; `onTap`
 -- fires on tap. `trove` owns the row; `zBase` is the row ZIndex (children +1).
-local PLACE_ROW_HEIGHT = 56
-local PLACE_ROW_BADGE_WIDTH = 78
-local PLACE_ROW_BADGE_GAP = 6
+LY.PLACE_ROW_HEIGHT = 56
+LY.PLACE_ROW_BADGE_WIDTH = 78
+LY.PLACE_ROW_BADGE_GAP = 6
 local function buildRow(
     parent: Instance,
     trove: typeof(rootTrove),
@@ -993,7 +1166,7 @@ local function buildRow(
         LayoutOrder = order,
         AutoButtonColor = true,
         Text = "",
-        Size = UDim2.new(1, 0, 0, PLACE_ROW_HEIGHT),
+        Size = UDim2.new(1, 0, 0, LY.PLACE_ROW_HEIGHT),
         BackgroundColor3 = Color.PanelLight,
         BorderSizePixel = 0,
         ZIndex = zBase,
@@ -1005,7 +1178,7 @@ local function buildRow(
         Name = "Emoji",
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(0, PLACE_ROW_HEIGHT - 12, 1, 0),
+        Size = UDim2.new(0, LY.PLACE_ROW_HEIGHT - 12, 1, 0),
         FontFace = Font.Regular,
         TextColor3 = Color.Text,
         TextScaled = true,
@@ -1018,8 +1191,8 @@ local function buildRow(
         Name = "Name",
         BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.new(0, PLACE_ROW_HEIGHT, 0.5, 0),
-        Size = UDim2.new(1, -PLACE_ROW_HEIGHT - PLACE_ROW_BADGE_WIDTH - PLACE_ROW_BADGE_GAP, 1, -12),
+        Position = UDim2.new(0, LY.PLACE_ROW_HEIGHT, 0.5, 0),
+        Size = UDim2.new(1, -LY.PLACE_ROW_HEIGHT - LY.PLACE_ROW_BADGE_WIDTH - LY.PLACE_ROW_BADGE_GAP, 1, -12),
         FontFace = Font.Bold,
         TextColor3 = Color.Text,
         TextScaled = true,
@@ -1040,7 +1213,7 @@ local function buildRow(
         Name = "Badge",
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.fromScale(1, 0.5),
-        Size = UDim2.fromOffset(PLACE_ROW_BADGE_WIDTH, PLACE_ROW_HEIGHT - 18),
+        Size = UDim2.fromOffset(LY.PLACE_ROW_BADGE_WIDTH, LY.PLACE_ROW_HEIGHT - 18),
         BackgroundColor3 = theme.color,
         BorderSizePixel = 0,
         FontFace = Font.Heavy,
@@ -1109,7 +1282,7 @@ local sheetPanel = apply(Instance.new("TextButton"), {
     Text = "",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(SHEET_WIDTH, SHEET_HEIGHT),
+    Size = UDim2.fromOffset(LY.SHEET_WIDTH, LY.SHEET_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BorderSizePixel = 0,
     ZIndex = 51,
@@ -1121,7 +1294,7 @@ local sheetHeader = apply(Instance.new("TextLabel"), {
     Name = "Header",
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, -(SHEET_CLOSE_SIZE + 8), 0, SHEET_HEADER_HEIGHT),
+    Size = UDim2.new(1, -(LY.SHEET_CLOSE_SIZE + 8), 0, LY.SHEET_HEADER_HEIGHT),
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
@@ -1136,7 +1309,7 @@ local sheetClose = apply(Instance.new("TextButton"), {
     Name = "Close",
     AnchorPoint = Vector2.new(1, 0),
     Position = UDim2.fromScale(1, 0),
-    Size = UDim2.fromOffset(SHEET_CLOSE_SIZE, SHEET_CLOSE_SIZE),
+    Size = UDim2.fromOffset(LY.SHEET_CLOSE_SIZE, LY.SHEET_CLOSE_SIZE),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     FontFace = Font.Heavy,
@@ -1151,8 +1324,8 @@ local sheetClose = apply(Instance.new("TextButton"), {
 local sheetXpTrack = apply(Instance.new("Frame"), {
     Name = "XpTrack",
     AnchorPoint = Vector2.new(0, 0.5),
-    Position = UDim2.fromOffset(0, SHEET_XP_TOP + SHEET_XP_HEIGHT / 2),
-    Size = UDim2.new(0.55, 0, 0, SHEET_XP_FILL_HEIGHT),
+    Position = UDim2.fromOffset(0, LY.SHEET_XP_TOP + LY.SHEET_XP_HEIGHT / 2),
+    Size = UDim2.new(0.55, 0, 0, LY.SHEET_XP_FILL_HEIGHT),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     ZIndex = 52,
@@ -1173,8 +1346,8 @@ local sheetXpLabel = apply(Instance.new("TextLabel"), {
     Name = "XpLabel",
     BackgroundTransparency = 1,
     AnchorPoint = Vector2.new(1, 0.5),
-    Position = UDim2.new(1, 0, 0, SHEET_XP_TOP + SHEET_XP_HEIGHT / 2),
-    Size = UDim2.new(0.4, 0, 0, SHEET_XP_HEIGHT),
+    Position = UDim2.new(1, 0, 0, LY.SHEET_XP_TOP + LY.SHEET_XP_HEIGHT / 2),
+    Size = UDim2.new(0.4, 0, 0, LY.SHEET_XP_HEIGHT),
     FontFace = Font.Bold,
     TextColor3 = Color.TextDim,
     TextScaled = true,
@@ -1187,8 +1360,8 @@ local sheetXpLabel = apply(Instance.new("TextLabel"), {
 -- Divider above the stat row.
 apply(Instance.new("Frame"), {
     Name = "Divider1",
-    Position = UDim2.fromOffset(0, SHEET_STATS_TOP - 8),
-    Size = UDim2.new(1, 0, 0, SHEET_DIVIDER_HEIGHT),
+    Position = UDim2.fromOffset(0, LY.SHEET_STATS_TOP - 8),
+    Size = UDim2.new(1, 0, 0, LY.SHEET_DIVIDER_HEIGHT),
     BackgroundColor3 = Color.Stroke,
     BorderSizePixel = 0,
     ZIndex = 52,
@@ -1199,8 +1372,8 @@ apply(Instance.new("Frame"), {
 local sheetHp = apply(Instance.new("TextLabel"), {
     Name = "Hp",
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(0, SHEET_STATS_TOP),
-    Size = UDim2.new(0.5, 0, 0, SHEET_STATS_HEIGHT),
+    Position = UDim2.fromOffset(0, LY.SHEET_STATS_TOP),
+    Size = UDim2.new(0.5, 0, 0, LY.SHEET_STATS_HEIGHT),
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
@@ -1214,8 +1387,8 @@ local sheetPower = apply(Instance.new("TextLabel"), {
     Name = "Power",
     BackgroundTransparency = 1,
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, 0, 0, SHEET_STATS_TOP),
-    Size = UDim2.new(0.5, 0, 0, SHEET_STATS_HEIGHT),
+    Position = UDim2.new(1, 0, 0, LY.SHEET_STATS_TOP),
+    Size = UDim2.new(0.5, 0, 0, LY.SHEET_STATS_HEIGHT),
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
@@ -1229,8 +1402,8 @@ local sheetPower = apply(Instance.new("TextLabel"), {
 local sheetEffect = apply(Instance.new("TextLabel"), {
     Name = "Effect",
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(0, SHEET_EFFECT_TOP),
-    Size = UDim2.new(1, 0, 0, SHEET_EFFECT_HEIGHT),
+    Position = UDim2.fromOffset(0, LY.SHEET_EFFECT_TOP),
+    Size = UDim2.new(1, 0, 0, LY.SHEET_EFFECT_HEIGHT),
     FontFace = Font.Bold,
     TextColor3 = Color.Text,
     TextScaled = true,
@@ -1244,8 +1417,8 @@ local sheetEffect = apply(Instance.new("TextLabel"), {
 local sheetWins = apply(Instance.new("TextLabel"), {
     Name = "Wins",
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(0, SHEET_FLAVOR_TOP),
-    Size = UDim2.new(0.5, 0, 0, SHEET_FLAVOR_HEIGHT),
+    Position = UDim2.fromOffset(0, LY.SHEET_FLAVOR_TOP),
+    Size = UDim2.new(0.5, 0, 0, LY.SHEET_FLAVOR_HEIGHT),
     FontFace = Font.Bold,
     TextColor3 = Color.TextDim,
     TextScaled = true,
@@ -1259,8 +1432,8 @@ local sheetCoins = apply(Instance.new("TextLabel"), {
     Name = "CoinsMade",
     BackgroundTransparency = 1,
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, 0, 0, SHEET_FLAVOR_TOP),
-    Size = UDim2.new(0.5, 0, 0, SHEET_FLAVOR_HEIGHT),
+    Position = UDim2.new(1, 0, 0, LY.SHEET_FLAVOR_TOP),
+    Size = UDim2.new(0.5, 0, 0, LY.SHEET_FLAVOR_HEIGHT),
     FontFace = Font.Bold,
     TextColor3 = Color.Coin,
     TextScaled = true,
@@ -1274,8 +1447,8 @@ local sheetCoins = apply(Instance.new("TextLabel"), {
 apply(Instance.new("Frame"), {
     Name = "Divider2",
     AnchorPoint = Vector2.new(0, 1),
-    Position = UDim2.new(0, 0, 1, -(SHEET_ACTIONS_HEIGHT + SHEET_ACTION_GAP + SHEET_EVOLVE_HEIGHT + 8)),
-    Size = UDim2.new(1, 0, 0, SHEET_DIVIDER_HEIGHT),
+    Position = UDim2.new(0, 0, 1, -(LY.SHEET_ACTIONS_HEIGHT + LY.SHEET_ACTION_GAP + LY.SHEET_EVOLVE_HEIGHT + 8)),
+    Size = UDim2.new(1, 0, 0, LY.SHEET_DIVIDER_HEIGHT),
     BackgroundColor3 = Color.Stroke,
     BorderSizePixel = 0,
     ZIndex = 52,
@@ -1288,8 +1461,8 @@ apply(Instance.new("Frame"), {
 local sheetEvolve = apply(Instance.new("TextButton"), {
     Name = "EvolveBtn",
     AnchorPoint = Vector2.new(0, 1),
-    Position = UDim2.new(0, 0, 1, -(SHEET_ACTIONS_HEIGHT + SHEET_ACTION_GAP)),
-    Size = UDim2.new(1, 0, 0, SHEET_EVOLVE_HEIGHT),
+    Position = UDim2.new(0, 0, 1, -(LY.SHEET_ACTIONS_HEIGHT + LY.SHEET_ACTION_GAP)),
+    Size = UDim2.new(1, 0, 0, LY.SHEET_EVOLVE_HEIGHT),
     AutoButtonColor = true,
     BackgroundColor3 = Color.PanelLight,
     BorderSizePixel = 0,
@@ -1306,7 +1479,7 @@ local sheetSummon = apply(Instance.new("TextButton"), {
     Name = "SummonBtn",
     AnchorPoint = Vector2.new(0, 1),
     Position = UDim2.fromScale(0, 1),
-    Size = UDim2.new(0.5, -SHEET_ACTION_GAP / 2, 0, SHEET_ACTIONS_HEIGHT),
+    Size = UDim2.new(0.5, -LY.SHEET_ACTION_GAP / 2, 0, LY.SHEET_ACTIONS_HEIGHT),
     AutoButtonColor = true,
     BackgroundColor3 = Color.Collect,
     BorderSizePixel = 0,
@@ -1322,7 +1495,7 @@ local sheetDeploy = apply(Instance.new("TextButton"), {
     Name = "DeployBtn",
     AnchorPoint = Vector2.new(1, 1),
     Position = UDim2.fromScale(1, 1),
-    Size = UDim2.new(0.5, -SHEET_ACTION_GAP / 2, 0, SHEET_ACTIONS_HEIGHT),
+    Size = UDim2.new(0.5, -LY.SHEET_ACTION_GAP / 2, 0, LY.SHEET_ACTIONS_HEIGHT),
     AutoButtonColor = true,
     BackgroundColor3 = Color.CrateButton,
     BorderSizePixel = 0,
@@ -1358,8 +1531,20 @@ local function openSheet(item: DemoClient.InventoryItem)
         rarityTag(item.rarity)
     )
 
+    -- STATUS: only "bag" monsters can act — kandang/summon open READ-ONLY
+    -- (the list shows everyone now; actions dim with a reason).
+    local inBag = item.status == "bag" or item.status == nil
+    sheetSummon.AutoButtonColor = inBag
+    sheetSummon.BackgroundTransparency = if inBag then 0 else 0.5
+    sheetDeploy.AutoButtonColor = inBag
+    sheetDeploy.BackgroundTransparency = if inBag then 0 else 0.5
+
     -- EVOLVE button state (data from the server payload; server re-validates).
-    if item.evolveCost == nil then
+    if not inBag then
+        sheetEvolve.Text = if item.status == "kandang" then "🏠 Sedang di Kandang" else "⚔ Sedang Bertarung"
+        sheetEvolve.BackgroundColor3 = Color.SlotEmpty
+        sheetEvolve.AutoButtonColor = false
+    elseif item.evolveCost == nil then
         sheetEvolve.Text = "💫 STAGE MAX"
         sheetEvolve.BackgroundColor3 = Color.SlotEmpty
         sheetEvolve.AutoButtonColor = false
@@ -1404,8 +1589,8 @@ rootTrove:Add(sheetBackdrop.Activated:Connect(closeSheet))
 -- ⚔ Summon: send THIS Brainrot (by roster id) out to auto-battle, then close.
 rootTrove:Add(sheetSummon.Activated:Connect(function()
     local item = sheetItem
-    if not item then
-        return
+    if not item or (item.status ~= nil and item.status ~= "bag") then
+        return -- busy monsters are read-only
     end
     print("[Combat][ui] summon " .. item.personality .. " id=" .. item.id)
     DemoClient.summon(item.id)
@@ -1419,6 +1604,9 @@ rootTrove:Add(sheetEvolve.Activated:Connect(function()
     local item = sheetItem
     if not item or item.evolveCost == nil then
         return -- MAX stage: inert
+    end
+    if item.status ~= nil and item.status ~= "bag" then
+        return -- busy monsters are read-only
     end
     if item.level < (item.evolveMilestone or math.huge) then
         return -- level-gated: inert (button already reads "terbuka di Lv N")
@@ -1435,8 +1623,8 @@ end))
 -- server-authoritative — the client never tracks occupancy). Then close the sheet.
 rootTrove:Add(sheetDeploy.Activated:Connect(function()
     local item = sheetItem
-    if not item then
-        return
+    if not item or (item.status ~= nil and item.status ~= "bag") then
+        return -- busy monsters are read-only
     end
     print("[Deploy][ui] deploy-from-sheet " .. item.personality .. " id=" .. item.id)
     -- ID-KEYED: try every stand for THIS monster; the server accepts the first
@@ -1448,20 +1636,57 @@ rootTrove:Add(sheetDeploy.Activated:Connect(function()
 end))
 
 -- ════════════════════════════════════════════════════════════════════════════
--- RENDER (grid of cards)
+-- RENDER (Monster tab: filter -> sort -> wide-card grid)
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- Rarity rank for the sort (ascending index in the canonical order).
+local rarityRank: { [string]: number } = {}
+for i, r in ipairs(RarityConfig.order) do
+    rarityRank[r] = i
+end
+
+LY.SORT_LABELS = { level = "Level ↓", rarity = "Rarity ↓", new = "Terbaru" }
+
 local function render(inventory: DemoClient.Inventory)
     cardsTrove:Clean()
 
     local n = #inventory
     print(("[Inv][ui] render count=%d"):format(n))
-    -- (Top-bar Monster label stays static per owner feedback — count removed.)
-    -- TABBED MENU: the count lives on the Monster tab; the title stays put.
     tabMonsters.Text = string.format("🐾 Monster (%d/%d)", n, ROSTER_CAP)
 
+    -- Filter chip highlight state.
+    for key, chip in filterButtons do
+        chip.BackgroundColor3 = if key == monsterFilter then LY.FILTER_ACTIVE else Color.SlotEmpty
+    end
+    sortBtn.Text = LY.SORT_LABELS[monsterSort] or "Level ↓"
+
+    -- FILTER (element) then SORT (per the controls row).
+    local shown: { DemoClient.InventoryItem } = {}
+    for _, item in inventory do
+        if monsterFilter == "All" or item.element == monsterFilter then
+            table.insert(shown, item)
+        end
+    end
+    table.sort(shown, function(a, b)
+        if monsterSort == "rarity" then
+            local ra = rarityRank[a.rarity] or 0
+            local rb = rarityRank[b.rarity] or 0
+            if ra ~= rb then
+                return ra > rb
+            end
+            return a.level > b.level
+        elseif monsterSort == "new" then
+            return (a.capturedAt or 0) > (b.capturedAt or 0)
+        end
+        if a.level ~= b.level then
+            return a.level > b.level
+        end
+        return (rarityRank[a.rarity] or 0) > (rarityRank[b.rarity] or 0)
+    end)
+
     -- The empty-state belongs to the MONSTER tab only.
-    emptyLabel.Visible = list.Visible and n == 0
-    for i, item in inventory do
+    emptyLabel.Visible = list.Visible and #shown == 0
+    for i, item in shown do
         -- Each card is tap-to-open: tapping opens the STAT SHEET for this item,
         -- where the Summon / Deploy actions live.
         buildCard(list, cardsTrove, item, i, 22, function()
@@ -1470,6 +1695,20 @@ local function render(inventory: DemoClient.Inventory)
         end)
     end
 end
+
+-- Controls: filter chips re-render on tap; the sort button CYCLES modes.
+for key, chip in filterButtons do
+    rootTrove:Add(chip.Activated:Connect(function()
+        monsterFilter = key
+        render(DemoClient.Inventory)
+    end))
+end
+LY.SORT_CYCLE = { "level", "rarity", "new" }
+rootTrove:Add(sortBtn.Activated:Connect(function()
+    local idx = table.find(LY.SORT_CYCLE, monsterSort) or 1
+    monsterSort = LY.SORT_CYCLE[(idx % #LY.SORT_CYCLE) + 1]
+    render(DemoClient.Inventory)
+end))
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- TOGGLE
@@ -1513,7 +1752,7 @@ rootTrove:Add(UserInputService.InputBegan:Connect(function(input: InputObject, p
     if processed then
         return
     end
-    if input.KeyCode == TOGGLE_KEY then
+    if input.KeyCode == LY.TOGGLE_KEY then
         toggle()
     end
 end))
@@ -1548,7 +1787,7 @@ local placePanel = apply(Instance.new("TextButton"), {
     Text = "",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(PLACE_WIDTH, PLACE_HEIGHT),
+    Size = UDim2.fromOffset(LY.PLACE_WIDTH, LY.PLACE_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BorderSizePixel = 0,
     ZIndex = 31,
@@ -1559,7 +1798,7 @@ local placeTitle = apply(Instance.new("TextLabel"), {
     Name = "Title",
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, -(PLACE_CLOSE_SIZE + 8), 0, PLACE_TITLE_HEIGHT),
+    Size = UDim2.new(1, -(LY.PLACE_CLOSE_SIZE + 8), 0, LY.PLACE_TITLE_HEIGHT),
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
@@ -1587,7 +1826,7 @@ local placeClose = apply(Instance.new("TextButton"), {
     Name = "Close",
     AnchorPoint = Vector2.new(1, 0),
     Position = UDim2.fromScale(1, 0),
-    Size = UDim2.fromOffset(PLACE_CLOSE_SIZE, PLACE_CLOSE_SIZE),
+    Size = UDim2.fromOffset(LY.PLACE_CLOSE_SIZE, LY.PLACE_CLOSE_SIZE),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     FontFace = Font.Heavy,
@@ -1600,8 +1839,8 @@ local placeClose = apply(Instance.new("TextButton"), {
 
 local placeList = apply(Instance.new("ScrollingFrame"), {
     Name = "List",
-    Position = UDim2.fromOffset(0, PLACE_LIST_TOP),
-    Size = UDim2.new(1, 0, 1, -PLACE_LIST_TOP),
+    Position = UDim2.fromOffset(0, LY.PLACE_LIST_TOP),
+    Size = UDim2.new(1, 0, 1, -LY.PLACE_LIST_TOP),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     ScrollBarThickness = 6,
@@ -1651,14 +1890,18 @@ local function openPlaceMenu(standIndex: number)
     local n = #inventory
     placeEmptyLabel.Visible = n == 0
 
-    for i, item in inventory do
-        local itemId = item.id -- ID-KEYED deploy (the exact tapped monster)
-        local personality = item.personality
-        buildRow(placeList, placeRowsTrove, item, i, 32, function()
-            print("[Place] chose " .. personality .. " (" .. itemId .. ") for stand " .. standIndex)
-            DemoClient.deployToStand(standIndex, itemId)
-            closePlaceMenu()
-        end)
+    local order = 0
+    for _, item in inventory do
+        if item.status == nil or item.status == "bag" then -- busy excluded
+            order += 1
+            local itemId = item.id -- ID-KEYED deploy (the exact tapped monster)
+            local personality = item.personality
+            buildRow(placeList, placeRowsTrove, item, order, 32, function()
+                print("[Place] chose " .. personality .. " (" .. itemId .. ") for stand " .. standIndex)
+                DemoClient.deployToStand(standIndex, itemId)
+                closePlaceMenu()
+            end)
+        end
     end
 
     placeBackdrop.Visible = true
@@ -1681,16 +1924,16 @@ DemoClient.PlaceMenuRequested:Connect(openPlaceMenu)
 -- replies with a fresh snapshot (KandangUpdated) that re-renders the menu live.
 -- ════════════════════════════════════════════════════════════════════════════
 
-local KANDANG_WIDTH = 420
-local KANDANG_HEIGHT = 560
-local KANDANG_TITLE_HEIGHT = 44
-local KANDANG_UPGRADE_HEIGHT = 48 -- the upgrade-button row under the title (>=44px tap)
-local KANDANG_SHOP_HEIGHT = 48 -- the Capture Net shop row under the upgrade button
-local KANDANG_LIST_TOP = 56 + KANDANG_UPGRADE_HEIGHT + 8 + KANDANG_SHOP_HEIGHT + 8
-local KANDANG_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
-local KANDANG_ROW_HEIGHT = 56
-local KANDANG_SECTION_HEIGHT = 30
-local KANDANG_BADGE_WIDTH = 86
+LY.KANDANG_WIDTH = 420
+LY.KANDANG_HEIGHT = 560
+LY.KANDANG_TITLE_HEIGHT = 44
+LY.KANDANG_UPGRADE_HEIGHT = 48 -- the upgrade-button row under the title (>=44px tap)
+LY.KANDANG_SHOP_HEIGHT = 48 -- the Capture Net shop row under the upgrade button
+LY.KANDANG_LIST_TOP = 56 + LY.KANDANG_UPGRADE_HEIGHT + 8 + LY.KANDANG_SHOP_HEIGHT + 8
+LY.KANDANG_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
+LY.KANDANG_ROW_HEIGHT = 56
+LY.KANDANG_SECTION_HEIGHT = 30
+LY.KANDANG_BADGE_WIDTH = 86
 
 local kandangBackdrop = apply(Instance.new("TextButton"), {
     Name = "KandangBackdrop",
@@ -1711,7 +1954,7 @@ local kandangPanel = apply(Instance.new("TextButton"), {
     Text = "",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(KANDANG_WIDTH, KANDANG_HEIGHT),
+    Size = UDim2.fromOffset(LY.KANDANG_WIDTH, LY.KANDANG_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BorderSizePixel = 0,
     ZIndex = 41,
@@ -1722,7 +1965,7 @@ local kandangTitle = apply(Instance.new("TextLabel"), {
     Name = "Title",
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, -(KANDANG_CLOSE_SIZE + 8), 0, KANDANG_TITLE_HEIGHT),
+    Size = UDim2.new(1, -(LY.KANDANG_CLOSE_SIZE + 8), 0, LY.KANDANG_TITLE_HEIGHT),
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
@@ -1736,7 +1979,7 @@ local kandangClose = apply(Instance.new("TextButton"), {
     Name = "Close",
     AnchorPoint = Vector2.new(1, 0),
     Position = UDim2.fromScale(1, 0),
-    Size = UDim2.fromOffset(KANDANG_CLOSE_SIZE, KANDANG_CLOSE_SIZE),
+    Size = UDim2.fromOffset(LY.KANDANG_CLOSE_SIZE, LY.KANDANG_CLOSE_SIZE),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     FontFace = Font.Heavy,
@@ -1755,7 +1998,7 @@ local kandangClose = apply(Instance.new("TextButton"), {
 local kandangUpgradeBtn = apply(Instance.new("TextButton"), {
     Name = "Upgrade",
     Position = UDim2.fromOffset(0, 56),
-    Size = UDim2.new(1, 0, 0, KANDANG_UPGRADE_HEIGHT),
+    Size = UDim2.new(1, 0, 0, LY.KANDANG_UPGRADE_HEIGHT),
     BackgroundColor3 = Color.PanelLight,
     BorderSizePixel = 0,
     AutoButtonColor = true,
@@ -1773,8 +2016,8 @@ local kandangUpgradeBtn = apply(Instance.new("TextButton"), {
 local kandangShopRow = apply(Instance.new("Frame"), {
     Name = "Shop",
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(0, 56 + KANDANG_UPGRADE_HEIGHT + 8),
-    Size = UDim2.new(1, 0, 0, KANDANG_SHOP_HEIGHT),
+    Position = UDim2.fromOffset(0, 56 + LY.KANDANG_UPGRADE_HEIGHT + 8),
+    Size = UDim2.new(1, 0, 0, LY.KANDANG_SHOP_HEIGHT),
     ZIndex = 42,
     Parent = kandangPanel,
 })
@@ -1833,8 +2076,8 @@ end
 
 local kandangList = apply(Instance.new("ScrollingFrame"), {
     Name = "List",
-    Position = UDim2.fromOffset(0, KANDANG_LIST_TOP),
-    Size = UDim2.new(1, 0, 1, -KANDANG_LIST_TOP),
+    Position = UDim2.fromOffset(0, LY.KANDANG_LIST_TOP),
+    Size = UDim2.new(1, 0, 1, -LY.KANDANG_LIST_TOP),
     BackgroundColor3 = Color.SlotEmpty,
     BorderSizePixel = 0,
     ScrollBarThickness = 6,
@@ -1873,7 +2116,7 @@ local function kandangSection(text: string, order: number)
         Name = "Section",
         LayoutOrder = order,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, KANDANG_SECTION_HEIGHT),
+        Size = UDim2.new(1, 0, 0, LY.KANDANG_SECTION_HEIGHT),
         FontFace = Font.Heavy,
         TextColor3 = Color.TextDim,
         TextScaled = true,
@@ -1900,7 +2143,7 @@ local function kandangRow(
         LayoutOrder = order,
         AutoButtonColor = onTap ~= nil,
         Text = "",
-        Size = UDim2.new(1, 0, 0, KANDANG_ROW_HEIGHT),
+        Size = UDim2.new(1, 0, 0, LY.KANDANG_ROW_HEIGHT),
         BackgroundColor3 = Color.PanelLight,
         BackgroundTransparency = if onTap then 0 else 0.4,
         BorderSizePixel = 0,
@@ -1914,7 +2157,7 @@ local function kandangRow(
     apply(Instance.new("TextLabel"), {
         Name = "Emoji",
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, KANDANG_ROW_HEIGHT - 12, 1, 0),
+        Size = UDim2.new(0, LY.KANDANG_ROW_HEIGHT - 12, 1, 0),
         FontFace = Font.Regular,
         TextColor3 = Color.Text,
         TextScaled = true,
@@ -1927,8 +2170,8 @@ local function kandangRow(
         Name = "Label",
         BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.new(0, KANDANG_ROW_HEIGHT, 0.5, 0),
-        Size = UDim2.new(1, -KANDANG_ROW_HEIGHT - KANDANG_BADGE_WIDTH - 8, 1, -16),
+        Position = UDim2.new(0, LY.KANDANG_ROW_HEIGHT, 0.5, 0),
+        Size = UDim2.new(1, -LY.KANDANG_ROW_HEIGHT - LY.KANDANG_BADGE_WIDTH - 8, 1, -16),
         FontFace = Font.Bold,
         TextColor3 = Color.Text,
         TextScaled = true,
@@ -1943,7 +2186,7 @@ local function kandangRow(
         Name = "Badge",
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.fromScale(1, 0.5),
-        Size = UDim2.fromOffset(KANDANG_BADGE_WIDTH, KANDANG_ROW_HEIGHT - 20),
+        Size = UDim2.fromOffset(LY.KANDANG_BADGE_WIDTH, LY.KANDANG_ROW_HEIGHT - 20),
         BackgroundColor3 = badgeColor or theme.color,
         BackgroundTransparency = if onTap then 0 else 0.5,
         BorderSizePixel = 0,
@@ -1956,8 +2199,8 @@ local function kandangRow(
     }, { corner(8), padding(6) })
 end
 
-local AMBIL_COLOR = Color3.fromRGB(231, 111, 81) -- warm red: take OUT
-local TARUH_COLOR = Color3.fromRGB(42, 157, 113) -- green: put IN
+LY.AMBIL_COLOR = Color3.fromRGB(231, 111, 81) -- warm red: take OUT
+LY.TARUH_COLOR = Color3.fromRGB(42, 157, 113) -- green: put IN
 
 -- Render the whole menu from the last snapshot + the live bag.
 local function renderKandang()
@@ -2014,7 +2257,7 @@ local function renderKandang()
             slot.level or 1,
             rarityTag(slot.rarity)
         )
-        kandangRow(nextOrder(), slot.personality, label, "AMBIL", AMBIL_COLOR, function()
+        kandangRow(nextOrder(), slot.personality, label, "AMBIL", LY.AMBIL_COLOR, function()
             DemoClient.recallDeployed(index)
         end)
     end
@@ -2027,6 +2270,9 @@ local function renderKandang()
     end
     local firstFree: number? = payload.free[1]
     for _, item in inventory do
+        if item.status ~= nil and item.status ~= "bag" then
+            continue -- busy monsters can't be placed (list shows everyone now)
+        end
         local personality = item.personality
         local label = string.format(
             "%s %s%s  ⭐ Lv%d%s",
@@ -2039,7 +2285,7 @@ local function renderKandang()
         if firstFree then
             local target = firstFree
             local itemId = item.id -- ID-KEYED deploy (the exact tapped monster)
-            kandangRow(nextOrder(), personality, label, "TARUH", TARUH_COLOR, function()
+            kandangRow(nextOrder(), personality, label, "TARUH", LY.TARUH_COLOR, function()
                 DemoClient.deployToStand(target, itemId)
             end)
         else
@@ -2110,12 +2356,12 @@ local function paintCoins()
     rateLabel.Text = string.format("+%d/s", math.floor(DemoClient.getRate() + 0.5))
 end
 
--- Drive the counter every frame, throttled to ~HUD_REFRESH_SEC, so it ticks up
+-- Drive the counter every frame, throttled to ~LY.HUD_REFRESH_SEC, so it ticks up
 -- continuously without burning frames (mobile-friendly).
 local refreshAccum = 0
 rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
     refreshAccum += dt
-    if refreshAccum < HUD_REFRESH_SEC then
+    if refreshAccum < LY.HUD_REFRESH_SEC then
         return
     end
     refreshAccum = 0

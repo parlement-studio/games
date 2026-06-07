@@ -92,6 +92,8 @@ type InventoryItem = {
     evoStage: number, -- persisted evolution stage (0..maxStage)
     evolveCost: number?, -- coins for the NEXT stage (x rarity); nil = MAX stage
     evolveMilestone: number?, -- level required for the NEXT stage; nil = MAX stage
+    status: string, -- "bag" | "kandang" | "summon" — Monster-tab status icon; only "bag" is actionable
+    capturedAt: number, -- os.time() at capture (sort "Terbaru")
     level: number, -- current progression level of this Brainrot (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level (xpCurveBase * level)
@@ -383,24 +385,26 @@ local function pushInventory(player: Player)
         return -- profile not loaded yet; a later push will carry the bag
     end
 
-    -- BUSY ids: deployed (on a stand) OR currently an active fighter — excluded.
-    local busy: { [string]: boolean } = {}
+    -- STATUS per id (Monster-tab mock: the list shows EVERY monster with a
+    -- status icon — 🏠 kandang / ⚔ summon — instead of hiding the busy ones).
+    -- "bag" entries are the only ones the action surfaces may consume.
+    local statusById: { [string]: string } = {}
     local b1 = data.base.buildings[BUILDING_ID]
     if b1 then
         for _, deployedId in b1.deployment do
             if deployedId ~= nil then
-                busy[deployedId] = true
+                statusById[deployedId] = "kandang"
             end
         end
     end
     for _, record in state.fighters do
-        busy[record.brainrotId] = true
+        statusById[record.brainrotId] = "summon"
     end
 
     local combat = DemoConfig.combat
     local payload: { InventoryItem } = {}
     for id, entry in data.roster do
-        if not busy[id] then
+        do
             -- Derive the stat-sheet fields from the authoritative entry. hp/power
             -- mirror the COMBAT derivation used at summon time (fighterMaxHP /
             -- fighterDamage), inlined here because those helpers are defined later
@@ -433,6 +437,8 @@ local function pushInventory(player: Player)
                 evoStage = stage,
                 evolveCost = evolveCost,
                 evolveMilestone = evolveMilestone,
+                status = statusById[id] or "bag",
+                capturedAt = (entry.history and entry.history.capturedAt) or 0,
                 level = entry.level,
                 xp = entry.xp,
                 xpToNext = PROGRESSION.xpCurveBase * entry.level,

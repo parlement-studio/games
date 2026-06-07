@@ -54,6 +54,18 @@ return {
     -- moment spam so pop-ups stay readable. Range: 1-30 | Default: 4
     momentCooldownSec = 4,
 
+    -- ── SPECIES DISPLAY NAMES (demo flavor; real species catalog comes with
+    -- Capture v2 / world-universe). One name per ELEMENT — the demo's models
+    -- are identical blobs, so the element drives the "species" identity on
+    -- the Monster-tab cards (mock: "BlazeHound", "TideShell", ...).
+    speciesNames = {
+        Fire = "BlazeHound",
+        Water = "TideShell",
+        Volt = "ThunderPaw",
+        Nature = "LeafyBug",
+        Wind = "GaleWing",
+    },
+
     -- ── CAPTURE MODE (S4 item flow vs legacy coin debit) ─────────────────
     -- true (S4-locked direction): a catch CONSUMES one Capture Net from the
     -- persisted backpack (profile.items; bought in the Kandang menu shop).
