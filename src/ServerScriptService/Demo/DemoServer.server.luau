@@ -2698,9 +2698,8 @@ local function onHeartbeat(dt: number)
     broadcastAccum += dt
     if broadcastAccum >= BROADCAST then
         broadcastAccum = 0
-        for player, state in states do
+        for player, _state in states do
             pushCoins(player)
-            print(("[Coin] %s coins=%d rate=%.2f/s"):format(player.Name, math.floor(state.coins), currentRate(state)))
         end
     end
     -- PERSIST CADENCE: piggyback the heartbeat to periodically flush each player's

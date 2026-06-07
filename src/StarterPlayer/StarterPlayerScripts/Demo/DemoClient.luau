@@ -184,7 +184,6 @@ function DemoClient.init()
         if baseCoins > displayShown or displayShown - baseCoins > overshootBound then
             displayShown = baseCoins
         end
-        print(("[Coin][client] coins=%d rate=%.2f/s"):format(DemoClient.Coins, ratePerSec))
         DemoClient.CoinsChanged:Fire()
     end))
     print("[Coin][client] CoinUpdate handler connected")
