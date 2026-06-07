@@ -394,6 +394,30 @@ return {
         },
     },
 
+    -- ── MERCHANT NPC (item shop) ─────────────────────────────────────────────
+    -- The item shop lives on a world NPC, not inside the kandang menu: the
+    -- server finds `npcName` (renaming a leftover `legacyName` model if that is
+    -- what the place still has), tags it with an overhead label, and attaches
+    -- a ProximityPrompt that opens the client's shop modal.
+    merchant = {
+        -- Master switch: false = no shop NPC (purchases only via remotes).
+        -- Boolean | Default: true
+        enabled = true,
+        -- Workspace model names: the NPC we want, and the legacy model to
+        -- rename if the place hasn't been migrated yet.
+        npcName = "Merchant",
+        legacyName = "Noob",
+        -- Overhead label above the NPC head (BillboardGui).
+        labelText = "🛒 Merchant",
+        -- Prompt strings (player-facing). ActionText | ObjectText.
+        actionText = "Belanja",
+        objectText = "Merchant",
+        -- Hold duration on the prompt (seconds). Range: 0-2 | Default: 0
+        holdSec = 0,
+        -- Max activation distance (studs). Range: 4-32 | Default: 12
+        distance = 12,
+    },
+
     -- ── WILD BRAINROT AI (server-authoritative roaming) ─────────────────────
     -- The wild creatures (Brainrot_<P>) are rigged with a Humanoid + an
     -- (invisible) HumanoidRootPart so the server can walk them via Humanoid:MoveTo.

@@ -1889,13 +1889,16 @@ DemoClient.PlaceMenuRequested:Connect(openPlaceMenu)
 LY.KANDANG_WIDTH = 420
 LY.KANDANG_HEIGHT = 560
 LY.KANDANG_TITLE_HEIGHT = 44
-LY.KANDANG_UPGRADE_HEIGHT = 48 -- the upgrade-button row under the title (>=44px tap)
-LY.KANDANG_SHOP_HEIGHT = 48 -- the Capture Net shop row under the upgrade button
-LY.KANDANG_LIST_TOP = 56 + LY.KANDANG_UPGRADE_HEIGHT + 8 + LY.KANDANG_SHOP_HEIGHT + 8
+LY.KANDANG_CAP_TOP = 48 -- capacity bar row (under the title)
+LY.KANDANG_CAP_HEIGHT = 26
+LY.KANDANG_UPGRADE_TOP = LY.KANDANG_CAP_TOP + LY.KANDANG_CAP_HEIGHT + 8
+LY.KANDANG_UPGRADE_HEIGHT = 48 -- the upgrade-button row (>=44px tap)
+LY.KANDANG_LIST_TOP = LY.KANDANG_UPGRADE_TOP + LY.KANDANG_UPGRADE_HEIGHT + 10
 LY.KANDANG_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
 LY.KANDANG_ROW_HEIGHT = 56
 LY.KANDANG_SECTION_HEIGHT = 30
 LY.KANDANG_BADGE_WIDTH = 86
+LY.KANDANG_LV_PILL_WIDTH = 72
 
 local kandangBackdrop = apply(Instance.new("TextButton"), {
     Name = "KandangBackdrop",
@@ -1923,19 +1926,67 @@ local kandangPanel = apply(Instance.new("TextButton"), {
     Parent = kandangBackdrop,
 }, { corner(20), stroke(Color.Stroke, 3), padding(14) })
 
-local kandangTitle = apply(Instance.new("TextLabel"), {
+apply(Instance.new("TextLabel"), {
     Name = "Title",
     BackgroundTransparency = 1,
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, -(LY.KANDANG_CLOSE_SIZE + 8), 0, LY.KANDANG_TITLE_HEIGHT),
+    Size = UDim2.new(1, -(LY.KANDANG_CLOSE_SIZE + LY.KANDANG_LV_PILL_WIDTH + 16), 0, LY.KANDANG_TITLE_HEIGHT),
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "🏠 KANDANG (0/6)",
+    Text = "🏠 KANDANG",
     ZIndex = 42,
     Parent = kandangPanel,
 })
+
+-- Level pill (between the title and the close button): "⬆ Lv3".
+local kandangLvPill = apply(Instance.new("TextLabel"), {
+    Name = "LevelPill",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -(LY.KANDANG_CLOSE_SIZE + 8), 0, 6),
+    Size = UDim2.fromOffset(LY.KANDANG_LV_PILL_WIDTH, LY.KANDANG_TITLE_HEIGHT - 12),
+    BackgroundColor3 = Color3.fromRGB(42, 157, 113),
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.TextOnBright,
+    TextScaled = true,
+    Text = "Lv 0",
+    ZIndex = 42,
+    Parent = kandangPanel,
+}, { corner(10), padding(6) })
+
+-- Capacity bar: green fill = occupied stands; centered "n/cap slot terisi".
+local kandangCapTrack = apply(Instance.new("Frame"), {
+    Name = "CapTrack",
+    Position = UDim2.fromOffset(0, LY.KANDANG_CAP_TOP),
+    Size = UDim2.new(1, 0, 0, LY.KANDANG_CAP_HEIGHT),
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    ZIndex = 42,
+    Parent = kandangPanel,
+}, { corner(8) })
+
+local kandangCapFill = apply(Instance.new("Frame"), {
+    Name = "CapFill",
+    Size = UDim2.fromScale(0, 1),
+    BackgroundColor3 = Color3.fromRGB(42, 157, 113),
+    BorderSizePixel = 0,
+    ZIndex = 43,
+    Parent = kandangCapTrack,
+}, { corner(8) })
+
+local kandangCapText = apply(Instance.new("TextLabel"), {
+    Name = "CapText",
+    BackgroundTransparency = 1,
+    Size = UDim2.fromScale(1, 1),
+    FontFace = Font.Bold,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "0/6 slot terisi",
+    ZIndex = 44,
+    Parent = kandangCapTrack,
+}, { padding(4) })
 
 local kandangClose = apply(Instance.new("TextButton"), {
     Name = "Close",
@@ -1959,7 +2010,7 @@ local kandangClose = apply(Instance.new("TextButton"), {
 -- snapshot + a Moment banner.
 local kandangUpgradeBtn = apply(Instance.new("TextButton"), {
     Name = "Upgrade",
-    Position = UDim2.fromOffset(0, 56),
+    Position = UDim2.fromOffset(0, LY.KANDANG_UPGRADE_TOP),
     Size = UDim2.new(1, 0, 0, LY.KANDANG_UPGRADE_HEIGHT),
     BackgroundColor3 = Color.PanelLight,
     BorderSizePixel = 0,
@@ -1972,75 +2023,14 @@ local kandangUpgradeBtn = apply(Instance.new("TextButton"), {
     Parent = kandangPanel,
 }, { corner(12), padding(8) })
 
--- SHOP row (S4): Capture Net counter + two buy buttons (single / 10-bundle).
--- Prices come from the replicated CaptureConfig (display only — the server
--- re-validates funds on every tap).
-local kandangShopRow = apply(Instance.new("Frame"), {
-    Name = "Shop",
-    BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(0, 56 + LY.KANDANG_UPGRADE_HEIGHT + 8),
-    Size = UDim2.new(1, 0, 0, LY.KANDANG_SHOP_HEIGHT),
-    ZIndex = 42,
-    Parent = kandangPanel,
-})
-
-local kandangNetCount = apply(Instance.new("TextLabel"), {
-    Name = "NetCount",
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0.3, -4, 1, 0),
-    FontFace = Font.Heavy,
-    TextColor3 = Color.Text,
-    TextScaled = true,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "🕸️ ×0",
-    ZIndex = 43,
-    Parent = kandangShopRow,
-})
-
-local kandangBuyOne = apply(Instance.new("TextButton"), {
-    Name = "BuyOne",
-    AnchorPoint = Vector2.new(0, 0),
-    Position = UDim2.new(0.3, 4, 0, 0),
-    Size = UDim2.new(0.35, -8, 1, 0),
-    AutoButtonColor = true,
-    BackgroundColor3 = Color3.fromRGB(42, 157, 113),
-    BorderSizePixel = 0,
-    FontFace = Font.Heavy,
-    TextColor3 = Color.TextOnBright,
-    TextScaled = true,
-    Text = "Beli 1 — 25 🪙",
-    ZIndex = 43,
-    Parent = kandangShopRow,
-}, { corner(10), padding(6) })
-
-local kandangBuyBundle = apply(Instance.new("TextButton"), {
-    Name = "BuyBundle",
-    AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.fromScale(1, 0),
-    Size = UDim2.new(0.35, -8, 1, 0),
-    AutoButtonColor = true,
-    BackgroundColor3 = Color3.fromRGB(42, 157, 113),
-    BorderSizePixel = 0,
-    FontFace = Font.Heavy,
-    TextColor3 = Color.TextOnBright,
-    TextScaled = true,
-    Text = "Paket 10 — 225 🪙",
-    ZIndex = 43,
-    Parent = kandangShopRow,
-}, { corner(10), padding(6) })
-
--- Price labels from the replicated config (single source of display truth).
-do
-    local netDef = CaptureConfig.items.capture_net
-    kandangBuyOne.Text = ("Beli 1 — %d 🪙"):format(netDef.price)
-    kandangBuyBundle.Text = ("Paket %d — %d 🪙"):format(netDef.bundleCount, netDef.bundlePrice)
-end
+-- (The Capture Net shop row moved to the MERCHANT NPC modal — see below.)
 
 local kandangList = apply(Instance.new("ScrollingFrame"), {
     Name = "List",
     Position = UDim2.fromOffset(0, LY.KANDANG_LIST_TOP),
     Size = UDim2.new(1, 0, 1, -LY.KANDANG_LIST_TOP),
     BackgroundColor3 = Color.SlotEmpty,
+    BackgroundTransparency = 0.5, -- airy: rows carry the visual weight
     BorderSizePixel = 0,
     ScrollBarThickness = 6,
     CanvasSize = UDim2.new(),
@@ -2059,22 +2049,22 @@ apply(Instance.new("UIListLayout"), {
 -- Trove for the menu's rows (cleared + rebuilt on every snapshot).
 local kandangRowsTrove = rootTrove:Extend()
 
--- Menu state: the last server snapshot + open flag. `kandangClosedAt` guards
--- against a stale post-action refresh re-opening a just-closed menu.
+-- Menu state: the last server snapshot + open flag. Opening is EXPLICIT now —
+-- only a payload with `open = true` (the gate terminal prompt) pops the menu;
+-- every other push is a silent refresh (so catching never opens it).
 local kandangOpen = false
 local kandangLast: DemoClient.KandangPayload? = nil
-local kandangClosedAt = 0
 
 local function closeKandangMenu()
     kandangOpen = false
-    kandangClosedAt = os.clock()
     kandangBackdrop.Visible = false
     kandangRowsTrove:Clean()
 end
 
--- One section header line ("DI KANDANG — tap untuk ambil").
-local function kandangSection(text: string, order: number)
-    kandangRowsTrove:Add(apply(Instance.new("TextLabel"), {
+-- One section header line ("DI KANDANG — tap untuk ambil") with a small
+-- colored accent strip on the left (red = ambil section, green = taruh).
+local function kandangSection(text: string, order: number, accent: Color3?)
+    local header = kandangRowsTrove:Add(apply(Instance.new("TextLabel"), {
         Name = "Section",
         LayoutOrder = order,
         BackgroundTransparency = 1,
@@ -2083,13 +2073,26 @@ local function kandangSection(text: string, order: number)
         TextColor3 = Color.TextDim,
         TextScaled = true,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Text = text,
+        Text = if accent then "      " .. text else text,
         ZIndex = 43,
         Parent = kandangList,
     }))
+    if accent then
+        apply(Instance.new("Frame"), {
+            Name = "Accent",
+            AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.fromScale(0, 0.5),
+            Size = UDim2.new(0, 6, 1, -10),
+            BackgroundColor3 = accent,
+            BorderSizePixel = 0,
+            ZIndex = 44,
+            Parent = header,
+        }, { corner(3) })
+    end
 end
 
--- One tappable row: personality emoji tile + label + action badge.
+-- One tappable row: personality emoji tile + label + action badge. The row
+-- border is tinted by RARITY (same language as the monster cards).
 -- `badgeColor` nil = personality color; `onTap` nil = inert (e.g. PENUH).
 local function kandangRow(
     order: number,
@@ -2097,7 +2100,8 @@ local function kandangRow(
     label: string,
     badgeText: string,
     badgeColor: Color3?,
-    onTap: (() -> ())?
+    onTap: (() -> ())?,
+    rarity: any?
 )
     local theme = UITheme.personality(personality)
     local row = kandangRowsTrove:Add(apply(Instance.new("TextButton"), {
@@ -2111,7 +2115,7 @@ local function kandangRow(
         BorderSizePixel = 0,
         ZIndex = 42,
         Parent = kandangList,
-    }, { corner(10), padding(6) }))
+    }, { corner(10), stroke(rarityColor(rarity), 2), padding(6) }))
     if onTap then
         kandangRowsTrove:Add(row.Activated:Connect(onTap))
     end
@@ -2175,10 +2179,9 @@ local function renderKandang()
     local capacity = payload.capacity or 6
     local deployedCount = #payload.deployed
     local level = payload.level or 0
-    kandangTitle.Text = string.format("🏠 KANDANG Lv%d (%d/%d)", level, deployedCount, capacity)
-
-    -- SHOP (S4): owned Capture Nets counter.
-    kandangNetCount.Text = string.format("🕸️ ×%d", payload.nets or 0)
+    kandangLvPill.Text = string.format("Lv %d", level)
+    kandangCapFill.Size = UDim2.fromScale(if capacity > 0 then deployedCount / capacity else 0, 1)
+    kandangCapText.Text = string.format("%d/%d slot terisi", deployedCount, capacity)
 
     -- Upgrade button (data-driven; the server re-validates every tap).
     local nextCost = payload.nextCost
@@ -2205,7 +2208,7 @@ local function renderKandang()
     end
 
     -- ── DI KANDANG ──
-    kandangSection("DI KANDANG — tap untuk ambil", nextOrder())
+    kandangSection("DI KANDANG — tap untuk ambil", nextOrder(), LY.AMBIL_COLOR)
     if deployedCount == 0 then
         kandangSection("   (kosong — taruh monster dari tasmu)", nextOrder())
     end
@@ -2221,11 +2224,11 @@ local function renderKandang()
         )
         kandangRow(nextOrder(), slot.personality, label, "AMBIL", LY.AMBIL_COLOR, function()
             DemoClient.recallDeployed(index)
-        end)
+        end, slot.rarity)
     end
 
     -- ── DI TAS ──
-    kandangSection("DI TAS — tap untuk taruh", nextOrder())
+    kandangSection("DI TAS — tap untuk taruh", nextOrder(), LY.TARUH_COLOR)
     local inventory = DemoClient.Inventory
     if #inventory == 0 then
         kandangSection("   (tas kosong — pergi tangkap monster!)", nextOrder())
@@ -2249,23 +2252,24 @@ local function renderKandang()
             local itemId = item.id -- ID-KEYED deploy (the exact tapped monster)
             kandangRow(nextOrder(), personality, label, "TARUH", LY.TARUH_COLOR, function()
                 DemoClient.deployToStand(target, itemId)
-            end)
+            end, item.rarity)
         else
-            kandangRow(nextOrder(), personality, label, "PENUH", nil, nil)
+            kandangRow(nextOrder(), personality, label, "PENUH", nil, nil, item.rarity)
         end
     end
 end
 
--- Snapshot arrives: refresh if open; open if this is a fresh user intent
--- (suppress the stale post-action push that can trail a just-closed menu).
+-- Snapshot arrives: refresh if open; otherwise open ONLY on an explicit
+-- open-intent payload (the gate terminal). Background refreshes (post-catch
+-- net spend, post-action pushes) just update the cache silently.
 DemoClient.KandangUpdated:Connect(function(payload)
     kandangLast = payload
     if kandangOpen then
         renderKandang()
         return
     end
-    if os.clock() - kandangClosedAt < 1 then
-        return -- trailing refresh after close; ignore
+    if payload.open ~= true then
+        return -- live refresh while closed; cache only
     end
     kandangOpen = true
     renderKandang()
@@ -2289,14 +2293,225 @@ rootTrove:Add(kandangUpgradeBtn.Activated:Connect(function()
         DemoClient.upgradeKandang()
     end
 end))
--- SHOP taps (S4): buy 1 / buy the bundle. Server validates + banners.
-rootTrove:Add(kandangBuyOne.Activated:Connect(function()
-    if kandangOpen then
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- MERCHANT SHOP (modal) — opened by the Merchant NPC's Belanja prompt.
+-- One item card (Capture Net) + two buy buttons. Counts ride BackpackUpdate
+-- (DemoClient.Items), prices come from the replicated CaptureConfig, and the
+-- server re-validates funds on every tap (the buttons are intents, not truth).
+-- ════════════════════════════════════════════════════════════════════════════
+
+LY.SHOP_WIDTH = 360
+LY.SHOP_HEIGHT = 330
+LY.SHOP_TITLE_HEIGHT = 44
+LY.SHOP_GREET_TOP = 50
+LY.SHOP_GREET_HEIGHT = 24
+LY.SHOP_CARD_TOP = LY.SHOP_GREET_TOP + LY.SHOP_GREET_HEIGHT + 10
+LY.SHOP_CARD_HEIGHT = 96
+LY.SHOP_BTN_TOP = LY.SHOP_CARD_TOP + LY.SHOP_CARD_HEIGHT + 12
+LY.SHOP_BTN_HEIGHT = 52 -- MOBILE: >=44px touch target
+
+local shopBackdrop = apply(Instance.new("TextButton"), {
+    Name = "ShopBackdrop",
+    Visible = false,
+    Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = Color.Backdrop,
+    BackgroundTransparency = 0.4,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Text = "",
+    ZIndex = 44,
+    Parent = screen,
+})
+
+local shopPanel = apply(Instance.new("TextButton"), {
+    Name = "ShopPanel",
+    AutoButtonColor = false,
+    Text = "",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(LY.SHOP_WIDTH, LY.SHOP_HEIGHT),
+    BackgroundColor3 = Color.Panel,
+    BorderSizePixel = 0,
+    ZIndex = 45,
+    Parent = shopBackdrop,
+}, { corner(20), stroke(Color3.fromRGB(255, 206, 64), 3), padding(14) })
+
+apply(Instance.new("TextLabel"), {
+    Name = "Title",
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, -52, 0, LY.SHOP_TITLE_HEIGHT),
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "🛒 MERCHANT",
+    ZIndex = 46,
+    Parent = shopPanel,
+})
+
+local shopClose = apply(Instance.new("TextButton"), {
+    Name = "Close",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.fromScale(1, 0),
+    Size = UDim2.fromOffset(44, 44),
+    BackgroundColor3 = Color.SlotEmpty,
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "✕",
+    ZIndex = 47,
+    Parent = shopPanel,
+}, { corner(10), padding(8) })
+
+apply(Instance.new("TextLabel"), {
+    Name = "Greeting",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, LY.SHOP_GREET_TOP),
+    Size = UDim2.new(1, 0, 0, LY.SHOP_GREET_HEIGHT),
+    FontFace = Font.Bold,
+    TextColor3 = Color.TextDim,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "Perlengkapan hunter — bayar pakai koin!",
+    ZIndex = 46,
+    Parent = shopPanel,
+})
+
+-- Item card: big net icon + name + owned count.
+local shopCard = apply(Instance.new("Frame"), {
+    Name = "NetCard",
+    Position = UDim2.fromOffset(0, LY.SHOP_CARD_TOP),
+    Size = UDim2.new(1, 0, 0, LY.SHOP_CARD_HEIGHT),
+    BackgroundColor3 = Color.PanelLight,
+    BorderSizePixel = 0,
+    ZIndex = 46,
+    Parent = shopPanel,
+}, { corner(12), padding(10) })
+
+apply(Instance.new("TextLabel"), {
+    Name = "Icon",
+    BackgroundTransparency = 1,
+    Size = UDim2.new(0, 64, 1, 0),
+    FontFace = Font.Regular,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "🕸️",
+    ZIndex = 47,
+    Parent = shopCard,
+})
+
+apply(Instance.new("TextLabel"), {
+    Name = "ItemName",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(76, 6),
+    Size = UDim2.new(1, -80, 0.5, -6),
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "Capture Net",
+    ZIndex = 47,
+    Parent = shopCard,
+})
+
+local shopOwned = apply(Instance.new("TextLabel"), {
+    Name = "Owned",
+    BackgroundTransparency = 1,
+    AnchorPoint = Vector2.new(0, 1),
+    Position = UDim2.new(0, 76, 1, -6),
+    Size = UDim2.new(1, -80, 0.5, -6),
+    FontFace = Font.Bold,
+    TextColor3 = Color.TextDim,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "Punya: ×0",
+    ZIndex = 47,
+    Parent = shopCard,
+})
+
+-- Buy buttons (green when affordable, dim when not — server still re-checks).
+local shopBuyOne = apply(Instance.new("TextButton"), {
+    Name = "BuyOne",
+    Position = UDim2.fromOffset(0, LY.SHOP_BTN_TOP),
+    Size = UDim2.new(0.5, -6, 0, LY.SHOP_BTN_HEIGHT),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color3.fromRGB(42, 157, 113),
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.TextOnBright,
+    TextScaled = true,
+    Text = "Beli 1",
+    ZIndex = 46,
+    Parent = shopPanel,
+}, { corner(12), padding(8) })
+
+local shopBuyBundle = apply(Instance.new("TextButton"), {
+    Name = "BuyBundle",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, 0, 0, LY.SHOP_BTN_TOP),
+    Size = UDim2.new(0.5, -6, 0, LY.SHOP_BTN_HEIGHT),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color3.fromRGB(42, 157, 113),
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.TextOnBright,
+    TextScaled = true,
+    Text = "Paket 10",
+    ZIndex = 46,
+    Parent = shopPanel,
+}, { corner(12), padding(8) })
+
+local shopOpen = false
+
+-- Re-paint the dynamic bits: owned count + price labels + affordability tint.
+local function renderShop()
+    local netDef = CaptureConfig.items.capture_net
+    local owned = DemoClient.Items.capture_net or 0
+    local coins = DemoClient.getDisplayCoins()
+    shopOwned.Text = ("Punya: ×%d"):format(owned)
+    shopBuyOne.Text = ("Beli 1 — %d 🪙"):format(netDef.price)
+    shopBuyBundle.Text = ("Paket %d — %d 🪙"):format(netDef.bundleCount, netDef.bundlePrice)
+    shopBuyOne.BackgroundColor3 = if coins >= netDef.price then Color3.fromRGB(42, 157, 113) else Color.SlotEmpty
+    shopBuyBundle.BackgroundColor3 = if coins >= netDef.bundlePrice
+        then Color3.fromRGB(42, 157, 113)
+        else Color.SlotEmpty
+end
+
+local function closeShop()
+    shopOpen = false
+    shopBackdrop.Visible = false
+end
+
+-- NPC prompt triggered: render fresh + open.
+DemoClient.ShopRequested:Connect(function()
+    shopOpen = true
+    renderShop()
+    shopBackdrop.Visible = true
+end)
+
+-- Live refresh while open: item counts (purchase/consumption) + coin ticks.
+DemoClient.ItemsChanged:Connect(function()
+    if shopOpen then
+        renderShop()
+    end
+end)
+DemoClient.CoinsChanged:Connect(function()
+    if shopOpen then
+        renderShop()
+    end
+end)
+
+rootTrove:Add(shopClose.Activated:Connect(closeShop))
+rootTrove:Add(shopBackdrop.Activated:Connect(closeShop))
+rootTrove:Add(shopBuyOne.Activated:Connect(function()
+    if shopOpen then
         DemoClient.buyCaptureItem(false)
     end
 end))
-rootTrove:Add(kandangBuyBundle.Activated:Connect(function()
-    if kandangOpen then
+rootTrove:Add(shopBuyBundle.Activated:Connect(function()
+    if shopOpen then
         DemoClient.buyCaptureItem(true)
     end
 end))

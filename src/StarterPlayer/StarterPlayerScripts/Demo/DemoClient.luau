@@ -93,8 +93,9 @@ export type KandangPayload = {
     level: number, -- current kandang (factory) level
     nextCost: number?, -- coins for the next level; nil = level cap reached
     bonusPerLevel: number, -- production multiplier gained per level (e.g. 0.15)
-    -- ECONOMY SINK (S4 shop):
-    nets: number, -- owned Capture Nets (profile.items.capture_net)
+    -- true ONLY when the player triggered the gate terminal (fresh open
+    -- intent); false/nil = live refresh that must not pop the menu open.
+    open: boolean?,
 }
 
 -- ── Module ─────────────────────────────────────────────────────────────────
@@ -149,6 +150,9 @@ DemoClient.KandangUpdated = Signal.new()
 -- BACKPACK (S4): fires with (items: {[itemId]: number}) on every server push
 -- (hydrate / purchase / consumption) — feeds the menu's Item tab.
 DemoClient.ItemsChanged = Signal.new()
+-- MERCHANT SHOP: fires (no args) when the player triggers the Merchant NPC's
+-- prompt — the UI opens the shop modal (counts/prices come from Items/config).
+DemoClient.ShopRequested = Signal.new()
 
 local trove = Trove.new()
 local started = false
@@ -209,6 +213,12 @@ function DemoClient.init()
         DemoClient.KandangUpdated:Fire(payload)
     end))
     print("[Kandang][client] OpenKandangMenu handler connected")
+
+    -- MERCHANT SHOP: the NPC prompt was triggered — open the shop modal.
+    trove:Add(DemoRemotes.OpenShopMenu.OnClientEvent:Connect(function()
+        DemoClient.ShopRequested:Fire()
+    end))
+    print("[Shop][client] OpenShopMenu handler connected")
 
     -- COMBAT (Tahap 2): translate a BattleEvent into a banner-ready payload and
     -- re-emit it on BattleFeedback (the UI shows it via the shared Moment banner).

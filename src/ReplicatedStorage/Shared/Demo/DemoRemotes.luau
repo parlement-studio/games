@@ -98,7 +98,14 @@ local SERVER_TO_CLIENT = {
     -- }
     -- Sent when the player triggers the kandang terminal prompt, on
     -- RequestKandang, and after every deploy/recall (live refresh while open).
+    -- payload.open: true ONLY for a fresh user intent (terminal prompt /
+    -- RequestKandang) — everything else is a live refresh that must NOT
+    -- pop the menu open (e.g. the post-catch net-counter push).
     "OpenKandangMenu",
+    -- MERCHANT SHOP: OpenShopMenu() — the player triggered the Merchant NPC's
+    -- prompt; open the shop modal. Item counts come from BackpackUpdate and
+    -- prices from the replicated CaptureConfig, so the payload stays empty.
+    "OpenShopMenu",
 }
 
 local ALL_NAMES = {}
@@ -130,6 +137,7 @@ export type DemoRemotes = {
     BattleEvent: RemoteEvent,
     BackpackUpdate: RemoteEvent,
     OpenKandangMenu: RemoteEvent,
+    OpenShopMenu: RemoteEvent,
 }
 
 -- The module script instance is the parent for the RemoteEvents.

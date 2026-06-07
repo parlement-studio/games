@@ -1275,10 +1275,9 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
             return true
         end)
         priceNote = ("-1🕸️ (sisa %d)"):format(remaining)
-        -- Net counter lives in the kandang menu + the menu's Item tab.
-        if pushKandangRef then
-            pushKandangRef(player)
-        end
+        -- Net counter lives in the Merchant shop + the menu's Item tab —
+        -- both ride BackpackUpdate (NO kandang push: catching must never
+        -- pop the kandang menu open).
         pushBackpack(player)
     elseif usedFree then
         PlayerDataService.update(player, function(d)
@@ -2117,17 +2116,16 @@ local function buildKandangPayload(player: Player): { [string]: any }?
         level = level,
         nextCost = nextCost,
         bonusPerLevel = DemoConfig.kandang.upgrade.bonusPerLevel,
-        -- S4 shop: owned Capture Nets (the menu shows the count + buy buttons;
-        -- prices come from the replicated CaptureConfig client-side).
-        nets = (data and data.items and data.items.capture_net) or 0,
     }
 end
 
--- Push a fresh kandang snapshot to `player` (open OR refresh — the client
--- decides; a closed menu ignores refreshes, an open one re-renders).
-local function pushKandang(player: Player)
+-- Push a fresh kandang snapshot to `player`. `open` = true ONLY for a fresh
+-- user intent (the gate terminal prompt) — every other push is a live refresh
+-- that must NOT pop the menu open on the client (e.g. the post-catch push).
+local function pushKandang(player: Player, open: boolean?)
     local payload = buildKandangPayload(player)
     if payload then
+        payload.open = open == true
         DemoRemotes.OpenKandangMenu:FireClient(player, payload)
     end
 end
@@ -2384,8 +2382,7 @@ local function handleBuyCaptureItem(player: Player, bundle: unknown)
     state.coins = math.max(0, state.coins - cost)
     flushCoins(player, false)
     pushCoins(player)
-    pushKandang(player) -- net counter + shop row re-render
-    pushBackpack(player) -- menu Item tab re-render
+    pushBackpack(player) -- Merchant shop + menu Item tab re-render
     DemoRemotes.Moment:FireClient(player, {
         kind = "info",
         text = ("🕸️ +%d %s! Total: %d"):format(count, def.name, newTotal),
@@ -2410,6 +2407,70 @@ if game:GetService("RunService"):IsStudio() then
     end
 end
 
+-- ── MERCHANT NPC (item shop) ────────────────────────────────────────────────
+-- The Capture Net shop moved OFF the kandang menu onto a world NPC: the server
+-- adopts the configured model (renaming the legacy "Noob" if the place still
+-- has it), anchors it, hangs an overhead label, and attaches the shop prompt.
+local merchantPrompt: ProximityPrompt? = nil
+
+local function setupMerchant(): boolean
+    local cfg = DemoConfig.merchant
+    if not cfg.enabled then
+        return false
+    end
+    local npc = workspace:FindFirstChild(cfg.npcName) or workspace:FindFirstChild(cfg.legacyName)
+    if not npc or not npc:IsA("Model") then
+        warn("[Merchant][server] NPC model missing: " .. cfg.npcName .. " / " .. cfg.legacyName)
+        return false
+    end
+    npc.Name = cfg.npcName
+
+    -- Static shopkeeper: anchor the root so nothing nudges it around, and make
+    -- sure no stray behavior (wander AI tags etc.) ever targets it.
+    local root = npc:FindFirstChild("HumanoidRootPart")
+    if root and root:IsA("BasePart") then
+        root.Anchored = true
+    end
+
+    -- Overhead label (idempotent: skip if a previous boot already added one).
+    local head = npc:FindFirstChild("Head")
+    if head and head:IsA("BasePart") and not head:FindFirstChild("MerchantLabel") then
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "MerchantLabel"
+        billboard.Size = UDim2.fromOffset(160, 32)
+        billboard.StudsOffset = Vector3.new(0, 2, 0)
+        billboard.AlwaysOnTop = true
+        billboard.MaxDistance = 80
+        local labelText = Instance.new("TextLabel")
+        labelText.BackgroundTransparency = 1
+        labelText.Size = UDim2.fromScale(1, 1)
+        labelText.Font = Enum.Font.GothamBold
+        labelText.TextScaled = true
+        labelText.TextColor3 = Color3.fromRGB(255, 206, 64)
+        labelText.Text = cfg.labelText
+        labelText.Parent = billboard
+        billboard.Parent = head
+    end
+
+    -- Shop prompt (idempotent like the label).
+    local existing = root and root:FindFirstChild("MerchantPrompt")
+    if existing and existing:IsA("ProximityPrompt") then
+        merchantPrompt = existing
+        return true
+    end
+    local prompt = Instance.new("ProximityPrompt")
+    prompt.Name = "MerchantPrompt"
+    prompt.ActionText = cfg.actionText
+    prompt.ObjectText = cfg.objectText
+    prompt.KeyboardKeyCode = Enum.KeyCode.F
+    prompt.HoldDuration = cfg.holdSec
+    prompt.MaxActivationDistance = cfg.distance
+    prompt.RequiresLineOfSight = false
+    prompt.Parent = root or npc
+    merchantPrompt = prompt
+    return true
+end
+
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
     if promptToRecord[prompt] then
         handleCatch(prompt, player)
@@ -2418,9 +2479,15 @@ local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
     elseif placePromptToStand[prompt] then
         handlePlace(prompt, player)
     elseif kandangPrompt ~= nil and prompt == kandangPrompt then
-        -- KANDANG MENU: open with a fresh snapshot.
+        -- KANDANG MENU: open with a fresh snapshot (the ONLY open-intent push).
         if states[player] then
-            pushKandang(player)
+            pushKandang(player, true)
+        end
+    elseif merchantPrompt ~= nil and prompt == merchantPrompt then
+        -- MERCHANT SHOP: open the shop modal (item counts ride BackpackUpdate).
+        if states[player] then
+            pushBackpack(player)
+            DemoRemotes.OpenShopMenu:FireClient(player)
         end
     end
 end
@@ -2734,4 +2801,10 @@ print("[Demo Place] ready — " .. placeReady .. " empty stands with place promp
 -- per-monster prompts (those creators no-op while the menu is enabled).
 if setupKandangTerminal() then
     print("[Kandang] terminal ready — menu interaction enabled")
+end
+
+-- MERCHANT NPC: the item shop lives on the world NPC (ex-"Noob"), not in the
+-- kandang menu.
+if setupMerchant() then
+    print("[Merchant] NPC ready — shop prompt enabled")
 end
