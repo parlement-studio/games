@@ -89,6 +89,9 @@ type InventoryItem = {
     personality: string, -- canonical key: "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
     element: string, -- persisted element enum ("Fire"|"Nature"|"Water"|"Volt"|"Wind"), display badge
     rarity: string, -- persisted rarity enum ("Common".."Legendary"), badge tint (rarity doc R3)
+    evoStage: number, -- persisted evolution stage (0..maxStage)
+    evolveCost: number?, -- coins for the NEXT stage (x rarity); nil = MAX stage
+    evolveMilestone: number?, -- level required for the NEXT stage; nil = MAX stage
     level: number, -- current progression level of this Brainrot (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level (xpCurveBase * level)
@@ -127,6 +130,7 @@ type FighterRecord = {
     level: number,
     element: string, -- element SNAPSHOT from the summoned entry (element doc E3; drives elementMod)
     rarity: string, -- rarity SNAPSHOT from the summoned entry (rarity doc R3; drives statMult)
+    evoStage: number, -- evolution stage SNAPSHOT (S2; drives evoStatMult + aura)
     model: Model,
     nextCombatAt: number,
     nextSeekAt: number,
@@ -405,15 +409,30 @@ local function pushInventory(player: Player)
             local powerMult = if combat.personalityDamageScales then prodMult(entry.personality) else 1
             -- RARITY (R3): one moderate tier factor on both stats (C 1.0 .. L 2.0).
             local rarityMult = RarityConfig.statMultFor(entry.rarity)
-            local hp = math.round(combat.fighterBaseHP * scale * rarityMult)
-            local power = math.round(combat.fighterBaseDamagePerTick * scale * powerMult * rarityMult)
+            -- EVOLUTION (S2): ABSOLUTE stage multiplier (inlined like the rest —
+            -- evoStatMult is defined later in the file; formula kept identical).
+            local stage = entry.evoStage or 0
+            local evo = DemoConfig.evolution
+            local evoMult = if stage >= 1 and stage <= evo.maxStage then evo.statMult[stage] else 1
+            local hp = math.round(combat.fighterBaseHP * scale * rarityMult * evoMult)
+            local power = math.round(combat.fighterBaseDamagePerTick * scale * powerMult * rarityMult * evoMult)
             local wins = (entry.history and entry.history.rwon) or 0
             local coinsMade = math.floor((entry.history and entry.history.coins) or 0)
+            -- EVOLVE button data (server-computed; nil cost/milestone = MAX).
+            local evolveCost: number? = nil
+            local evolveMilestone: number? = nil
+            if stage < evo.maxStage then
+                evolveMilestone = evo.levelMilestones[stage + 1]
+                evolveCost = math.floor(evo.baseCost[stage + 1] * RarityConfig.evolveCostMultFor(entry.rarity))
+            end
             table.insert(payload, {
                 id = id,
                 personality = entry.personality,
                 element = entry.element,
                 rarity = entry.rarity,
+                evoStage = stage,
+                evolveCost = evolveCost,
+                evolveMilestone = evolveMilestone,
                 level = entry.level,
                 xp = entry.xp,
                 xpToNext = PROGRESSION.xpCurveBase * entry.level,
@@ -670,6 +689,52 @@ end
 -- this only changes the deployed clone's presentation (rigged + wandering).
 local KANDANG = DemoConfig.kandang
 
+-- EVOLUTION (sink S2): milestone + paid activation; ABSOLUTE stat multiplier
+-- per stage (stage 0 = 1.0) and an element-colored aura on spawned clones.
+local EVOLUTION = DemoConfig.evolution
+
+-- Defensive stage->statMult lookup (nil/garbage/out-of-range -> 1.0).
+local function evoStatMult(evoStage: any): number
+    local s = if type(evoStage) == "number" then math.floor(evoStage) else 0
+    if s >= 1 and s <= EVOLUTION.maxStage then
+        return EVOLUTION.statMult[s]
+    end
+    return 1.0
+end
+
+-- EVOLUTION AURA (placeholder VFX per decision doc S2): a ParticleEmitter on
+-- the model root, COLOR = the monster's element tint (ElementConfig.display),
+-- density/size scaling with stage. Stage 0 = no-op. Survives until the model
+-- is destroyed (recall/despawn); evolves apply to the NEXT spawn (a monster
+-- must be in the BAG to evolve, so no live clone ever needs retrofitting).
+local function addEvoAura(model: Model, element: any, evoStage: any)
+    local s = if type(evoStage) == "number" then math.floor(evoStage) else 0
+    if s < 1 then
+        return
+    end
+    s = math.min(s, EVOLUTION.maxStage)
+    local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    if not root then
+        return
+    end
+    local display = ElementConfig.display[element]
+    local color = if display then Color3.fromHex(display.color) else Color3.fromRGB(255, 255, 255)
+    local emitter = Instance.new("ParticleEmitter")
+    emitter.Name = "EvoAura"
+    emitter.Color = ColorSequence.new(color)
+    emitter.Rate = EVOLUTION.aura.rates[s]
+    emitter.Size = NumberSequence.new(EVOLUTION.aura.sizes[s])
+    emitter.Lifetime = NumberRange.new(0.8, 1.4)
+    emitter.Speed = NumberRange.new(0.5, 1.5)
+    emitter.SpreadAngle = Vector2.new(180, 180)
+    emitter.LightEmission = 0.6
+    emitter.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    emitter.Parent = root
+end
+
 -- GROUNDING: two-phase HipHeight fix shared with the pack prototype (the rigs
 -- hover ~0.75 studs otherwise; scaled rigs proportionally more). See
 -- Shared/Demo/RigGrounding.luau for the mechanism.
@@ -698,7 +763,9 @@ end)
 -- showroom look).
 --
 -- Returns the parented clone, or nil if no template is available.
-local function spawnDisplay(personality: string, stand: BasePart, index: number): Model?
+-- `entry` (optional): the authoritative roster entry — supplies element +
+-- evoStage for the evolution aura/scale (S2). nil = plain spawn.
+local function spawnDisplay(personality: string, stand: BasePart, index: number, entry: Types.BrainrotEntry?): Model?
     local template: Instance? = nil
     local rigged = false
     if KANDANG.wanderEnabled then
@@ -746,7 +813,16 @@ local function spawnDisplay(personality: string, stand: BasePart, index: number)
                 desc.CollisionGroup = "Brainrot"
             end
         end
+        -- EVOLUTION (S2): stage-3 monsters are slightly bigger; every evolved
+        -- stage carries the element-colored aura. Applied pre-parent so the
+        -- grounding settle measures the FINAL size.
+        if entry and (entry.evoStage or 0) >= EVOLUTION.maxStage then
+            clone:ScaleTo(clone:GetScale() * EVOLUTION.stage3ScaleMult)
+        end
         clone.Parent = workspace
+        if entry then
+            addEvoAura(clone, entry.element, entry.evoStage)
+        end
         -- GROUNDING phase 2: measure + remove the residual pose gap once the
         -- physics settle.
         if humanoid then
@@ -952,7 +1028,8 @@ local function handleDeployToStand(player: Player, standIndex: unknown, personal
         return -- pedestal missing in Workspace
     end
 
-    local model = spawnDisplay(personality, stand, standIndex)
+    -- Pass the entry so the spawn carries the evolution aura/scale (S2).
+    local model = spawnDisplay(personality, stand, standIndex, data.roster[itemId])
     if not model then
         return -- template missing; leave inventory untouched
     end
@@ -1196,16 +1273,22 @@ end
 -- (battle-gdd F2): fighterBaseDamagePerTick * levelScale(level) * personalityScale
 -- * rarityStatMult (rarity doc R3, moderate C 1.0 .. L 2.0; defensive 1.0 on
 -- nil/invalid). LEVEL boosts damage; personality keeps its flavor multiplier.
-local function fighterDamage(level: number, personality: string, rarity: any): number
+local function fighterDamage(level: number, personality: string, rarity: any, evoStage: any): number
     local personalityMult = if COMBAT.personalityDamageScales then prodMult(personality) else 1
-    return COMBAT.fighterBaseDamagePerTick * levelScale(level) * personalityMult * RarityConfig.statMultFor(rarity)
+    return COMBAT.fighterBaseDamagePerTick
+        * levelScale(level)
+        * personalityMult
+        * RarityConfig.statMultFor(rarity)
+        * evoStatMult(evoStage)
 end
 
 -- PROGRESSION: a FIGHTER's derived Max HP at a given level (battle-gdd F2):
 -- round(fighterBaseHP * levelScale(level) * rarityStatMult). LEVEL + rarity
 -- boost HP; rounded to a whole HP so the built-in health bar reads cleanly.
-local function fighterMaxHP(level: number, rarity: any): number
-    return math.round(COMBAT.fighterBaseHP * levelScale(level) * RarityConfig.statMultFor(rarity))
+local function fighterMaxHP(level: number, rarity: any, evoStage: any): number
+    return math.round(
+        COMBAT.fighterBaseHP * levelScale(level) * RarityConfig.statMultFor(rarity) * evoStatMult(evoStage)
+    )
 end
 
 -- FOLLOW FORMATION: a fighter is "living" (counts toward a formation slot) iff
@@ -1478,6 +1561,8 @@ local function handleSummon(player: Player, brainrotId: unknown)
     local element = entry.element
     -- RARITY: snapshot likewise (rarity doc R3) — drives this fighter's statMult.
     local rarity = entry.rarity
+    -- EVOLUTION: stage snapshot (S2) — drives evoStatMult + the spawn aura.
+    local evoStage = entry.evoStage or 0
 
     -- Place in front of the player's character. Bail gracefully if no character.
     local character = player.Character
@@ -1505,8 +1590,8 @@ local function handleSummon(player: Player, brainrotId: unknown)
         fighter:Destroy()
         return
     end
-    -- PROGRESSION: derive Max HP from the Brainrot's level + rarity (F2 + R3).
-    local maxHP = fighterMaxHP(level, rarity)
+    -- PROGRESSION: derive Max HP from level + rarity + evolution (F2/R3/S2).
+    local maxHP = fighterMaxHP(level, rarity, evoStage)
     humanoid.WalkSpeed = COMBAT.fighterWalkSpeed
     humanoid.MaxHealth = maxHP
     humanoid.Health = maxHP
@@ -1537,6 +1622,12 @@ local function handleSummon(player: Player, brainrotId: unknown)
     billboard.Parent = labelAnchor or root
 
     fighter.Parent = workspace
+    -- EVOLUTION: stage 3 fights slightly BIGGER + every evolved stage gets the
+    -- element-colored aura (S2 visual payoff).
+    if evoStage >= EVOLUTION.maxStage then
+        fighter:ScaleTo(fighter:GetScale() * EVOLUTION.stage3ScaleMult)
+    end
+    addEvoAura(fighter, element, evoStage)
     -- GROUNDING phase 2: measure + remove the residual pose gap once settled.
     RigGrounding.settleToGround(fighter, humanoid)
 
@@ -1552,6 +1643,7 @@ local function handleSummon(player: Player, brainrotId: unknown)
         level = level,
         element = element,
         rarity = rarity,
+        evoStage = evoStage,
         model = fighter,
         nextCombatAt = 0,
         nextSeekAt = 0,
@@ -1741,10 +1833,10 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                         wildDamageMult = 1
                     end
 
-                    -- Wild takes the fighter's LEVEL+personality+rarity-scaled
-                    -- damage (battle-gdd F2 + rarity R3) times elementMod.
+                    -- Wild takes the fighter's LEVEL+personality+rarity+evo-
+                    -- scaled damage (F2 + R3 + S2) times elementMod.
                     wildHumanoid:TakeDamage(
-                        fighterDamage(record.level, record.personality, record.rarity) * fighterVsWild
+                        fighterDamage(record.level, record.personality, record.rarity, record.evoStage) * fighterVsWild
                     )
                     -- Fighter takes the wild's (personality-only) damage back times
                     -- its DamageMult (boss) times the REVERSE elementMod; the wild
@@ -1954,6 +2046,7 @@ local function buildKandangPayload(player: Player): { [string]: any }?
                 personality = slot.personality,
                 element = entry and entry.element or nil,
                 rarity = entry and entry.rarity or nil,
+                evoStage = entry and entry.evoStage or 0,
                 level = entry and entry.level or 1,
             })
         else
@@ -2099,6 +2192,128 @@ local function handleUpgradeKandang(player: Player)
     print(("[Upgrade] %s kandang -> Lv%d (-%d coins)"):format(player.Name, state.factoryLevel, cost))
 end
 
+-- ── EVOLUTION (sink S2): pay the activation cost to evolve a BAG monster ───
+-- HYBRID gate: milestone level (free, from playing) + coins (x rarity).
+-- PERSIST-FIRST: eligibility is re-validated INSIDE the atomic mutator (a
+-- racing double-tap cannot double-evolve); the float is debited only after
+-- the stage bump committed. The monster must be in the BAG (not deployed /
+-- not fighting) so no live clone ever needs retro-fitting — the aura + stat
+-- bump apply on the next spawn/summon.
+local function handleEvolve(player: Player, brainrotId: unknown)
+    local state = states[player]
+    if not state then
+        return
+    end
+    if not allowAction(state, "evolve", DemoConfig.rateLimits.deploy) then
+        return
+    end
+    if type(brainrotId) ~= "string" then
+        return -- attacker-controlled arg; reject
+    end
+    local data = PlayerDataService.getData(player)
+    if not data then
+        return
+    end
+    local entry = data.roster[brainrotId]
+    if not entry then
+        return -- not owned; reject
+    end
+    -- BUSY check: deployed or fighting monsters cannot evolve (bag only).
+    local b1 = data.base.buildings[BUILDING_ID]
+    if b1 then
+        for _, deployedId in b1.deployment do
+            if deployedId == brainrotId then
+                return
+            end
+        end
+    end
+    for _, record in state.fighters do
+        if record.brainrotId == brainrotId then
+            return
+        end
+    end
+
+    local stage = entry.evoStage or 0
+    if stage >= EVOLUTION.maxStage then
+        DemoRemotes.Moment:FireClient(player, { kind = "info", text = "💫 Monster ini sudah STAGE MAX!" })
+        return
+    end
+    local milestone = EVOLUTION.levelMilestones[stage + 1]
+    if entry.level < milestone then
+        DemoRemotes.Moment:FireClient(player, {
+            kind = "info",
+            text = ("✨ Butuh Lv %d untuk evolve (sekarang Lv %d)."):format(milestone, entry.level),
+        })
+        return
+    end
+    local cost = math.floor(EVOLUTION.baseCost[stage + 1] * RarityConfig.evolveCostMultFor(entry.rarity))
+    if state.coins < cost then
+        DemoRemotes.Moment:FireClient(player, {
+            kind = "info",
+            text = ("🪙 Koin tidak cukup! Evolve butuh %d."):format(cost),
+        })
+        return
+    end
+
+    -- PERSIST FIRST, re-validating inside the mutator (anti double-fire).
+    local newStage = stage + 1
+    local ok = PlayerDataService.update(player, function(d)
+        local e = d.roster[brainrotId]
+        if not e then
+            error("gone", 0)
+        end
+        local s = e.evoStage or 0
+        if s ~= stage or e.level < milestone then
+            error("stale", 0)
+        end
+        e.evoStage = s + 1
+        return true
+    end)
+    if not ok then
+        return
+    end
+    state.coins = math.max(0, state.coins - cost)
+    flushCoins(player, false)
+    pushCoins(player)
+    pushInventory(player) -- stats + evolve-button data re-derive
+    local stageEmoji = ({ "✨", "🌟", "💫" })[newStage] or "✨"
+    DemoRemotes.Moment:FireClient(player, {
+        kind = "info",
+        text = ("%s %s berevolusi ke Stage %d! Stat x%.2f"):format(
+            stageEmoji,
+            string.upper(entry.personality),
+            newStage,
+            EVOLUTION.statMult[newStage]
+        ),
+    })
+    print(
+        ("[Evolve] %s %s -> stage %d (-%d coins, rarity %s)"):format(
+            player.Name,
+            entry.personality,
+            newStage,
+            cost,
+            tostring(entry.rarity)
+        )
+    )
+end
+
+-- DEV ONLY (Studio): grant XP to a roster entry through the REAL awardWinXp
+-- path so evolve milestones can be tested without 20 minutes of farming.
+-- Server-side BindableFunction — unreachable from clients; no-op outside
+-- Studio. Remove (or leave; it is inert in production) before launch.
+if game:GetService("RunService"):IsStudio() then
+    local devXp = Instance.new("BindableFunction")
+    devXp.Name = "DevAwardXp"
+    devXp.Parent = ServerStorage
+    devXp.OnInvoke = function(player: Player, brainrotId: string, wins: number): boolean
+        for _ = 1, math.clamp(wins, 1, 200) do
+            awardWinXp(player, brainrotId)
+        end
+        pushInventory(player)
+        return true
+    end
+end
+
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
     if promptToRecord[prompt] then
         handleCatch(prompt, player)
@@ -2165,7 +2380,7 @@ local function hydrate(player: Player, data: Types_PlayerData)
         if entry then
             local stand = findStand(standIndex)
             if stand then
-                local model = spawnDisplay(entry.personality, stand, standIndex)
+                local model = spawnDisplay(entry.personality, stand, standIndex, entry)
                 if model then
                     state.slots[standIndex] = { personality = entry.personality, model = model, id = id }
                     setStandLabel(stand, string.upper(entry.personality), true)
@@ -2364,6 +2579,8 @@ DemoRemotes.SummonFighter.OnServerEvent:Connect(handleSummon)
 DemoRemotes.RequestKandang.OnServerEvent:Connect(handleRequestKandang)
 DemoRemotes.RecallDeployed.OnServerEvent:Connect(handleRecallDeployed)
 DemoRemotes.UpgradeKandang.OnServerEvent:Connect(handleUpgradeKandang)
+-- EVOLUTION sink (S2): paid stage activation from the stat sheet.
+DemoRemotes.EvolveMonster.OnServerEvent:Connect(handleEvolve)
 -- AUTO-COLLECT: the Collect remote stays registered (handleCollect is a no-op)
 -- but is intentionally NOT wired to OnServerEvent — coins rise automatically.
 -- Reference the no-op so it is not flagged unused while documenting the removal.

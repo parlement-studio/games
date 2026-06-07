@@ -86,6 +86,15 @@ local function rarityTag(rarity: any): string
     end
     return (' <font color="%s">◆%s</font>'):format(display.color, display.name)
 end
+
+-- EVOLUTION stage badge (S2): "" at stage 0, ✨/🌟/💫 for stages 1-3.
+local STAGE_EMOJI = { "✨", "🌟", "💫" }
+local function stageEmoji(stage: any): string
+    if type(stage) == "number" and stage >= 1 then
+        return STAGE_EMOJI[math.min(math.floor(stage), #STAGE_EMOJI)]
+    end
+    return ""
+end
 local corner = UITheme.corner
 local stroke = UITheme.stroke
 local padding = UITheme.padding
@@ -112,7 +121,7 @@ local PANEL_CLOSE_SIZE = 44
 -- header (emoji + name + ⭐ Lv + ✕), an XP bar, an HP/Power stat row, the effect
 -- one-liner + lifetime flavor (wins / coins made), then the action buttons.
 local SHEET_WIDTH = 380
-local SHEET_HEIGHT = 360
+local SHEET_HEIGHT = 424 -- +64 for the EVOLVE row (S2 sink) above the actions
 local SHEET_CLOSE_SIZE = 44 -- MOBILE: >=44px touch target
 local SHEET_HEADER_HEIGHT = 44
 local SHEET_XP_TOP = 56 -- y of the XP bar block
@@ -127,6 +136,8 @@ local SHEET_FLAVOR_HEIGHT = 26
 local SHEET_ACTIONS_HEIGHT = 52 -- height of the bottom action-button row (>=44px)
 local SHEET_ACTION_GAP = 12 -- gap between the two action buttons
 local SHEET_DIVIDER_HEIGHT = 2 -- thin divider rule between sections
+-- EVOLVE row (S2 sink): full-width button stacked ABOVE the action row.
+local SHEET_EVOLVE_HEIGHT = 52
 
 -- MOBILE BAG TOGGLE: an on-screen button that opens/closes the inventory panel
 -- (same path as the B key). Anchored bottom-RIGHT but offset UP so it clears
@@ -458,7 +469,7 @@ local function buildCard(
         FontFace = Font.Bold,
         TextColor3 = Color.Text,
         TextScaled = true,
-        Text = string.format("⭐ Lv%d %s", item.level, elementEmoji(item.element)),
+        Text = string.format("⭐ Lv%d %s%s", item.level, elementEmoji(item.element), stageEmoji(item.evoStage)),
         ZIndex = childZ,
         Parent = card,
     }, { corner(6) })
@@ -759,17 +770,36 @@ local sheetCoins = apply(Instance.new("TextLabel"), {
     Parent = sheetPanel,
 })
 
--- Divider above the actions.
+-- Divider above the EVOLVE + action rows.
 apply(Instance.new("Frame"), {
     Name = "Divider2",
     AnchorPoint = Vector2.new(0, 1),
-    Position = UDim2.new(0, 0, 1, -(SHEET_ACTIONS_HEIGHT + 8)),
+    Position = UDim2.new(0, 0, 1, -(SHEET_ACTIONS_HEIGHT + SHEET_ACTION_GAP + SHEET_EVOLVE_HEIGHT + 8)),
     Size = UDim2.new(1, 0, 0, SHEET_DIVIDER_HEIGHT),
     BackgroundColor3 = Color.Stroke,
     BorderSizePixel = 0,
     ZIndex = 52,
     Parent = sheetPanel,
 })
+
+-- EVOLVE button (S2 sink): full-width, stacked above Summon/Deploy. Text +
+-- color are data-driven per item in openSheet (ready / level-gated / broke /
+-- MAX); the SERVER re-validates every tap and answers with a Moment banner.
+local sheetEvolve = apply(Instance.new("TextButton"), {
+    Name = "EvolveBtn",
+    AnchorPoint = Vector2.new(0, 1),
+    Position = UDim2.new(0, 0, 1, -(SHEET_ACTIONS_HEIGHT + SHEET_ACTION_GAP)),
+    Size = UDim2.new(1, 0, 0, SHEET_EVOLVE_HEIGHT),
+    AutoButtonColor = true,
+    BackgroundColor3 = Color.PanelLight,
+    BorderSizePixel = 0,
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    Text = "✨ EVOLVE",
+    ZIndex = 52,
+    Parent = sheetPanel,
+}, { corner(12), padding(8) })
 
 -- Action buttons (finger-sized, >=44px): ⚔ Summon (left) / ▶ Deploy (right).
 local sheetSummon = apply(Instance.new("TextButton"), {
@@ -819,13 +849,34 @@ local function openSheet(item: DemoClient.InventoryItem)
     local theme = UITheme.personality(item.personality)
 
     sheetHeader.Text = string.format(
-        "%s %s %s ⭐ Lv%d%s",
+        "%s %s %s%s ⭐ Lv%d%s",
         theme.emoji,
         string.upper(item.personality),
         elementEmoji(item.element),
+        stageEmoji(item.evoStage),
         item.level,
         rarityTag(item.rarity)
     )
+
+    -- EVOLVE button state (data from the server payload; server re-validates).
+    if item.evolveCost == nil then
+        sheetEvolve.Text = "💫 STAGE MAX"
+        sheetEvolve.BackgroundColor3 = Color.SlotEmpty
+        sheetEvolve.AutoButtonColor = false
+    elseif item.level < (item.evolveMilestone or math.huge) then
+        sheetEvolve.Text = string.format("✨ Evolve terbuka di Lv %d", item.evolveMilestone or 0)
+        sheetEvolve.BackgroundColor3 = Color.SlotEmpty
+        sheetEvolve.AutoButtonColor = false
+    else
+        sheetEvolve.Text =
+            string.format("✨ EVOLVE ke Stage %d — %d 🪙", (item.evoStage or 0) + 1, item.evolveCost)
+        sheetEvolve.AutoButtonColor = true
+        if DemoClient.getDisplayCoins() >= item.evolveCost then
+            sheetEvolve.BackgroundColor3 = Color3.fromRGB(168, 85, 247) -- ready: evolution purple
+        else
+            sheetEvolve.BackgroundColor3 = Color.SlotEmpty -- broke: dim (server still answers)
+        end
+    end
 
     -- XP bar: fill = xp / xpToNext clamped 0..1; "MAX" at the level ceiling.
     if item.level >= MAX_LEVEL then
@@ -858,6 +909,22 @@ rootTrove:Add(sheetSummon.Activated:Connect(function()
     end
     print("[Combat][ui] summon " .. item.personality .. " id=" .. item.id)
     DemoClient.summon(item.id)
+    closeSheet()
+end))
+
+-- ✨ Evolve (S2 sink): send the intent; the server validates milestone + funds
+-- (x rarity) and answers via a Moment banner + InventoryUpdate. Close so the
+-- re-opened sheet shows the fresh stage/stats.
+rootTrove:Add(sheetEvolve.Activated:Connect(function()
+    local item = sheetItem
+    if not item or item.evolveCost == nil then
+        return -- MAX stage: inert
+    end
+    if item.level < (item.evolveMilestone or math.huge) then
+        return -- level-gated: inert (button already reads "terbuka di Lv N")
+    end
+    print("[Evolve][ui] evolve " .. item.personality .. " id=" .. item.id)
+    DemoClient.evolve(item.id)
     closeSheet()
 end))
 
@@ -1351,9 +1418,10 @@ local function renderKandang()
     for _, slot in payload.deployed do
         local index = slot.index
         local label = string.format(
-            "%s %s  ⭐ Lv%d%s",
+            "%s %s%s  ⭐ Lv%d%s",
             string.upper(slot.personality),
             elementEmoji(slot.element),
+            stageEmoji(slot.evoStage),
             slot.level or 1,
             rarityTag(slot.rarity)
         )
@@ -1372,9 +1440,10 @@ local function renderKandang()
     for _, item in inventory do
         local personality = item.personality
         local label = string.format(
-            "%s %s  ⭐ Lv%d%s",
+            "%s %s%s  ⭐ Lv%d%s",
             string.upper(personality),
             elementEmoji(item.element),
+            stageEmoji(item.evoStage),
             item.level,
             rarityTag(item.rarity)
         )

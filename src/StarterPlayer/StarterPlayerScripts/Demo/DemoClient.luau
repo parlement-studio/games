@@ -37,6 +37,9 @@ export type InventoryItem = {
     personality: string, -- "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
     element: string, -- "Fire" | "Nature" | "Water" | "Volt" | "Wind" (display badge only)
     rarity: string, -- "Common".."Legendary" (display badge tint only)
+    evoStage: number, -- evolution stage (0..3); drives the ✨/🌟/💫 badge
+    evolveCost: number?, -- server-computed coins for the NEXT stage; nil = MAX
+    evolveMilestone: number?, -- level gate for the NEXT stage; nil = MAX
     level: number, -- current progression level (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level
@@ -75,6 +78,7 @@ export type KandangSlot = {
     personality: string,
     element: string?, -- element badge (from the authoritative roster entry)
     rarity: string?, -- rarity badge tint (from the authoritative roster entry)
+    evoStage: number?, -- evolution stage badge (✨/🌟/💫)
     level: number,
 }
 
@@ -235,6 +239,12 @@ end
 -- validates funds + the level cap and replies with a fresh kandang snapshot.
 function DemoClient.upgradeKandang()
     DemoRemotes.UpgradeKandang:FireServer()
+end
+
+-- EVOLUTION sink (S2): evolve a bag monster one stage. Server validates the
+-- milestone + funds (x rarity) and replies via InventoryUpdate + a banner.
+function DemoClient.evolve(brainrotId: string)
+    DemoRemotes.EvolveMonster:FireServer(brainrotId)
 end
 
 -- COMBAT (Tahap 2 + PROGRESSION): summon a SPECIFIC owned Brainrot (by its roster

@@ -490,6 +490,40 @@ return {
         personalityDamageScales = true,
     },
 
+    -- ── EVOLUTION (sink S2, decisions/2026-06-07-economy-sinks-fase0.md) ────
+    -- HYBRID: milestone level (FREE, from playing) gates eligibility; a coin
+    -- ACTIVATION COST (x RarityConfig.evolveCostMult) triggers the evolve.
+    -- evoStage persists on the roster entry (schema field shipped with
+    -- Persistence #1). Combat payoff = statMult below; visual payoff = an
+    -- element-colored aura (placeholder VFX until real art).
+    evolution = {
+        -- Activation cost per target stage (basis Common; x evolveCostMult).
+        -- LOCKED S2 values — changing them is a design decision.
+        baseCost = { 2500, 30000, 300000 },
+        -- Level milestone required to evolve INTO stage i (same for every
+        -- rarity — scarcity is already paid via the coin multiplier).
+        -- LOCKED S2 values: Lv 5 / 15 / 30.
+        levelMilestones = { 5, 15, 30 },
+        -- ABSOLUTE combat stat multiplier at stage i (not stacked): a stage-2
+        -- monster fights at x1.5, not x1.25*1.5. Stage 0 = x1.0.
+        -- LOCKED S2 values. Range per value: 1.0-3.0
+        statMult = { 1.25, 1.5, 2.0 },
+        -- Hard stage ceiling. Range: 1-3 | Default: 3
+        maxStage = 3,
+        -- Extra uniform model scale at the FINAL stage only ("sedikit lebih
+        -- besar", decision doc S2 table). Range: 1.0-1.3 | Default: 1.1
+        stage3ScaleMult = 1.1,
+        -- AURA placeholder tuning per stage (ParticleEmitter on the root,
+        -- color = ElementConfig.display[element].color).
+        aura = {
+            -- Particles/sec per stage (sparse glow -> dense swirl).
+            -- Range per value: 1-60 | Defaults: 6 / 14 / 28
+            rates = { 6, 14, 28 },
+            -- Particle size (studs) per stage. Range: 0.1-2 | Defaults below.
+            sizes = { 0.35, 0.5, 0.7 },
+        },
+    },
+
     -- ── PROGRESSION (LEVEL / XP — battle-gdd v1.2 F2) ────────────────────────
     -- XP comes ONLY from WINNING battles; LEVEL boosts ONLY combat stats
     -- (HP / ATK / damage), NEVER coin production (production stays personality-

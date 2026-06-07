@@ -63,6 +63,10 @@ local CLIENT_TO_SERVER = {
     -- DemoConfig.kandang.upgrade.bonusPerLevel per level. Server validates
     -- funds + cap + rate-limits; persists base.buildings.b1.factoryLevel.
     "UpgradeKandang",
+    -- ECONOMY SINK (S2): EvolveMonster(brainrotId) — pay the activation cost
+    -- to evolve an ELIGIBLE bag monster one stage (milestone level + coins,
+    -- x rarity). Server validates everything; persists entry.evoStage.
+    "EvolveMonster",
 }
 
 local SERVER_TO_CLIENT = {
@@ -106,6 +110,7 @@ export type DemoRemotes = {
     RequestKandang: RemoteEvent,
     RecallDeployed: RemoteEvent,
     UpgradeKandang: RemoteEvent,
+    EvolveMonster: RemoteEvent,
     StateUpdate: RemoteEvent,
     CrateOpened: RemoteEvent,
     Moment: RemoteEvent,
