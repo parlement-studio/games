@@ -15,6 +15,8 @@
 
 > **Revision note (2026-06-07, v3.1 rebrand)**: **Tema diganti, mekanik tetap.** Kreatur "Brainrot" → **Monster Relic**; player fantasy → **Relic Hunter**; setting "The Feed" → **reruntuhan peradaban kuno** (Relic Inti meledak ratusan tahun lalu; monster liar + monster penjaga kuil/gerbang/harta). Tier 2 boss kandidat nama baru: **Temple Guardian** (menggantikan kandidat "CEO Brainrot"); Raid Dungeon → kandidat **Ancient Vault**; token → kandidat **Relic Key**; "Meme Coins" → nama currency TBD. **Open decision baru: Element system** (lore menyebut monster ber-elemen — mekanik type-chart atau flavor saja? blokir boss-system-gdd). Tidak ada perubahan status/prioritas/dependency sistem apa pun. Lihat `design/decisions/2026-06-07-monster-relic-rebrand.md`.
 
+> **Revision note (2026-06-07, v3.2 Element system LOCKED)**: Open decision Element **resolved** — **light chart mekanik combat**: 5 elemen **Fire > Nature > Water > Volt > Wind > Fire** (lingkaran 1-arah), `elementMod` 1.25/1.00/0.75 config-driven di formula damage Pet AI (dua arah, semua 3 boss tier). Element **di-roll server-side saat capture (uniform 20%)**, **permanen** (no reroll — hanya Personality yang rerollable), elemen boss **fixed per spec**. Field schema baru `BrainrotEntry.element` + backfill migrasi roster lama. Element TIDAK memengaruhi idle production (axis milik Personality) maupun capture success rate. **Blokir boss-system-gdd / capture-v2-gdd / ekstensi Pet AI 3-tier DIBUKA.** Lihat `design/decisions/2026-06-07-element-system.md`.
+
 ## Summary
 
 - **Total active MVP systems**: 23 (after restructure)

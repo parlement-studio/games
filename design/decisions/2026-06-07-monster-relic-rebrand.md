@@ -99,7 +99,7 @@ Owner memutuskan nama game tetap dulu (2026-06-07). Rename title = open decision
 ## 7. Open decisions (baru + carry-over yang terdampak)
 
 Baru dari rebrand ini:
-1. **Element system** — mekanik baru (type chart, weakness/resist) atau flavor saja? Berdampak ke Pet AI #25, Boss System #6, katalog spesies. **Perlu keputusan sebelum boss-system-gdd ditulis.**
+1. ~~**Element system** — mekanik baru (type chart, weakness/resist) atau flavor saja?~~ ✅ **RESOLVED (2026-06-07)** — light chart, 5 elemen (Fire/Nature/Water/Volt/Wind), roll uniform saat capture, no reroll, ±25% config-driven. Lihat `design/decisions/2026-06-07-element-system.md`.
 2. Nama final: game title, dunia, Lobby/Hunter Camp, currency, capture item, token, ketiga nama boss tier (lihat 🚧 di §4).
 3. **Relic Inti** — dipakai sebagai endgame raid content sekarang, atau disimpan untuk Phase 2 narrative?
 4. Spesies monster — katalog spesies (berapa spesies di launch? per area berapa?) — masuk world-universe-gdd / capture-v2-gdd.
