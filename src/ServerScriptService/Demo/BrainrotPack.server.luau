@@ -61,6 +61,7 @@ local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("Elemen
 -- bridge applies the same authoritative values).
 local CaptureConfig = require(Shared:WaitForChild("Config"):WaitForChild("CaptureConfig"))
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
+local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 
 -- The CollectionService tag DemoServer's summon-combat target search reads.
 -- Single decoupling point between this prototype and the combat loop.
@@ -508,11 +509,12 @@ local function handlePackCatch(prompt: ProximityPrompt, player: Player)
         end
     end
 
-    -- Mark the model so the wander / respawn loops see it as gone, then
-    -- destroy it. We do not reuse the original `DemoCaught` attribute here so
-    -- a future integration with DemoServer can re-enable the full catch path
-    -- without false positives from the prototype.
-    slot.model:Destroy()
+    -- Detach the model from the live loops IMMEDIATELY (so wander/respawn and a
+    -- re-trigger all treat it as gone) but DEFER the destroy: the catcher plays
+    -- a cinematic on it first. We stash the model in `caughtModel` and hand the
+    -- slot's `model` to nil right away.
+    local caughtModel = slot.model
+    local element = caughtModel:GetAttribute("Element")
     slot.model = nil
     -- Tear the prompt out of our map; ProximityPromptService retains a stale
     -- reference until the prompt is destroyed, which happened with the model.
@@ -522,6 +524,41 @@ local function handlePackCatch(prompt: ProximityPrompt, player: Player)
     -- countdown. (Per-slot delay: minions vs boss differ — though a boss never
     -- reaches this handler since it gets no catch prompt.)
     slot.nextAt = os.clock() + slot.respawnSec
+
+    local cine = DemoConfig.catchCinematic
+    if cine and cine.enabled and caughtModel and caughtModel.Parent then
+        -- FREEZE the wild so it holds still for the sequence: kill its AI inputs
+        -- (anchor parts, stop the Humanoid) and strip the catch prompt + label
+        -- so nothing re-triggers or floats during the shot.
+        local humanoid = caughtModel:FindFirstChildWhichIsA("Humanoid")
+        if humanoid then
+            humanoid:MoveTo(caughtModel:GetPivot().Position)
+            humanoid.WalkSpeed = 0
+            humanoid.AutoRotate = false
+        end
+        for _, desc in caughtModel:GetDescendants() do
+            if desc:IsA("ProximityPrompt") or desc:IsA("BillboardGui") then
+                desc:Destroy()
+            elseif desc:IsA("BasePart") then
+                desc.Anchored = true
+            end
+        end
+        -- Tell the CATCHER to play the cinematic on this exact model.
+        DemoRemotes.CatchCinematic:FireClient(player, {
+            model = caughtModel,
+            personality = slot.personality,
+            element = element,
+        })
+        -- Destroy after the client has had the full hold window (the client
+        -- sequence is shorter than holdSec — see DemoConfig.catchCinematic).
+        task.delay(cine.holdSec, function()
+            if caughtModel and caughtModel.Parent then
+                caughtModel:Destroy()
+            end
+        end)
+    else
+        caughtModel:Destroy()
+    end
     print(("[Pack] %s caught %s — respawn in %ds"):format(player.Name, slot.personality, slot.respawnSec))
 end
 

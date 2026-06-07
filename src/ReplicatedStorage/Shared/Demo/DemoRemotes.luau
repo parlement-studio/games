@@ -106,6 +106,11 @@ local SERVER_TO_CLIENT = {
     -- prompt; open the shop modal. Item counts come from BackpackUpdate and
     -- prices from the replicated CaptureConfig, so the payload stays empty.
     "OpenShopMenu",
+    -- CATCH CINEMATIC: CatchCinematic({ model, personality, element }) — a
+    -- catch SUCCEEDED; the server froze the wild for a short hold so the
+    -- catching client can play the net-throw + suck-in + camera sequence
+    -- (presentation only — the roster mint already committed).
+    "CatchCinematic",
 }
 
 local ALL_NAMES = {}
@@ -138,6 +143,7 @@ export type DemoRemotes = {
     BackpackUpdate: RemoteEvent,
     OpenKandangMenu: RemoteEvent,
     OpenShopMenu: RemoteEvent,
+    CatchCinematic: RemoteEvent,
 }
 
 -- The module script instance is the parent for the RemoteEvents.

@@ -418,6 +418,34 @@ return {
         distance = 12,
     },
 
+    -- ── CATCH CINEMATIC (client presentation on a successful catch) ─────────
+    -- The server freezes the caught wild for `holdSec` and fires
+    -- CatchCinematic at the catcher; the client plays: camera dolly-in →
+    -- net throw (bezier arc) → impact burst → shake → suck-in shrink →
+    -- poof → camera restore. Pure presentation — the mint already committed.
+    catchCinematic = {
+        -- Master switch (false = instant despawn, old behavior).
+        -- Boolean | Default: true
+        enabled = true,
+        -- How long the SERVER keeps the frozen model before destroying it.
+        -- Must outlast the whole client sequence. Range: 1-6 | Default: 3.0
+        holdSec = 3.0,
+        -- Net projectile flight time (player hand -> monster). Range: 0.2-1
+        netFlightSec = 0.45,
+        -- Struggle shake after the net lands. Range: 0.2-1 | Default: 0.45
+        shakeSec = 0.45,
+        -- Suck-in shrink (scale -> ~0) duration. Range: 0.3-1.2 | Default: 0.6
+        shrinkSec = 0.6,
+        -- Camera: dolly-in time, framing distance/height, zoom FOV, restore time.
+        camInSec = 0.35,
+        camDistance = 9, -- studs from the monster (toward the player side)
+        camHeight = 2.5, -- studs above the monster pivot
+        fovZoom = 55, -- punched-in FOV during the sequence (default cam ~70)
+        restoreSec = 0.4,
+        -- Net arc height (studs above the straight line). Range: 1-8 | Default: 4
+        arcHeight = 4,
+    },
+
     -- ── WILD BRAINROT AI (server-authoritative roaming) ─────────────────────
     -- The wild creatures (Brainrot_<P>) are rigged with a Humanoid + an
     -- (invisible) HumanoidRootPart so the server can walk them via Humanoid:MoveTo.
