@@ -233,30 +233,66 @@ apply(Instance.new("TextLabel"), {
 }, { corner(12), stroke(Color.Stroke, 2), padding(10) })
 
 -- ════════════════════════════════════════════════════════════════════════════
--- INVENTORY BUTTON (top right)
+-- TOP BAR (top right) — per the owner's layout mock: a horizontal row of
+-- launcher buttons. Inventory / Monster / Skill open the tabbed menu panel
+-- straight onto their tab; Galery / Mission are PLACEHOLDERS (visible, dimmed,
+-- no handler — "taruh saja tetapi tidak perlu di-on togglenya").
 -- ════════════════════════════════════════════════════════════════════════════
-local inventoryButton = apply(Instance.new("TextButton"), {
-    Name = "InventoryButton",
+local TOPBAR_HEIGHT = 48
+local TOPBAR_BTN_WIDTH = 118
+
+local topBar = apply(Instance.new("Frame"), {
+    Name = "TopBar",
     AnchorPoint = Vector2.new(1, 0),
     Position = UDim2.new(1, -16, 0, 16),
-    Size = UDim2.fromOffset(220, 56),
-    AutoButtonColor = true,
-    BackgroundColor3 = Color.CrateButton,
+    Size = UDim2.fromOffset(TOPBAR_BTN_WIDTH * 5 + 6 * 4 + 20, TOPBAR_HEIGHT),
+    BackgroundColor3 = Color.Panel,
+    BackgroundTransparency = 0.15,
     BorderSizePixel = 0,
-    FontFace = Font.Heavy,
-    TextColor3 = Color.Text,
-    TextScaled = true,
-    Text = "🎒 INVENTORY (0)",
+    ZIndex = 15,
     Parent = screen,
-}, { corner(14), stroke(Color.Stroke, 2), padding(10) })
+}, { corner(14), stroke(Color.Stroke, 2), padding(6) })
+apply(Instance.new("UIListLayout"), {
+    FillDirection = Enum.FillDirection.Horizontal,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6),
+    Parent = topBar,
+})
+
+local function makeTopButton(order: number, text: string, active: boolean): TextButton
+    return apply(Instance.new("TextButton"), {
+        Name = "Top" .. order,
+        LayoutOrder = order,
+        AutoButtonColor = active,
+        Size = UDim2.fromOffset(TOPBAR_BTN_WIDTH, TOPBAR_HEIGHT - 12),
+        BackgroundColor3 = if active then Color.CrateButton else Color.SlotEmpty,
+        BackgroundTransparency = if active then 0 else 0.4,
+        BorderSizePixel = 0,
+        FontFace = Font.Heavy,
+        TextColor3 = if active then Color.Text else Color.TextDim,
+        TextScaled = true,
+        Text = text,
+        ZIndex = 16,
+        Parent = topBar,
+    }, { corner(10), padding(4) })
+end
+local topInventory = makeTopButton(1, "🎒 Inventory", true)
+local topMonster = makeTopButton(2, "🐾 Monster", true)
+local topSkill = makeTopButton(3, "🌟 Skill", true)
+makeTopButton(4, "🖼️ Galery", false) -- placeholder (inert)
+makeTopButton(5, "📜 Mission", false) -- placeholder (inert)
+
+-- Back-compat alias: render() updates this button's count text.
+local inventoryButton = topMonster
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- COIN HUD (MIDDLE LEFT) — AUTO-COLLECT: climbing 🪙 total + "+N/s" rate line
 -- ════════════════════════════════════════════════════════════════════════════
+-- Per the layout mock: TOP-LEFT (was middle-left).
 local coinHud = apply(Instance.new("Frame"), {
     Name = "CoinHud",
-    AnchorPoint = Vector2.new(0, 0.5),
-    Position = UDim2.new(0, 16, 0.5, 0),
+    AnchorPoint = Vector2.new(0, 0),
+    Position = UDim2.fromOffset(16, 16),
     Size = UDim2.fromOffset(HUD_WIDTH, HUD_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BorderSizePixel = 0,
@@ -312,13 +348,162 @@ local bagButton = apply(Instance.new("TextButton"), {
 }, { corner(16), stroke(Color.Stroke, 2), padding(8) })
 
 -- ════════════════════════════════════════════════════════════════════════════
--- INVENTORY PANEL (centered-right)
+-- SUMMON STATUS PANEL (right, under the top bar) — per the layout mock: the
+-- live "monster yg di summon" readout (nama, darah, type/elemen). Reads the
+-- REPLICATED Fighter_* models directly (attributes + Humanoid HP) on a 4 Hz
+-- throttle — zero extra remote traffic, presentation only.
+-- ════════════════════════════════════════════════════════════════════════════
+local SUMMON_PANEL_WIDTH = 230
+local SUMMON_ROW_HEIGHT = 64
+local SUMMON_MAX = DemoConfig.combat.maxActiveFighters
+local SUMMON_REFRESH_SEC = 0.25
+
+local summonPanel = apply(Instance.new("Frame"), {
+    Name = "SummonPanel",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -16, 0, 16 + TOPBAR_HEIGHT + 8),
+    Size = UDim2.fromOffset(SUMMON_PANEL_WIDTH, 44 + (SUMMON_ROW_HEIGHT + 6) * SUMMON_MAX + 10),
+    BackgroundColor3 = Color.Panel,
+    BackgroundTransparency = 0.1,
+    BorderSizePixel = 0,
+    ZIndex = 14,
+    Parent = screen,
+}, { corner(14), stroke(Color.Stroke, 2), padding(8) })
+
+apply(Instance.new("TextLabel"), {
+    Name = "Title",
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, 0, 0, 32),
+    FontFace = Font.Heavy,
+    TextColor3 = Color.Text,
+    TextScaled = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Text = "⚔ Summon",
+    ZIndex = 15,
+    Parent = summonPanel,
+})
+
+local summonEmpty = apply(Instance.new("TextLabel"), {
+    Name = "EmptySummon",
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(0, 40),
+    Size = UDim2.new(1, 0, 0, 36),
+    FontFace = Font.Bold,
+    TextColor3 = Color.TextDim,
+    TextScaled = true,
+    Text = "Belum ada summon",
+    ZIndex = 15,
+    Parent = summonPanel,
+})
+
+-- Pre-built fixed rows (NO per-frame allocations — mobile rules): each shows
+-- name+badges on top and an HP bar + numbers below; hidden when unused.
+type SummonRow = { frame: Frame, name: TextLabel, hpFill: Frame, hpText: TextLabel }
+local summonRows: { SummonRow } = {}
+for i = 1, SUMMON_MAX do
+    local frame = apply(Instance.new("Frame"), {
+        Name = "SummonRow" .. i,
+        Visible = false,
+        Position = UDim2.fromOffset(0, 40 + (i - 1) * (SUMMON_ROW_HEIGHT + 6)),
+        Size = UDim2.new(1, 0, 0, SUMMON_ROW_HEIGHT),
+        BackgroundColor3 = Color.PanelLight,
+        BorderSizePixel = 0,
+        ZIndex = 15,
+        Parent = summonPanel,
+    }, { corner(10), padding(6) })
+    local nameLabel = apply(Instance.new("TextLabel"), {
+        Name = "FighterName",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 0.5),
+        FontFace = Font.Bold,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
+        ZIndex = 16,
+        Parent = frame,
+    })
+    local hpTrack = apply(Instance.new("Frame"), {
+        Name = "HpTrack",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 0, 1, -2),
+        Size = UDim2.new(1, 0, 0, 12),
+        BackgroundColor3 = Color.SlotEmpty,
+        BorderSizePixel = 0,
+        ZIndex = 16,
+        Parent = frame,
+    }, { corner(6) })
+    local hpFill = apply(Instance.new("Frame"), {
+        Name = "HpFill",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Color3.fromRGB(231, 76, 60),
+        BorderSizePixel = 0,
+        ZIndex = 17,
+        Parent = hpTrack,
+    }, { corner(6) })
+    local hpText = apply(Instance.new("TextLabel"), {
+        Name = "HpText",
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 0, 1, -16),
+        Size = UDim2.new(1, 0, 0, 16),
+        FontFace = Font.Bold,
+        TextColor3 = Color.TextDim,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
+        ZIndex = 16,
+        Parent = frame,
+    })
+    summonRows[i] = { frame = frame, name = nameLabel, hpFill = hpFill, hpText = hpText }
+end
+
+-- 4 Hz updater: scan the replicated Fighter_* models and paint the rows.
+local summonAccum = 0
+rootTrove:Add(RunService.Heartbeat:Connect(function(dt: number)
+    summonAccum += dt
+    if summonAccum < SUMMON_REFRESH_SEC then
+        return
+    end
+    summonAccum = 0
+    local found = 0
+    for _, m in workspace:GetChildren() do
+        if found >= SUMMON_MAX then
+            break
+        end
+        if m:IsA("Model") and m.Name:match("^Fighter_") then
+            local humanoid = m:FindFirstChildWhichIsA("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                found += 1
+                local row = summonRows[found]
+                local personality = m:GetAttribute("Personality") or m.Name:gsub("^Fighter_", "")
+                row.name.Text = ("%s %s%s"):format(
+                    string.upper(tostring(personality)),
+                    elementEmoji(m:GetAttribute("Element")),
+                    stageEmoji(m:GetAttribute("EvoStage"))
+                )
+                local hp = math.max(humanoid.Health, 0)
+                local maxHp = math.max(humanoid.MaxHealth, 1)
+                row.hpText.Text = ("❤ %d/%d"):format(math.floor(hp + 0.5), math.floor(maxHp + 0.5))
+                row.hpFill.Size = UDim2.fromScale(math.clamp(hp / maxHp, 0, 1), 1)
+                row.frame.Visible = true
+            end
+        end
+    end
+    for i = found + 1, SUMMON_MAX do
+        summonRows[i].frame.Visible = false
+    end
+    summonEmpty.Visible = found == 0
+end))
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- MENU PANEL (centered — the right edge now belongs to the summon panel)
 -- ════════════════════════════════════════════════════════════════════════════
 local panel = apply(Instance.new("Frame"), {
     Name = "InventoryPanel",
     Visible = false,
-    AnchorPoint = Vector2.new(1, 0.5),
-    Position = UDim2.new(1, -16, 0.5, 0),
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
     Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT),
     BackgroundColor3 = Color.Panel,
     BorderSizePixel = 0,
@@ -1237,7 +1422,7 @@ local function render(inventory: DemoClient.Inventory)
 
     local n = #inventory
     print(("[Inv][ui] render count=%d"):format(n))
-    inventoryButton.Text = string.format("📦 MENU (%d)", n)
+    inventoryButton.Text = string.format("🐾 Monster (%d)", n) -- the TOP BAR launcher
     -- TABBED MENU: the count lives on the Monster tab; the title stays put.
     tabMonsters.Text = string.format("🐾 Monster (%d/%d)", n, ROSTER_CAP)
 
@@ -1268,7 +1453,25 @@ local function toggle()
     setOpen(not isOpen)
 end
 
-rootTrove:Add(inventoryButton.Activated:Connect(toggle))
+-- TOP BAR launchers: open the panel STRAIGHT onto the matching tab; tapping
+-- the same launcher again while open closes the panel (feels like a toggle).
+local function openAt(tab: string)
+    if isOpen then
+        setOpen(false)
+        return
+    end
+    setTab(tab)
+    setOpen(true)
+end
+rootTrove:Add(topInventory.Activated:Connect(function()
+    openAt("items")
+end))
+rootTrove:Add(topMonster.Activated:Connect(function()
+    openAt("monsters")
+end))
+rootTrove:Add(topSkill.Activated:Connect(function()
+    openAt("skills")
+end))
 -- Mobile on-screen Bag button shares the EXACT same toggle path as the B key.
 rootTrove:Add(bagButton.Activated:Connect(toggle))
 rootTrove:Add(closeButton.Activated:Connect(function()

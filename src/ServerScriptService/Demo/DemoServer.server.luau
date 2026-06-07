@@ -1620,6 +1620,11 @@ local function handleSummon(player: Player, brainrotId: unknown)
     fighter:SetAttribute("DemoCaught", nil)
     fighter:SetAttribute("InCombat", nil)
     fighter:SetAttribute("Element", element) -- visibility/debug; combat reads the record snapshot
+    -- DISPLAY attributes for the client summon-status panel (reads the
+    -- replicated model directly — no extra remote traffic).
+    fighter:SetAttribute("Personality", personality)
+    fighter:SetAttribute("Rarity", rarity)
+    fighter:SetAttribute("EvoStage", evoStage)
 
     local humanoid = fighter:FindFirstChildWhichIsA("Humanoid")
     local root = fighter.PrimaryPart
