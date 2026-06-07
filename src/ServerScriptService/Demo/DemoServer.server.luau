@@ -24,6 +24,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
+local CollectionService = game:GetService("CollectionService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local RunService = game:GetService("RunService")
 
@@ -43,6 +44,7 @@ local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 -- NOTE: the Showroom is a SINGLE-PLAYER demo space — deployed creatures re-spawn
 -- for the joining player (slots are not shared across players).
 local Types = require(Shared:WaitForChild("Types"))
+local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("ElementConfig"))
 local PlayerDataService = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("PlayerDataService"))
 local Schema = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("Schema"))
 
@@ -54,6 +56,13 @@ local BUILDING_ID = "b1"
 -- species id = 1-based index of the personality in DemoConfig.personalityOrder
 -- (the persisted roster entry stores a numeric species; the demo only has the 5
 -- personality archetypes, so personality order IS the species mapping). Fallback 1.
+-- ELEMENT (sandbox wiring, element doc E2): emoji badge for an element key.
+-- Returns "" for nil/unknown so a label never renders garbage.
+local function elementEmoji(element: any): string
+    local display = ElementConfig.display[element]
+    return if display then display.emoji else ""
+end
+
 local speciesByPersonality: { [string]: number } = {}
 for index, key in DemoConfig.personalityOrder do
     speciesByPersonality[key] = index
@@ -71,6 +80,7 @@ end
 type InventoryItem = {
     id: string, -- persisted roster GUID (also the SUMMON target)
     personality: string, -- canonical key: "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
+    element: string, -- persisted element enum ("Fire"|"Nature"|"Water"|"Volt"|"Wind"), display badge
     level: number, -- current progression level of this Brainrot (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level (xpCurveBase * level)
@@ -87,6 +97,9 @@ type DeployedSlot = {
     personality: string,
     model: Model,
     id: string, -- persisted roster GUID of the deployed creature
+    -- KANDANG WANDER: os.clock() gate for this deployed monster's next wander
+    -- move (mirrors the pack slots' nextMoveAt). nil on legacy/static slots.
+    nextMoveAt: number?,
 }
 
 -- One ACTIVE summoned fighter (Tahap 2). Ephemeral field combatant — it is NOT a
@@ -104,6 +117,7 @@ type FighterRecord = {
     personality: string,
     brainrotId: string,
     level: number,
+    element: string, -- element SNAPSHOT from the summoned entry (element doc E3; drives elementMod)
     model: Model,
     nextCombatAt: number,
     nextSeekAt: number,
@@ -295,6 +309,27 @@ local function addCatchPrompt(model: Instance, record: CreatureRecord): boolean
     promptToRecord[prompt] = record
     if model:IsA("Model") then
         modelToRecord[model] = record -- combat faint path reuses this (Tahap 2)
+
+        -- ELEMENT (sandbox wiring): every wild (re)spawn ROLLS a fresh element
+        -- server-side (uniform 20%, element doc E3) onto an attribute the combat
+        -- exchange reads for elementMod. The floating persona label gets the
+        -- element emoji appended so the matchup is readable in-world; the
+        -- authored base text is snapshot once into PersonaLabelBase so repeated
+        -- respawns never stack emojis.
+        local element = ElementConfig.rollElement()
+        model:SetAttribute("Element", element)
+        local personaLabel = model:FindFirstChild(DemoConfig.demo3d.personaLabelName, true)
+        if personaLabel then
+            local textLabel = personaLabel:FindFirstChildWhichIsA("TextLabel", true)
+            if textLabel then
+                local base = model:GetAttribute("PersonaLabelBase")
+                if type(base) ~= "string" then
+                    base = textLabel.Text
+                    model:SetAttribute("PersonaLabelBase", base)
+                end
+                textLabel.Text = ("%s %s"):format(base :: string, elementEmoji(element))
+            end
+        end
     end
     return true
 end
@@ -350,6 +385,7 @@ local function pushInventory(player: Player)
             table.insert(payload, {
                 id = id,
                 personality = entry.personality,
+                element = entry.element,
                 level = entry.level,
                 xp = entry.xp,
                 xpToNext = PROGRESSION.xpCurveBase * entry.level,
@@ -602,21 +638,52 @@ local function buildFighterTemplates(): number
     return built
 end
 
--- Build a display clone from the STABLE template store and stand it on the
--- pedestal TOP. Returns the parented clone, or nil if the template is missing.
+-- KANDANG (paddock wander) tunables. Production mechanics are untouched —
+-- this only changes the deployed clone's presentation (rigged + wandering).
+local KANDANG = DemoConfig.kandang
+
+-- GROUNDING: two-phase HipHeight fix shared with the pack prototype (the rigs
+-- hover ~0.75 studs otherwise; scaled rigs proportionally more). See
+-- Shared/Demo/RigGrounding.luau for the mechanism.
+local RigGrounding = require(DemoFolder:WaitForChild("RigGrounding"))
+
+-- The shared "Brainrot" collision group (no monster-vs-monster shoving) is
+-- normally registered by the pack prototype; register defensively here too so
+-- spawnDisplay's CollisionGroup assignment can never hit an unknown group.
+pcall(function()
+    game:GetService("PhysicsService"):RegisterCollisionGroup("Brainrot")
+end)
+
+-- Build a display clone and stand it on the slot plate.
+--
+-- KANDANG MODE (KANDANG.wanderEnabled, default): the clone comes from the
+-- RIGGED FighterTemplates store so it can WALK — the kandang wander step
+-- (stepKandangWander) then strolls it around the open paddock. Falls back to
+-- the static store if the rigged template is missing (race at boot).
+--
+-- LEGACY MODE: static stripped prop standing frozen on the plate (pre-kandang
+-- showroom look).
+--
+-- Returns the parented clone, or nil if no template is available.
 local function spawnDisplay(personality: string, stand: BasePart, index: number): Model?
-    local folder = getTemplatesFolder()
-    local template = folder:FindFirstChild(personality)
+    local template: Instance? = nil
+    local rigged = false
+    if KANDANG.wanderEnabled then
+        template = getFighterTemplatesFolder():FindFirstChild(personality)
+        rigged = template ~= nil
+    end
+    if not template then
+        template = getTemplatesFolder():FindFirstChild(personality)
+    end
     if not template or not template:IsA("Model") then
         warn("[Deploy][server] missing template " .. personality .. " (no startup snapshot)")
         return nil
     end
 
     local clone = template:Clone()
-    -- Template was already stripped to a static prop at build time; clone is clean.
 
-    -- Place STANDING ON TOP of the pedestal, facing forward (toward -Z so it
-    -- faces a player standing in front of the Showroom).
+    -- Place STANDING ON TOP of the slot plate, facing forward (toward -Z so it
+    -- faces a player standing at the paddock gate).
     local _, size = clone:GetBoundingBox()
     local creatureHeight = size.Y
     local target = stand.Position
@@ -624,8 +691,102 @@ local function spawnDisplay(personality: string, stand: BasePart, index: number)
     clone:PivotTo(CFrame.lookAt(target, target + Vector3.new(0, 0, -1)))
 
     clone.Name = "Deployed_" .. tostring(index)
-    clone.Parent = workspace
+
+    if rigged then
+        -- Rigged wanderer: calm walk speed, engine ground support (NOT
+        -- PlatformStand — see the pack fall-through bugfix), full health so no
+        -- health bar shows, shared "Brainrot" collision group so deployed
+        -- monsters never shove each other (or the pack wilds).
+        local humanoid = clone:FindFirstChildWhichIsA("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = KANDANG.walkSpeed
+            humanoid.PlatformStand = false
+            humanoid.Health = humanoid.MaxHealth
+            -- GROUNDING phase 1: blob-bottom near the floor, not hovering.
+            local rootPart = clone.PrimaryPart
+            if rootPart then
+                humanoid.HipHeight = RigGrounding.initialHipHeight(clone, rootPart)
+            end
+        end
+        for _, desc in clone:GetDescendants() do
+            if desc:IsA("BasePart") then
+                desc.CollisionGroup = "Brainrot"
+            end
+        end
+        clone.Parent = workspace
+        -- GROUNDING phase 2: measure + remove the residual pose gap once the
+        -- physics settle.
+        if humanoid then
+            RigGrounding.settleToGround(clone, humanoid)
+        end
+        -- Server-authoritative motion (root is unanchored on the rigged rig).
+        local root = clone.PrimaryPart
+        if root then
+            pcall(function()
+                root:SetNetworkOwner(nil)
+            end)
+        end
+    else
+        clone.Parent = workspace
+    end
     return clone
+end
+
+-- ── KANDANG WANDER (deployed monsters stroll the open paddock) ─────────────
+-- Bounds = the Showroom model's `Floor` part, inset by KANDANG.marginStuds.
+-- Resolved lazily + cached; nil (no wandering) if the floor is missing.
+local kandangFloor: BasePart? = nil
+local function getKandangFloor(): BasePart?
+    if kandangFloor and kandangFloor.Parent ~= nil then
+        return kandangFloor
+    end
+    local showroomModel = workspace:FindFirstChild(SHOWROOM.modelName)
+    local floor = showroomModel and showroomModel:FindFirstChild("Floor")
+    if floor and floor:IsA("BasePart") then
+        kandangFloor = floor
+        return floor
+    end
+    return nil
+end
+
+-- One wander step across EVERY player's deployed slots (mirrors the pack
+-- prototype's stepWander, but bounded by the paddock floor instead of a slot
+-- radius). Per-slot nextMoveAt gates give each monster its own pause rhythm.
+local function stepKandangWander(now: number)
+    if not KANDANG.wanderEnabled then
+        return
+    end
+    local floor = getKandangFloor()
+    if not floor then
+        return
+    end
+    local margin = KANDANG.marginStuds
+    local halfX = math.max(floor.Size.X / 2 - margin, 1)
+    local halfZ = math.max(floor.Size.Z / 2 - margin, 1)
+    local cx, cz = floor.Position.X, floor.Position.Z
+
+    for _, state in states do
+        for _, slot in state.slots do
+            local model = slot.model
+            if not model or model.Parent == nil then
+                continue
+            end
+            if now < (slot.nextMoveAt or 0) then
+                continue -- still pausing
+            end
+            local humanoid = model:FindFirstChildWhichIsA("Humanoid")
+            if not humanoid or humanoid.Health <= 0 then
+                continue -- legacy static clone (or dead rig): never wanders
+            end
+            -- Uniform target anywhere inside the inset paddock rectangle.
+            local tx = cx + (math.random() * 2 - 1) * halfX
+            local tz = cz + (math.random() * 2 - 1) * halfZ
+            humanoid:MoveTo(Vector3.new(tx, floor.Position.Y, tz))
+            local pause = KANDANG.wanderPauseMinSec
+                + math.random() * (KANDANG.wanderPauseMaxSec - KANDANG.wanderPauseMinSec)
+            slot.nextMoveAt = now + pause
+        end
+    end
 end
 
 -- Attach a "Recall" ProximityPrompt to a DEPLOYED display model so the owner can
@@ -883,6 +1044,55 @@ local function handleCatch(prompt: ProximityPrompt, player: Player)
     print("[Catch] " .. player.Name .. " caught " .. record.personality)
 end
 
+-- ── PACK CATCH MINT (server-side bridge for the pack prototype) ─────────────
+-- The BrainrotPack prototype owns the pack wilds' WORLD lifecycle (spawn /
+-- wander / respawn) but the ROSTER is owned here. This BindableFunction lets a
+-- pack catch mint a REAL roster entry through the exact same audited path as
+-- the original catch (Schema.newBrainrot + addBrainrot + bag re-push), without
+-- the two scripts sharing any internals. Returns true IFF the entry was
+-- committed — the pack only despawns the wild on true (roster_full aborts the
+-- catch, mirroring handleCatch's persist-first ordering).
+--
+-- ELEMENT: pack wilds DISPLAY their rolled element on the overhead label, so
+-- the minted entry INHERITS that element (what you see is what you catch).
+-- An invalid/missing element falls back to a fresh server roll inside
+-- Schema.newBrainrot — never trusted blindly.
+local packCatchMint = Instance.new("BindableFunction")
+packCatchMint.Name = "PackCatchMint"
+packCatchMint.Parent = ServerStorage
+packCatchMint.OnInvoke = function(player: Player, personality: unknown, element: unknown): boolean
+    if typeof(player) ~= "Instance" or not player:IsA("Player") then
+        return false
+    end
+    local state = states[player]
+    if not state then
+        return false
+    end
+    -- Same rate limit bucket as the original catch path.
+    if not allowAction(state, "catch", DemoConfig.rateLimits.catch) then
+        return false
+    end
+    if type(personality) ~= "string" or not isValidPersonality[personality] then
+        return false
+    end
+    local entry = Schema.newBrainrot({
+        species = speciesByPersonality[personality] or 1,
+        personality = personality :: any,
+        -- Inherit the wild's displayed element; Schema re-rolls if invalid.
+        element = if type(element) == "string" then element :: any else nil,
+        source = "manual",
+        hotspotId = "pack",
+    })
+    local ok = PlayerDataService.addBrainrot(player, entry)
+    if not ok then
+        warn("[Catch] " .. player.Name .. " pack add rejected for " .. personality)
+        return false
+    end
+    pushInventory(player)
+    print(("[Catch] %s caught pack %s (%s)"):format(player.Name, personality, entry.element))
+    return true
+end
+
 -- ════════════════════════════════════════════════════════════════════════════
 -- COMBAT (Tahap 2): SUMMON a fighter that auto-battles the nearest wild Brainrot
 -- ════════════════════════════════════════════════════════════════════════════
@@ -1013,20 +1223,38 @@ local function nearestWild(centerPos: Vector3, maxRange: number): (Model?, BaseP
     local best: Model? = nil
     local bestRoot: BasePart? = nil
     local bestDist = math.huge
+
+    -- Shared candidate check (original named wilds + tagged pack wilds).
+    local function consider(model: Model)
+        if model:GetAttribute("DemoCaught") == true then
+            return
+        end
+        local humanoid = model:FindFirstChildWhichIsA("Humanoid")
+        local root = model.PrimaryPart
+        if humanoid and humanoid.Health > 0 and root then
+            local dist = (root.Position - centerPos).Magnitude
+            -- RANGE GATE: reject anything beyond the player's detection radius.
+            if dist <= maxRange and dist < bestDist then
+                bestDist = dist
+                best = model
+                bestRoot = root
+            end
+        end
+    end
+
     for _, creatureName in DemoConfig.demo3d.creatureNames do
         local model = workspace:FindFirstChild(creatureName)
-        if model and model:IsA("Model") and model:GetAttribute("DemoCaught") ~= true then
-            local humanoid = model:FindFirstChildWhichIsA("Humanoid")
-            local root = model.PrimaryPart
-            if humanoid and humanoid.Health > 0 and root then
-                local dist = (root.Position - centerPos).Magnitude
-                -- RANGE GATE: reject anything beyond the player's detection radius.
-                if dist <= maxRange and dist < bestDist then
-                    bestDist = dist
-                    best = model
-                    bestRoot = root
-                end
-            end
+        if model and model:IsA("Model") then
+            consider(model)
+        end
+    end
+    -- PACK WILDS (incl. 👑 bosses): the BrainrotPack prototype tags every clone
+    -- with "PackWild" (CollectionService) — the single, decoupled discovery
+    -- point. Pack wilds carry Personality/Element/DamageMult/etc. attributes
+    -- the combat exchange + reward paths read.
+    for _, inst in CollectionService:GetTagged("PackWild") do
+        if inst:IsA("Model") and inst.Parent == workspace then
+            consider(inst)
         end
     end
     return best, bestRoot
@@ -1038,11 +1266,25 @@ end
 -- prompt + model, schedule respawnCreature at its original CFrame with full HP).
 local function defeatWild(player: Player, state: PlayerState, wild: Model)
     -- Award + persist coins (same path as production: live float -> flushCoins).
-    state.coins += COMBAT.winCoins
+    -- BOSS REWARD: a pack 👑 boss stamps WinCoinsMult (e.g. 10x) on its model;
+    -- regular wilds carry no attribute and default to 1.
+    local coinsMult = wild:GetAttribute("WinCoinsMult")
+    if type(coinsMult) ~= "number" or coinsMult <= 0 then
+        coinsMult = 1
+    end
+    state.coins += COMBAT.winCoins * coinsMult
     pushCoins(player)
     flushCoins(player, false)
 
     wild:SetAttribute("InCombat", nil)
+
+    -- PACK WILD (incl. boss): the BrainrotPack prototype owns its lifecycle —
+    -- its respawn sweep sees the 0-HP corpse, arms the per-slot timer (5s
+    -- minion / 30s boss), tears the corpse down, and respawns it. Do NOT run
+    -- the original-wild respawn path on it.
+    if CollectionService:HasTag(wild, "PackWild") then
+        return
+    end
 
     local record = modelToRecord[wild]
     if not record then
@@ -1070,9 +1312,11 @@ end
 -- (leveledTo, currentLevel): `leveledTo` is the new level IFF a level-up happened
 -- (else nil); `currentLevel` is the entry's level after the award (for display).
 -- Persistence handles saving (update marks dirty -> autosave/leave-save).
-local function awardWinXp(player: Player, brainrotId: string): (number?, number?)
+local function awardWinXp(player: Player, brainrotId: string, xpMult: number?): (number?, number?)
     local leveledTo: number? = nil
     local currentLevel: number? = nil
+    -- BOSS REWARD: a pack 👑 boss passes its XpMult (e.g. 4x); nil/invalid = 1.
+    local mult = if type(xpMult) == "number" and xpMult > 0 then xpMult else 1
     PlayerDataService.update(player, function(data)
         local e = data.roster[brainrotId]
         if not e then
@@ -1081,7 +1325,7 @@ local function awardWinXp(player: Player, brainrotId: string): (number?, number?
         -- BATTLES-WON tally (repurposed history.rwon for the demo): bump it in the
         -- SAME atomic mutator as the XP grant so the win count + XP move together.
         e.history.rwon += 1
-        e.xp += PROGRESSION.xpPerWin
+        e.xp += PROGRESSION.xpPerWin * mult
         while e.level < PROGRESSION.maxLevel and e.xp >= PROGRESSION.xpCurveBase * e.level do
             e.xp -= PROGRESSION.xpCurveBase * e.level
             e.level += 1
@@ -1144,6 +1388,9 @@ local function handleSummon(player: Player, brainrotId: unknown)
 
     local personality = entry.personality
     local level = entry.level
+    -- ELEMENT: snapshot from the authoritative entry (rolled at capture mint,
+    -- permanent per element doc E4) — drives this fighter's elementMod.
+    local element = entry.element
 
     -- Place in front of the player's character. Bail gracefully if no character.
     local character = player.Character
@@ -1163,6 +1410,7 @@ local function handleSummon(player: Player, brainrotId: unknown)
     fighter.Name = "Fighter_" .. string.upper(personality)
     fighter:SetAttribute("DemoCaught", nil)
     fighter:SetAttribute("InCombat", nil)
+    fighter:SetAttribute("Element", element) -- visibility/debug; combat reads the record snapshot
 
     local humanoid = fighter:FindFirstChildWhichIsA("Humanoid")
     local root = fighter.PrimaryPart
@@ -1175,6 +1423,10 @@ local function handleSummon(player: Player, brainrotId: unknown)
     humanoid.WalkSpeed = COMBAT.fighterWalkSpeed
     humanoid.MaxHealth = maxHP
     humanoid.Health = maxHP
+    -- GROUNDING phase 1: same rig family as the pack wilds — derive HipHeight
+    -- so the fighter walks ON the ground instead of hovering ~0.75 studs.
+    -- (Phase 2 settleToGround is scheduled after parenting below.)
+    humanoid.HipHeight = RigGrounding.initialHipHeight(fighter, root)
 
     -- Spawn summonOffsetStuds in FRONT of the player (along their look vector).
     local spawnCFrame = charRoot.CFrame * CFrame.new(0, 0, -COMBAT.summonOffsetStuds)
@@ -1192,12 +1444,14 @@ local function handleSummon(player: Player, brainrotId: unknown)
     labelText.Font = Enum.Font.GothamBold
     labelText.TextScaled = true
     labelText.TextColor3 = Color3.fromRGB(255, 206, 64)
-    labelText.Text = ("⚔ %s Lv%d"):format(string.upper(personality), level)
+    labelText.Text = ("⚔ %s Lv%d %s"):format(string.upper(personality), level, elementEmoji(element))
     labelText.Parent = billboard
     local labelAnchor = findAnchorPart(fighter)
     billboard.Parent = labelAnchor or root
 
     fighter.Parent = workspace
+    -- GROUNDING phase 2: measure + remove the residual pose gap once settled.
+    RigGrounding.settleToGround(fighter, humanoid)
 
     -- Server-authoritative motion: claim network ownership (root is unanchored).
     pcall(function()
@@ -1209,6 +1463,7 @@ local function handleSummon(player: Player, brainrotId: unknown)
         personality = personality,
         brainrotId = brainrotId,
         level = level,
+        element = element,
         model = fighter,
         nextCombatAt = 0,
         nextSeekAt = 0,
@@ -1376,29 +1631,61 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                         humanoid:MoveTo(slotPos)
                     end
 
-                    local wildPersonality = personalityFromName(wild.Name) or record.personality
+                    -- PACK WILDS carry a Personality attribute (their `Pack_<P>`
+                    -- name does not match the `Brainrot_` prefix parser).
+                    local attrPersonality = wild:GetAttribute("Personality")
+                    local wildPersonality = (if type(attrPersonality) == "string" then attrPersonality else nil)
+                        or personalityFromName(wild.Name)
+                        or record.personality
+
+                    -- ELEMENT (sandbox wiring, element doc §2): flat matchup
+                    -- multiplier applied BOTH directions with the same circle.
+                    -- A wild missing its attribute resolves to neutral 1.0
+                    -- inside elementMod (defensive fallback, §5 #3).
+                    local wildElement = wild:GetAttribute("Element")
+                    local fighterVsWild = ElementConfig.elementMod(record.element, wildElement)
+                    local wildVsFighter = ElementConfig.elementMod(wildElement, record.element)
+
+                    -- 👑 BOSS: DamageMult attribute (e.g. 2.0) stamped by the
+                    -- pack prototype; regular wilds default to 1.
+                    local wildDamageMult = wild:GetAttribute("DamageMult")
+                    if type(wildDamageMult) ~= "number" or wildDamageMult <= 0 then
+                        wildDamageMult = 1
+                    end
 
                     -- Wild takes the fighter's LEVEL+personality-scaled damage
-                    -- (battle-gdd F2: level boosts combat damage).
-                    wildHumanoid:TakeDamage(fighterDamage(record.level, record.personality))
-                    -- Fighter takes the wild's (personality-only) damage back; the
-                    -- wild is treated as level 1 for now.
-                    humanoid:TakeDamage(scaledDamage(COMBAT.wildDamagePerTick, wildPersonality))
+                    -- (battle-gdd F2: level boosts combat damage) times elementMod.
+                    wildHumanoid:TakeDamage(fighterDamage(record.level, record.personality) * fighterVsWild)
+                    -- Fighter takes the wild's (personality-only) damage back times
+                    -- its DamageMult (boss) times the REVERSE elementMod; the wild
+                    -- is treated as level 1 for now.
+                    humanoid:TakeDamage(
+                        scaledDamage(COMBAT.wildDamagePerTick, wildPersonality) * wildDamageMult * wildVsFighter
+                    )
 
                     if wildHumanoid.Health <= 0 then
-                        -- WIN: faint + respawn the wild + award coins.
+                        -- WIN: faint + respawn the wild + award coins (defeatWild
+                        -- reads the boss WinCoinsMult attribute itself; mirror the
+                        -- same mult here so the client banner shows the real award).
+                        local xpMult = wild:GetAttribute("XpMult")
+                        local coinsMult = wild:GetAttribute("WinCoinsMult")
+                        if type(coinsMult) ~= "number" or coinsMult <= 0 then
+                            coinsMult = 1
+                        end
                         defeatWild(player, state, wild)
                         record.engaged = nil
                         -- PROGRESSION: award XP to the WINNING Brainrot (atomic +
-                        -- persisted). May level it up one or more times.
-                        local leveledTo, currentLevel = awardWinXp(player, record.brainrotId)
+                        -- persisted). May level it up one or more times. Boss
+                        -- kills pass the XpMult attribute (e.g. 4x).
+                        local leveledTo, currentLevel =
+                            awardWinXp(player, record.brainrotId, if type(xpMult) == "number" then xpMult else nil)
                         -- Re-derive the bag so the new level shows immediately (the
                         -- active fighter stays excluded; recall/KO returns it later).
                         pushInventory(player)
                         DemoRemotes.BattleEvent:FireClient(player, {
                             kind = "win",
                             personality = record.personality,
-                            coins = COMBAT.winCoins,
+                            coins = COMBAT.winCoins * coinsMult,
                             leveledTo = leveledTo,
                             level = currentLevel,
                         })
@@ -1735,6 +2022,7 @@ end
 local productionAccum = 0
 local broadcastAccum = 0
 local flushAccum = 0
+local kandangAccum = 0 -- KANDANG WANDER cadence (KANDANG.aiTickSec)
 local TICK = DemoConfig.productionTickSec
 local BROADCAST = DemoConfig.coinBroadcastSec
 local FLUSH = DemoConfig.coinFlushSec
@@ -1781,6 +2069,14 @@ local function onHeartbeat(dt: number)
     if combatAccum >= COMBAT.combatTickSec then
         combatAccum = 0
         stepCombat()
+    end
+    -- KANDANG WANDER: stroll every deployed monster around the paddock. The
+    -- per-slot nextMoveAt gates own the pause rhythm; this accumulator only
+    -- bounds the sweep cadence.
+    kandangAccum += dt
+    if kandangAccum >= KANDANG.aiTickSec then
+        kandangAccum = 0
+        stepKandangWander(os.clock())
     end
 end
 

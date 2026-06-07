@@ -281,8 +281,8 @@ return {
         -- Max distance (studs) the place prompt is activatable from
         -- (ProximityPrompt MaxActivationDistance). Range: 4-32 | Default: 12
         placeDistance = 12,
-        -- ActionText shown on the place ProximityPrompt. String | Default: "Place Brainrot"
-        placeActionText = "Place Brainrot",
+        -- ActionText shown on the place ProximityPrompt. String | Default: "Place Monster"
+        placeActionText = "Place Monster",
         -- ObjectText shown on the place ProximityPrompt (kept empty — the stand
         -- index is conveyed by the menu the prompt opens). String | Default: ""
         placeObjectText = "",
@@ -311,6 +311,32 @@ return {
         -- Vertical clearance (studs) added above the pedestal top so the placed
         -- creature's feet clear the glowing `Top` child. Range: 0-4 | Default: 0.4
         standClearanceStuds = 0.4,
+    },
+
+    -- ── KANDANG (deployed monsters wander the open paddock) ────────────────
+    -- The Showroom is visually a fenced open paddock ("Kandang"): deployed
+    -- monsters are RIGGED clones (FighterTemplates) that wander freely inside
+    -- the paddock floor instead of standing frozen on a pedestal. Production
+    -- mechanics are UNCHANGED (the deployment map + rates are exactly the
+    -- same) — this is presentation only. The paddock bounds are derived from
+    -- the Showroom model's `Floor` part at runtime.
+    kandang = {
+        -- Master switch: false = legacy static display clones on the plates.
+        -- Boolean | Default: true
+        wanderEnabled = true,
+        -- WalkSpeed for deployed wanderers (calm; slower than wilds so the
+        -- kandang reads as a home, not a hunt zone). Range: 1-12 | Default: 4
+        walkSpeed = 4,
+        -- Random pause (seconds) between wander moves, drawn in [min, max].
+        -- Range: 0.5-20
+        wanderPauseMinSec = 2.0,
+        wanderPauseMaxSec = 5.0,
+        -- How often (seconds) the kandang AI scheduler ticks. Coarse — MoveTo
+        -- does the per-frame walking. Range: 0.1-2 | Default: 0.5
+        aiTickSec = 0.5,
+        -- Inset (studs) from the paddock Floor edge when picking wander
+        -- targets, so monsters do not hug/clip the fence. Range: 0-8 | Default: 2.5
+        marginStuds = 2.5,
     },
 
     -- ── WILD BRAINROT AI (server-authoritative roaming) ─────────────────────

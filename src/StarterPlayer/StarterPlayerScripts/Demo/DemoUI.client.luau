@@ -43,11 +43,20 @@ local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 -- to drive the deploy-from-sheet sweep. Display/tuning values only — the server
 -- stays authoritative for all game state.
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
+-- ElementConfig is replicated read-only: the UI reads ONLY the display table
+-- (emoji badge per element). Resolution values (mods/beats) are server-applied.
+local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("ElementConfig"))
 
 local UITheme = require(script.Parent:WaitForChild("UITheme"))
 local DemoClient = require(script.Parent:WaitForChild("DemoClient"))
 
 local apply = UITheme.apply
+
+-- Emoji badge for an element key; "" for nil/unknown so labels never break.
+local function elementEmoji(element: any): string
+    local display = ElementConfig.display[element]
+    return if display then display.emoji else ""
+end
 local corner = UITheme.corner
 local stroke = UITheme.stroke
 local padding = UITheme.padding
@@ -176,7 +185,7 @@ apply(Instance.new("TextLabel"), {
     FontFace = Font.Bold,
     TextColor3 = Color.Text,
     TextScaled = true,
-    Text = "Walk up to a Brainrot and hold [F] to catch it!",
+    Text = "Walk up to a Monster and hold [F] to catch it!",
     Parent = screen,
 }, { corner(12), stroke(Color.Stroke, 2), padding(10) })
 
@@ -284,7 +293,7 @@ local titleLabel = apply(Instance.new("TextLabel"), {
     TextColor3 = Color.Text,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "🎒 Brainrots (0)",
+    Text = "🎒 Monsters (0)",
     ZIndex = 21,
     Parent = panel,
 })
@@ -418,7 +427,7 @@ local function buildCard(
         FontFace = Font.Bold,
         TextColor3 = Color.Text,
         TextScaled = true,
-        Text = string.format("⭐ Lv%d", item.level),
+        Text = string.format("⭐ Lv%d %s", item.level, elementEmoji(item.element)),
         ZIndex = childZ,
         Parent = card,
     }, { corner(6) })
@@ -477,7 +486,12 @@ local function buildRow(
         TextColor3 = Color.Text,
         TextScaled = true,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Text = string.format("%s Brainrot  ⭐ Lv%d", string.upper(item.personality), item.level),
+        Text = string.format(
+            "%s Monster %s ⭐ Lv%d",
+            string.upper(item.personality),
+            elementEmoji(item.element),
+            item.level
+        ),
         ZIndex = childZ,
         Parent = row,
     })
@@ -514,7 +528,7 @@ local MAX_LEVEL = DemoConfig.progression.maxLevel
 local function effectLine(personality: string): string
     local def = DemoConfig.personalities[personality]
     if not def then
-        return "A mysterious Brainrot."
+        return "A mysterious Monster."
     end
     local mult = def.prodMult or 1
     local pct = math.floor((mult - 1) * 100 + 0.5)
@@ -770,7 +784,13 @@ local function openSheet(item: DemoClient.InventoryItem)
     sheetItem = item
     local theme = UITheme.personality(item.personality)
 
-    sheetHeader.Text = string.format("%s %s  ⭐ Lv%d", theme.emoji, string.upper(item.personality), item.level)
+    sheetHeader.Text = string.format(
+        "%s %s %s ⭐ Lv%d",
+        theme.emoji,
+        string.upper(item.personality),
+        elementEmoji(item.element),
+        item.level
+    )
 
     -- XP bar: fill = xp / xpToNext clamped 0..1; "MAX" at the level ceiling.
     if item.level >= MAX_LEVEL then
@@ -832,7 +852,7 @@ local function render(inventory: DemoClient.Inventory)
     local n = #inventory
     print(("[Inv][ui] render count=%d"):format(n))
     inventoryButton.Text = string.format("🎒 INVENTORY (%d)", n)
-    titleLabel.Text = string.format("🎒 Brainrots (%d/%d)", n, ROSTER_CAP)
+    titleLabel.Text = string.format("🎒 Monsters (%d/%d)", n, ROSTER_CAP)
 
     emptyLabel.Visible = n == 0
     for i, item in inventory do
@@ -936,7 +956,7 @@ apply(Instance.new("TextLabel"), {
     TextColor3 = Color.TextDim,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "Tap a Brainrot to place it here",
+    Text = "Tap a Monster to place it here",
     ZIndex = 32,
     Parent = placePanel,
 })
@@ -983,7 +1003,7 @@ local placeEmptyLabel = apply(Instance.new("TextLabel"), {
     FontFace = Font.Bold,
     TextColor3 = Color.TextDim,
     TextScaled = true,
-    Text = "No Brainrots yet — go catch some!",
+    Text = "No Monsters yet — go catch some!",
     Visible = false,
     ZIndex = 33,
     Parent = placeList,

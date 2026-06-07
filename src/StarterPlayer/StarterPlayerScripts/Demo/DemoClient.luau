@@ -35,6 +35,7 @@ local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 export type InventoryItem = {
     id: string, -- roster GUID; passed to DemoClient.summon to send out THIS Brainrot
     personality: string, -- "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
+    element: string, -- "Fire" | "Nature" | "Water" | "Volt" | "Wind" (display badge only)
     level: number, -- current progression level (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level
