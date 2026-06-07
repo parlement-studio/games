@@ -938,9 +938,11 @@ rootTrove:Add(sheetDeploy.Activated:Connect(function()
     if not item then
         return
     end
-    print("[Deploy][ui] deploy-from-sheet " .. item.personality)
+    print("[Deploy][ui] deploy-from-sheet " .. item.personality .. " id=" .. item.id)
+    -- ID-KEYED: try every stand for THIS monster; the server accepts the first
+    -- free one and rejects the rest (the id turns busy after the first).
     for standIndex = 1, STAND_COUNT do
-        DemoClient.deployToStand(standIndex, item.personality)
+        DemoClient.deployToStand(standIndex, item.id)
     end
     closeSheet()
 end))
@@ -1132,10 +1134,11 @@ local function openPlaceMenu(standIndex: number)
     placeEmptyLabel.Visible = n == 0
 
     for i, item in inventory do
+        local itemId = item.id -- ID-KEYED deploy (the exact tapped monster)
         local personality = item.personality
         buildRow(placeList, placeRowsTrove, item, i, 32, function()
-            print("[Place] chose " .. personality .. " for stand " .. standIndex)
-            DemoClient.deployToStand(standIndex, personality)
+            print("[Place] chose " .. personality .. " (" .. itemId .. ") for stand " .. standIndex)
+            DemoClient.deployToStand(standIndex, itemId)
             closePlaceMenu()
         end)
     end
@@ -1449,8 +1452,9 @@ local function renderKandang()
         )
         if firstFree then
             local target = firstFree
+            local itemId = item.id -- ID-KEYED deploy (the exact tapped monster)
             kandangRow(nextOrder(), personality, label, "TARUH", TARUH_COLOR, function()
-                DemoClient.deployToStand(target, personality)
+                DemoClient.deployToStand(target, itemId)
             end)
         else
             kandangRow(nextOrder(), personality, label, "PENUH", nil, nil)

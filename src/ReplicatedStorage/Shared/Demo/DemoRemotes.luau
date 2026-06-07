@@ -10,8 +10,8 @@
 -- DemoServer, DemoClient, and the UI that consumes them.
 --
 --   Client -> Server:  OpenCrate(), Deploy(personality), Undeploy(slotIndex),
---                       Collect(), DeployToStand(standIndex, personality),
---                       SummonFighter(personality)
+--                       Collect(), DeployToStand(standIndex, brainrotId),
+--                       SummonFighter(brainrotId)
 --   Server -> Client:  StateUpdate(state), CrateOpened(reveal), Moment(moment),
 --                       InventoryUpdate(items), CoinUpdate({coins, pending}),
 --                       OpenPlaceMenu(standIndex),

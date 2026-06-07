@@ -965,11 +965,16 @@ local function removePlacePrompt(index: number)
 end
 
 -- ── Deploy to a SPECIFIC stand ─────────────────────────────────────────────
--- The player chose the podium (by triggering its Place prompt) and the creature
--- (by tapping a row in the place menu). Remove ONE caught creature of
--- `personality` from inventory and stand it on pedestal `standIndex`.
--- Server-authoritative + arg-validated + rate-limited.
-local function handleDeployToStand(player: Player, standIndex: unknown, personality: unknown)
+-- The player chose the podium AND the SPECIFIC monster (`brainrotId`).
+--
+-- BUGFIX (id-keyed deploy): this used to be PERSONALITY-keyed — the server
+-- picked ANY free entry of that personality. Pre-uniqueness that was harmless;
+-- with element/rarity/evolution it deployed a DIFFERENT individual than the
+-- one tapped (the tapped Uncommon stayed in the bag, tappable again and again
+-- while same-personality Commons piled into the kandang — the reported
+-- "same monster deployed repeatedly" bug). Now the exact id is validated:
+-- owned, not already deployed, not fighting.
+local function handleDeployToStand(player: Player, standIndex: unknown, brainrotId: unknown)
     local state = states[player]
     if not state then
         return
@@ -984,44 +989,40 @@ local function handleDeployToStand(player: Player, standIndex: unknown, personal
     if standIndex < 1 or standIndex > SHOWROOM.showroomStandCount then
         return
     end
-    -- Validate the personality.
-    if type(personality) ~= "string" or not isValidPersonality[personality] then
-        return -- attacker-controlled arg; reject
+    -- Validate the id (attacker-controlled arg): must be a string.
+    if type(brainrotId) ~= "string" then
+        return
     end
     -- The stand must be FREE (no creature there already).
     if state.slots[standIndex] then
         return
     end
 
-    -- DEPLOY stays personality-keyed (production is personality-only). Pick ANY
-    -- non-deployed, non-fighting roster entry of that personality and use its id
-    -- for the deployment map. Derived fresh from the authoritative roster.
+    -- OWNERSHIP + BUSY: the id must be in the authoritative roster, not a
+    -- value in the deployment map, and not an active fighter.
     local data = PlayerDataService.getData(player)
     if not data then
         return -- profile not loaded yet
     end
-    local busy: { [string]: boolean } = {}
+    local entry = data.roster[brainrotId]
+    if not entry then
+        return -- not owned; reject
+    end
     local b1Now = data.base.buildings[BUILDING_ID]
     if b1Now then
         for _, deployedId in b1Now.deployment do
-            if deployedId ~= nil then
-                busy[deployedId] = true
+            if deployedId == brainrotId then
+                return -- already standing in the kandang; reject
             end
         end
     end
     for _, record in state.fighters do
-        busy[record.brainrotId] = true
-    end
-    local itemId: string? = nil
-    for id, entry in data.roster do
-        if entry.personality == personality and not busy[id] then
-            itemId = id
-            break
+        if record.brainrotId == brainrotId then
+            return -- currently fighting; reject
         end
     end
-    if not itemId then
-        return -- nothing of that personality free to deploy
-    end
+    local personality = entry.personality
+    local itemId = brainrotId
 
     local stand = findStand(standIndex)
     if not stand then
@@ -1029,7 +1030,7 @@ local function handleDeployToStand(player: Player, standIndex: unknown, personal
     end
 
     -- Pass the entry so the spawn carries the evolution aura/scale (S2).
-    local model = spawnDisplay(personality, stand, standIndex, data.roster[itemId])
+    local model = spawnDisplay(personality, stand, standIndex, entry)
     if not model then
         return -- template missing; leave inventory untouched
     end

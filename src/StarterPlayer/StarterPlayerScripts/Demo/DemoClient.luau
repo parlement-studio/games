@@ -219,8 +219,10 @@ end
 -- Place one caught Brainrot of `personality` onto the SPECIFIC empty pedestal
 -- `standIndex`. The player picked the podium (its Place prompt) and the creature
 -- (a row in the place menu); the server validates both and owns the result.
-function DemoClient.deployToStand(standIndex: number, personality: string)
-    DemoRemotes.DeployToStand:FireServer(standIndex, personality)
+-- ID-KEYED (bugfix): deploys the EXACT monster tapped, not "any of that
+-- personality" — uniqueness (element/rarity/evo) made the old behavior wrong.
+function DemoClient.deployToStand(standIndex: number, brainrotId: string)
+    DemoRemotes.DeployToStand:FireServer(standIndex, brainrotId)
 end
 
 -- KANDANG MENU: ask the server for a fresh kandang snapshot (replied via the
