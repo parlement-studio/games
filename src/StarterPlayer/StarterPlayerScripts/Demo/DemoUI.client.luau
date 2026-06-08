@@ -420,7 +420,7 @@ local summonEmpty = apply(Instance.new("TextLabel"), {
     FontFace = Font.Bold,
     TextColor3 = Color.TextDim,
     TextScaled = true,
-    Text = "Belum ada summon",
+    Text = "No summons yet",
     ZIndex = 15,
     Parent = summonPanel,
 })
@@ -660,7 +660,7 @@ local function makeFilterChip(order: number, key: string, text: string, width: n
     filterButtons[key] = chip
     return chip
 end
-makeFilterChip(1, "All", "Semua", 86)
+makeFilterChip(1, "All", "All", 86)
 for i, elementKey in ipairs(ElementConfig.order) do
     makeFilterChip(1 + i, elementKey, ElementConfig.display[elementKey].emoji, 44)
 end
@@ -724,204 +724,855 @@ local emptyLabel = apply(Instance.new("TextLabel"), {
     Parent = panel,
 })
 
--- ── ITEM tab content: the persisted backpack (DemoClient.Items) ─────────────
+-- ════════════════════════════════════════════════════════════════════════════
+-- §4 INVENTORY TAB — 4-col grid of rounded slots; tapping a filled slot opens
+-- a bottom detail drawer that slides up from the panel's lower edge.
+-- All cross-function UI refs live in INV{} to stay under the 200-local limit.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- INV: cross-function refs for the inventory drawer + active item.
+-- Stored in one table so we don't add multiple top-level locals.
+local INV = {}
+
+-- Grid scroll frame (full content area of the panel when Items tab is active).
 local itemsList = apply(Instance.new("ScrollingFrame"), {
     Name = "ItemsList",
     Visible = false,
     Position = UDim2.fromOffset(0, LY.CONTENT_TOP),
     Size = UDim2.new(1, 0, 1, -LY.CONTENT_TOP),
-    BackgroundColor3 = Color.SlotEmpty,
+    BackgroundTransparency = 1,
     BorderSizePixel = 0,
-    ScrollBarThickness = 6,
+    ScrollBarThickness = 4,
     CanvasSize = UDim2.new(),
     AutomaticCanvasSize = Enum.AutomaticSize.Y,
     ZIndex = 21,
     Parent = panel,
-}, { corner(12), padding(8) })
+}, { padding(8) })
+-- Vertical stack for the section blocks (header → grid → header → grid). Without
+-- this the children's LayoutOrder does nothing and every section renders at
+-- (0,0), overlapping. AutomaticCanvasSize.Y + each GridSection's AutomaticSize.Y
+-- size the scroll canvas to the stacked content.
 apply(Instance.new("UIListLayout"), {
     FillDirection = Enum.FillDirection.Vertical,
     SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 6),
+    Padding = UDim.new(0, 8),
     Parent = itemsList,
 })
 
--- Item display registry (icon + name + blurb per itemId). New items only need
--- a row here; counts come from the server push.
-local ITEM_DISPLAY: { [string]: { icon: string, name: string, blurb: string } } = {
-    capture_net = {
-        icon = "🕸️",
-        name = CaptureConfig.items.capture_net.name,
-        blurb = "Dipakai 1× per tangkapan. Beli di menu Kandang.",
-    },
-}
+-- ── Inventory detail DRAWER ─────────────────────────────────────────────────
+-- Slides up from the bottom of `panel` (not the screen) when a filled slot is
+-- tapped. Parented to `screen` so it can overlap freely; positioned to match
+-- the panel's lower ~40% (184px). ZIndex above the panel (ZIndex 20) but below
+-- any modal (ZIndex 30+).
+do
+    -- Drawer backdrop: transparent tap-catcher that closes the drawer when the
+    -- player taps outside it (but still inside the panel). Full screen so taps
+    -- anywhere outside the drawer panel close it.
+    INV.drawerBackdrop = apply(Instance.new("TextButton"), {
+        Name = "InvDrawerBackdrop",
+        Visible = false,
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "",
+        ZIndex = 24,
+        Parent = screen,
+    })
 
-local itemsTrove = rootTrove:Extend()
-local function renderItems()
-    itemsTrove:Clean()
-    local order = 0
-    local shown = 0
-    for itemId, count in DemoClient.Items do
-        local display = ITEM_DISPLAY[itemId]
-        if display and count > 0 then
-            order += 1
-            shown += 1
-            local row = itemsTrove:Add(apply(Instance.new("Frame"), {
-                Name = "ItemRow",
-                LayoutOrder = order,
-                BackgroundColor3 = Color.PanelLight,
-                BorderSizePixel = 0,
-                Size = UDim2.new(1, 0, 0, 64),
-                ZIndex = 22,
-                Parent = itemsList,
-            }, { corner(10), padding(8) }))
-            apply(Instance.new("TextLabel"), {
-                Name = "Icon",
-                BackgroundTransparency = 1,
-                Size = UDim2.new(0, 48, 1, 0),
-                FontFace = Font.Regular,
-                TextColor3 = Color.Text,
-                TextScaled = true,
-                Text = display.icon,
-                ZIndex = 23,
-                Parent = row,
-            })
-            apply(Instance.new("TextLabel"), {
-                Name = "Name",
-                BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(56, 0),
-                Size = UDim2.new(1, -56 - 80, 0.55, 0),
-                FontFace = Font.Bold,
-                TextColor3 = Color.Text,
-                TextScaled = true,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Text = display.name,
-                ZIndex = 23,
-                Parent = row,
-            })
-            apply(Instance.new("TextLabel"), {
-                Name = "Blurb",
-                BackgroundTransparency = 1,
-                AnchorPoint = Vector2.new(0, 1),
-                Position = UDim2.new(0, 56, 1, 0),
-                Size = UDim2.new(1, -56 - 80, 0.4, 0),
-                FontFace = Font.Bold,
-                TextColor3 = Color.TextDim,
-                TextScaled = true,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Text = display.blurb,
-                ZIndex = 23,
-                Parent = row,
-            })
-            apply(Instance.new("TextLabel"), {
-                Name = "Count",
-                AnchorPoint = Vector2.new(1, 0.5),
-                Position = UDim2.fromScale(1, 0.5),
-                Size = UDim2.fromOffset(72, 36),
-                BackgroundColor3 = Color.Panel,
-                BackgroundTransparency = 0.15,
-                FontFace = Font.Heavy,
-                TextColor3 = Color.Text,
-                TextScaled = true,
-                Text = "×" .. count,
-                ZIndex = 23,
-                Parent = row,
-            }, { corner(8), padding(4) })
+    -- Drawer panel: a rounded card anchored to the bottom-center of the screen;
+    -- it slides between Y=1 (hidden below) and Y≈0.55 (40% of panel showing).
+    -- The panel is 460px tall, centered vertically at 0.5. Its bottom edge is at
+    -- screen Y ≈ 0.5 + 230/viewport. We approximate by anchoring to screen bottom.
+    INV.drawer = apply(Instance.new("Frame"), {
+        Name = "InvDrawer",
+        Visible = false,
+        AnchorPoint = Vector2.new(0.5, 1),
+        -- Shown state: bottom-center of the panel (panel is 460px, centered at 0.5
+        -- of the screen). We park it slightly above screen center to land at the
+        -- panel's lower edge. Using fromOffset on a 460px panel: the drawer is
+        -- 184px tall and sits flush with the panel bottom.
+        Position = UDim2.new(0.5, 0, 0.5, 230), -- start hidden: one full panel-half below
+        Size = UDim2.fromOffset(LY.PANEL_WIDTH - 4, 188),
+        BackgroundColor3 = Color.Panel,
+        BorderSizePixel = 0,
+        ZIndex = 25,
+        Parent = screen,
+    }, { corner(16), stroke(Color.Stroke, 2), padding(12) })
+
+    -- Big icon on the left side of the drawer.
+    INV.drawerIcon = apply(Instance.new("TextLabel"), {
+        Name = "Icon",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(72, 72),
+        FontFace = Font.Regular,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        Text = "🕸️",
+        ZIndex = 26,
+        Parent = INV.drawer,
+    })
+
+    -- Name + description to the right of the icon.
+    INV.drawerName = apply(Instance.new("TextLabel"), {
+        Name = "ItemName",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(82, 0),
+        Size = UDim2.new(1, -82, 0, 26),
+        FontFace = Font.Heavy,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
+        ZIndex = 26,
+        Parent = INV.drawer,
+    })
+
+    INV.drawerBlurb = apply(Instance.new("TextLabel"), {
+        Name = "Blurb",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(82, 30),
+        Size = UDim2.new(1, -82, 0, 36),
+        FontFace = Font.Bold,
+        TextColor3 = Color.TextDim,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
+        ZIndex = 26,
+        Parent = INV.drawer,
+    })
+
+    -- Owned count badge (bottom-left, dark pill).
+    INV.drawerCount = apply(Instance.new("TextLabel"), {
+        Name = "CountBadge",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.fromScale(0, 1),
+        Size = UDim2.fromOffset(84, 34),
+        BackgroundColor3 = Color.Backdrop,
+        BorderSizePixel = 0,
+        FontFace = Font.Heavy,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        Text = "×0",
+        ZIndex = 26,
+        Parent = INV.drawer,
+    }, { corner(10), padding(6) })
+
+    -- "Buy more" action button (bottom-right, green).
+    INV.drawerBuy = apply(Instance.new("TextButton"), {
+        Name = "BuyMore",
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.fromScale(1, 1),
+        Size = UDim2.fromOffset(148, 44),
+        AutoButtonColor = true,
+        BackgroundColor3 = Color3.fromRGB(42, 157, 113),
+        BorderSizePixel = 0,
+        FontFace = Font.Heavy,
+        TextColor3 = Color.TextOnBright,
+        TextScaled = true,
+        Text = "🛒 Buy more",
+        ZIndex = 26,
+        Parent = INV.drawer,
+    }, { corner(10), padding(8) })
+
+    -- Close the drawer: animate it back down then hide.
+    local drawerTween: Tween? = nil
+    local DRAWER_SEC = 0.22
+    -- Shown Y position: 0.5 of screen + 42px (≈ half of 460 minus 230px to align
+    -- the drawer's top at panel bottom - 188px = 460/2 + 230 - 188 = 272 below center).
+    -- Numerically: panel bottom is at screen 0.5 + 230px; drawer top = that - 188 = 0.5+42px.
+    -- AnchorPoint(0.5,1) so Position Y = screen_center + 230 = panel bottom.
+    local POS_SHOWN = UDim2.new(0.5, 0, 0.5, 230)
+    local POS_HIDDEN = UDim2.new(0.5, 0, 0.5, 460) -- fully below panel
+
+    local function closeInvDrawer()
+        if drawerTween then
+            drawerTween:Cancel()
         end
+        INV.drawerBackdrop.Visible = false
+        drawerTween = TweenService:Create(
+            INV.drawer,
+            TweenInfo.new(DRAWER_SEC, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+            { Position = POS_HIDDEN }
+        )
+        drawerTween:Play()
+        drawerTween.Completed:Connect(function(state)
+            if state == Enum.PlaybackState.Completed then
+                INV.drawer.Visible = false
+            end
+        end)
     end
-    if shown == 0 then
-        itemsTrove:Add(apply(Instance.new("TextLabel"), {
-            Name = "EmptyItems",
-            LayoutOrder = 1,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 40),
-            FontFace = Font.Bold,
-            TextColor3 = Color.TextDim,
-            TextScaled = true,
-            Text = "Backpack kosong — beli Capture Net di Kandang!",
-            ZIndex = 22,
-            Parent = itemsList,
-        }))
+    INV.closeInvDrawer = closeInvDrawer
+
+    -- Open the drawer for a specific item (filled slot tapped).
+    local function openInvDrawer(icon: string, name: string, blurb: string, count: number)
+        INV.drawerIcon.Text = icon
+        INV.drawerName.Text = name
+        INV.drawerBlurb.Text = blurb
+        INV.drawerCount.Text = ("×%d"):format(count)
+        -- Snap to hidden position then tween in.
+        INV.drawer.Position = POS_HIDDEN
+        INV.drawer.Visible = true
+        INV.drawerBackdrop.Visible = true
+        if drawerTween then
+            drawerTween:Cancel()
+        end
+        drawerTween = TweenService:Create(
+            INV.drawer,
+            TweenInfo.new(DRAWER_SEC, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            { Position = POS_SHOWN }
+        )
+        drawerTween:Play()
     end
+    INV.openInvDrawer = openInvDrawer
+
+    -- Wire backdrop + buy button (buy fires ShopRequested, same as merchant NPC).
+    rootTrove:Add(INV.drawerBackdrop.Activated:Connect(closeInvDrawer))
+    rootTrove:Add(INV.drawerBuy.Activated:Connect(function()
+        closeInvDrawer()
+        DemoClient.ShopRequested:Fire()
+    end))
+end -- drawer build
+
+-- ── Item display registry ────────────────────────────────────────────────────
+-- icon + name + blurb per itemId. Add a row here to register new item types;
+-- counts always come from the server-authoritative DemoClient.Items push.
+do
+    -- Stored in LY so it is accessible inside renderItems() without a new top-level.
+    LY.ITEM_DISPLAY = {
+        capture_net = {
+            icon = "🕸️",
+            name = CaptureConfig.items.capture_net.name,
+            blurb = "Used once per catch. Buy from the Merchant.",
+        },
+    } :: { [string]: { icon: string, name: string, blurb: string } }
+    -- KEY ITEMS (locked placeholders — not real items yet). Rendered as grey
+    -- locked slots; tapping shows a "Coming soon" drawer state.
+    LY.KEY_ITEMS = {
+        raid_token = { icon = "🗝️", name = "Raid Token", blurb = "Coming soon." },
+    } :: { [string]: { icon: string, name: string, blurb: string } }
 end
 
--- ── SKILL tab content: placeholder (S5 deferred — bundled with boss HP
--- scaling). Locked previews only; no server logic.
-local skillsList = apply(Instance.new("ScrollingFrame"), {
-    Name = "SkillsList",
-    Visible = false,
-    Position = UDim2.fromOffset(0, LY.CONTENT_TOP),
-    Size = UDim2.new(1, 0, 1, -LY.CONTENT_TOP),
-    BackgroundColor3 = Color.SlotEmpty,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 6,
-    CanvasSize = UDim2.new(),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ZIndex = 21,
-    Parent = panel,
-}, { corner(12), padding(8) })
-apply(Instance.new("UIListLayout"), {
-    FillDirection = Enum.FillDirection.Vertical,
-    SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 6),
-    Parent = skillsList,
-})
-do
-    local SKILL_PREVIEWS = {
-        { icon = "⚔", name = "Slot Summon ke-4", cost = "25K 🪙" },
-        { icon = "⚔", name = "Slot Summon ke-5", cost = "250K 🪙" },
-        { icon = "✨", name = "Efek Summon", cost = "???" },
-    }
-    for i, def in SKILL_PREVIEWS do
-        local row = apply(Instance.new("Frame"), {
-            Name = "SkillRow",
-            LayoutOrder = i,
-            BackgroundColor3 = Color.PanelLight,
-            BackgroundTransparency = 0.4, -- locked: dim
-            BorderSizePixel = 0,
-            Size = UDim2.new(1, 0, 0, 56),
-            ZIndex = 22,
-            Parent = skillsList,
-        }, { corner(10), padding(8) })
-        apply(Instance.new("TextLabel"), {
-            Name = "Label",
+-- ── renderItems: clear + rebuild the 4-col grid each time the tab opens ─────
+-- Sections: CONSUMABLE (real data) → KEY ITEMS (locked placeholders).
+-- itemsTrove is an Extend() of rootTrove so cleanup cascades on destroy.
+local itemsTrove = rootTrove:Extend()
+
+-- Section header helper (small uppercase TextDim label — no layout child since
+-- it is inside the grid; we use a 1-col spanning frame via LayoutOrder spacing).
+local function renderItems()
+    itemsTrove:Clean()
+
+    -- Layout constants scoped here (not top-level).
+    local COL = 4 -- columns in the grid
+    local GAP = 6
+    -- Cell width = (panel inner width - (COL-1)*GAP) / COL; we use Scale UDim.
+    -- UIGridLayout handles this automatically with CellSize scale.
+    local CELL_H = 72 -- square-ish slots (grid makes them square via aspect ratio)
+
+    -- The grid lives directly inside itemsList (the ScrollingFrame).
+    -- We rebuild the layout on every render so section headers can be inserted.
+    -- Each section gets its OWN UIGridLayout block via a sub-Frame.
+    local order = 0
+    local function nextOrder(): number
+        order += 1
+        return order
+    end
+
+    -- Section header: a full-width TextLabel sitting above each grid block.
+    local function sectionHeader(text: string, lo: number)
+        itemsTrove:Add(apply(Instance.new("TextLabel"), {
+            Name = "SectionHeader",
+            LayoutOrder = lo,
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, -90, 1, 0),
+            Size = UDim2.new(1, 0, 0, 22),
             FontFace = Font.Bold,
             TextColor3 = Color.TextDim,
             TextScaled = true,
             TextXAlignment = Enum.TextXAlignment.Left,
-            Text = ("%s %s — %s"):format(def.icon, def.name, def.cost),
-            ZIndex = 23,
-            Parent = row,
-        })
-        apply(Instance.new("TextLabel"), {
-            Name = "Lock",
-            AnchorPoint = Vector2.new(1, 0.5),
-            Position = UDim2.fromScale(1, 0.5),
-            Size = UDim2.fromOffset(80, 32),
-            BackgroundColor3 = Color.Panel,
-            BackgroundTransparency = 0.15,
-            FontFace = Font.Heavy,
-            TextColor3 = Color.TextDim,
-            TextScaled = true,
-            Text = "🔒 Segera",
-            ZIndex = 23,
-            Parent = row,
-        }, { corner(8), padding(4) })
+            Text = text,
+            ZIndex = 22,
+            Parent = itemsList,
+        }))
     end
-    apply(Instance.new("TextLabel"), {
-        Name = "Note",
-        LayoutOrder = 99,
+
+    -- One square slot in the grid container. Filled = colored card + count badge.
+    -- Empty = thin stroke outline + "+" hint. Returns the slot Frame.
+    local function makeSlot(
+        container: Frame,
+        slotOrder: number,
+        icon: string,
+        name: string,
+        blurb: string,
+        count: number?, -- nil = locked/empty slot
+        isLocked: boolean
+    ): TextButton
+        local isFilled = count ~= nil and count > 0
+        local slotColor = if isFilled then Color.PanelLight else Color.SlotEmpty
+        local slotAlpha = if isLocked then 0.55 else (if isFilled then 0 else 0.2)
+
+        local slot = itemsTrove:Add(apply(Instance.new("TextButton"), {
+            Name = "Slot",
+            LayoutOrder = slotOrder,
+            AutoButtonColor = isFilled,
+            Text = "",
+            BackgroundColor3 = slotColor,
+            BackgroundTransparency = slotAlpha,
+            BorderSizePixel = 0,
+            ZIndex = 22,
+            Parent = container,
+        }, {
+            corner(12),
+            stroke(if isFilled then Color.Stroke else Color.SlotEmpty, if isFilled then 2 else 1),
+            padding(4),
+        }))
+
+        -- Big centered icon.
+        apply(Instance.new("TextLabel"), {
+            Name = "Icon",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.45),
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(0.6, 0.6),
+            FontFace = Font.Regular,
+            TextColor3 = if isLocked then Color.TextDim else Color.Text,
+            TextScaled = true,
+            Text = if isLocked then "🔒" else (if isFilled then icon else "+"),
+            ZIndex = 23,
+            Parent = slot,
+        })
+
+        -- Count badge (bottom-right dark pill) — only on filled slots.
+        if isFilled then
+            apply(Instance.new("TextLabel"), {
+                Name = "Count",
+                AnchorPoint = Vector2.new(1, 1),
+                Position = UDim2.fromScale(1, 1),
+                Size = UDim2.fromOffset(44, 22),
+                BackgroundColor3 = Color.Backdrop,
+                BorderSizePixel = 0,
+                FontFace = Font.Heavy,
+                TextColor3 = Color.Text,
+                TextScaled = true,
+                Text = ("×%d"):format(count :: number),
+                ZIndex = 24,
+                Parent = slot,
+            }, { corner(8), padding(3) })
+        end
+
+        -- Tap handler: open drawer for filled, "Coming soon" for locked, no-op for empty.
+        if isFilled then
+            itemsTrove:Add(slot.Activated:Connect(function()
+                INV.openInvDrawer(icon, name, blurb, count :: number)
+            end))
+        elseif isLocked then
+            itemsTrove:Add(slot.Activated:Connect(function()
+                INV.openInvDrawer("🔒", name, "Coming soon.", 0)
+            end))
+        end
+
+        return slot
+    end
+
+    -- Helper: build one sub-Frame + UIGridLayout then fill it with slots.
+    local function buildSection(
+        headerText: string,
+        defs: {
+            {
+                id: string,
+                icon: string,
+                name: string,
+                blurb: string,
+                count: number?,
+                locked: boolean,
+            }
+        },
+        padSlots: number -- trailing empty slots so the section looks "fillable"
+    )
+        sectionHeader(headerText, nextOrder())
+        local container = itemsTrove:Add(apply(Instance.new("Frame"), {
+            Name = "GridSection",
+            LayoutOrder = nextOrder(),
+            BackgroundTransparency = 1,
+            -- Height auto-expands via AutomaticSize.
+            Size = UDim2.fromScale(1, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            ZIndex = 21,
+            Parent = itemsList,
+        }))
+        apply(Instance.new("UIGridLayout"), {
+            CellSize = UDim2.new(1 / COL, -GAP, 0, CELL_H),
+            CellPadding = UDim2.fromOffset(GAP, GAP),
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Left,
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Parent = container,
+        })
+        -- Add a right-margin UIPadding so the rightmost cells don't clip.
+        apply(Instance.new("UIPadding"), {
+            PaddingRight = UDim.new(0, GAP),
+            Parent = container,
+        })
+        local slotIdx = 0
+        for _, def in defs do
+            slotIdx += 1
+            makeSlot(container, slotIdx, def.icon, def.name, def.blurb, def.count, def.locked)
+        end
+        for _ = 1, padSlots do
+            slotIdx += 1
+            makeSlot(container, slotIdx, "", "", "", nil, false)
+        end
+    end
+
+    -- ── CONSUMABLE section ─────────────────────────────────────────────────
+    do
+        local consumDefs = {}
+        for itemId, display in LY.ITEM_DISPLAY do
+            local count = DemoClient.Items[itemId] or 0
+            if count > 0 then
+                table.insert(consumDefs, {
+                    id = itemId,
+                    icon = display.icon,
+                    name = display.name,
+                    blurb = display.blurb,
+                    count = count,
+                    locked = false,
+                })
+            end
+        end
+        -- Show empty-state hint when no consumables at all.
+        if #consumDefs == 0 then
+            itemsTrove:Add(apply(Instance.new("TextLabel"), {
+                Name = "EmptyItems",
+                LayoutOrder = nextOrder(),
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 40),
+                FontFace = Font.Bold,
+                TextColor3 = Color.TextDim,
+                TextScaled = true,
+                Text = "Backpack empty — buy Capture Nets from the Merchant!",
+                ZIndex = 22,
+                Parent = itemsList,
+            }))
+        else
+            -- Pad to a minimum of 4 visible slots (one row) so the grid is never empty.
+            local pad = math.max(0, COL - #consumDefs)
+            buildSection("CONSUMABLE", consumDefs, pad)
+        end
+    end
+
+    -- ── KEY ITEMS section (locked placeholders) ────────────────────────────
+    do
+        local keyDefs = {}
+        for itemId, display in LY.KEY_ITEMS do
+            table.insert(keyDefs, {
+                id = itemId,
+                icon = display.icon,
+                name = display.name,
+                blurb = display.blurb,
+                count = nil,
+                locked = true,
+            })
+        end
+        -- Always show the KEY ITEMS section even when empty (aspirational).
+        local pad = math.max(0, COL - #keyDefs)
+        buildSection("KEY ITEMS", keyDefs, pad)
+    end
+end -- renderItems
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- §6 SKILL TAB — 3-path presentation tree (S5 deferred, no server logic).
+-- Paths: SUMMONER (green) · PEN (blue) · HUNTER (purple).
+-- Nodes: ✅ Owned · 💰 Buyable (inert "Coming soon") · 🔒 Locked.
+-- Coin balance mirror + disabled Reset button at the top.
+-- Cross-function refs live in SKL{} to stay under the 200-local limit.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- SKL: cross-function refs for the skill popover + coin mirror label.
+local SKL = {}
+
+-- skillsList: a plain Frame (not a ScrollingFrame) because the 3-column tree
+-- is laid out manually with absolute positions. We keep the name `skillsList`
+-- so setTab() and the existing reference at line ~2644 keep working.
+local skillsList = apply(Instance.new("Frame"), {
+    Name = "SkillsList",
+    Visible = false,
+    Position = UDim2.fromOffset(0, LY.CONTENT_TOP),
+    Size = UDim2.new(1, 0, 1, -LY.CONTENT_TOP),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ZIndex = 21,
+    Parent = panel,
+})
+
+do -- skill tree build (scoped to avoid polluting top-level registers)
+    -- ── Path definitions ───────────────────────────────────────────────────
+    -- Node state values: "owned" | "buyable" | "locked"
+    -- "buyable" nodes here are INERT (S5 deferred) — tapping shows "Coming soon".
+    local PATH_SUMMONER_COLOR = Color3.fromRGB(42, 157, 113) -- green
+    local PATH_PEN_COLOR = Color3.fromRGB(60, 141, 255) -- blue
+    local PATH_HUNTER_COLOR = Color3.fromRGB(168, 85, 247) -- purple
+
+    -- Each node: { name, effect, cost, state }
+    -- cost = display string; state = "owned"|"buyable"|"locked"
+    local PATHS: {
+        {
+            icon: string,
+            label: string,
+            color: Color3,
+            nodes: { { name: string, effect: string, cost: string, state: string } },
+        }
+    } =
+        {
+            {
+                icon = "⚔",
+                label = "SUMMONER",
+                color = PATH_SUMMONER_COLOR,
+                nodes = {
+                    {
+                        name = "Summon Slot 4",
+                        effect = "Unlock a 4th active summon slot.",
+                        cost = "25K 🪙",
+                        state = "buyable",
+                    },
+                    {
+                        name = "Summon Slot 5",
+                        effect = "Unlock a 5th active summon slot.",
+                        cost = "250K 🪙",
+                        state = "locked",
+                    },
+                    {
+                        name = "Battle Fury",
+                        effect = "???",
+                        cost = "???",
+                        state = "locked",
+                    },
+                },
+            },
+            {
+                icon = "🏠",
+                label = "PEN",
+                color = PATH_PEN_COLOR,
+                nodes = {
+                    { name = "Pen Efficiency", effect = "???", cost = "???", state = "locked" },
+                    { name = "Auto Harvest", effect = "???", cost = "???", state = "locked" },
+                    { name = "Pen Mastery", effect = "???", cost = "???", state = "locked" },
+                },
+            },
+            {
+                icon = "🕸️",
+                label = "HUNTER",
+                color = PATH_HUNTER_COLOR,
+                nodes = {
+                    { name = "Net Expert", effect = "???", cost = "???", state = "locked" },
+                    { name = "Sharp Eye", effect = "???", cost = "???", state = "locked" },
+                    { name = "Trap Master", effect = "???", cost = "???", state = "locked" },
+                },
+            },
+        }
+
+    -- ── Layout constants (scoped, not top-level) ──────────────────────────
+    local NODE_SIZE = 60 -- circle diameter
+    local CONN_H = 30 -- connector line height between nodes
+    local HEADER_H = 40 -- path header row (icon + label)
+    local HEADER_GAP = 26 -- breathing room between the header tab and the first node
+    local COIN_ROW_H = 32 -- coin mirror + reset bar
+    local TREE_TOP = COIN_ROW_H + 8
+    local COL_COUNT = #PATHS
+    -- Column width = (panel content width) / COL_COUNT.
+    -- UDim2 scale so it is responsive; each column is 1/3 of the parent.
+    local COL_W_SCALE = 1 / COL_COUNT
+
+    -- ── Coin mirror row (top of the skills pane) ──────────────────────────
+    local coinRow = apply(Instance.new("Frame"), {
+        Name = "CoinRow",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 36),
-        FontFace = Font.Bold,
-        TextColor3 = Color.TextDim,
-        TextScaled = true,
-        Text = "Skill tree menyusul bersama balance boss 👑",
+        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.new(1, 0, 0, COIN_ROW_H),
         ZIndex = 22,
         Parent = skillsList,
     })
-end
+    SKL.coinLabel = apply(Instance.new("TextLabel"), {
+        Name = "CoinMirror",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(0.6, 1),
+        FontFace = Font.Heavy,
+        TextColor3 = Color.Coin,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = ("🪙 %d"):format(DemoClient.getDisplayCoins()),
+        ZIndex = 23,
+        Parent = coinRow,
+    })
+    -- Disabled "Reset" spacer (for later — never fires anything).
+    apply(Instance.new("TextButton"), {
+        Name = "ResetSpacer",
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.fromScale(1, 0.5),
+        Size = UDim2.fromOffset(80, 28),
+        AutoButtonColor = false,
+        BackgroundColor3 = Color.SlotEmpty,
+        BackgroundTransparency = 0.4,
+        BorderSizePixel = 0,
+        FontFace = Font.Bold,
+        TextColor3 = Color.TextDim,
+        TextScaled = true,
+        Text = "Reset",
+        ZIndex = 23,
+        Parent = coinRow,
+    }, { corner(8) })
+
+    -- ── Skill node popover ─────────────────────────────────────────────────
+    -- A small tooltip card parented to `screen`; appears near the tapped node.
+    -- Presentation-only: every buyable node shows "Coming soon — S5".
+    SKL.popoverBackdrop = apply(Instance.new("TextButton"), {
+        Name = "SkillPopoverBackdrop",
+        Visible = false,
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "",
+        ZIndex = 48,
+        Parent = screen,
+    })
+    SKL.popover = apply(Instance.new("Frame"), {
+        Name = "SkillPopover",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(260, 148),
+        BackgroundColor3 = Color.Panel,
+        BorderSizePixel = 0,
+        ZIndex = 49,
+        Parent = SKL.popoverBackdrop,
+    }, { corner(16), stroke(Color.Stroke, 2), padding(12) })
+    SKL.popName = apply(Instance.new("TextLabel"), {
+        Name = "NodeName",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 26),
+        FontFace = Font.Heavy,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
+        ZIndex = 50,
+        Parent = SKL.popover,
+    })
+    SKL.popEffect = apply(Instance.new("TextLabel"), {
+        Name = "Effect",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, 30),
+        Size = UDim2.new(1, 0, 0, 34),
+        FontFace = Font.Bold,
+        TextColor3 = Color.TextDim,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
+        ZIndex = 50,
+        Parent = SKL.popover,
+    })
+    SKL.popCost = apply(Instance.new("TextLabel"), {
+        Name = "Cost",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, 68),
+        Size = UDim2.new(1, 0, 0, 22),
+        FontFace = Font.Heavy,
+        TextColor3 = Color.Coin,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
+        ZIndex = 50,
+        Parent = SKL.popover,
+    })
+    -- Status line ("Coming soon — S5" for buyable; "Unlocks after: NodeName" for locked).
+    SKL.popStatus = apply(Instance.new("TextLabel"), {
+        Name = "Status",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, 94),
+        Size = UDim2.new(1, 0, 0, 18),
+        FontFace = Font.Bold,
+        TextColor3 = Color.TextDim,
+        TextScaled = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
+        ZIndex = 50,
+        Parent = SKL.popover,
+    })
+    apply(Instance.new("TextButton"), {
+        Name = "Close",
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.fromScale(1, 0),
+        Size = UDim2.fromOffset(28, 28),
+        AutoButtonColor = true,
+        BackgroundColor3 = Color.SlotEmpty,
+        BorderSizePixel = 0,
+        FontFace = Font.Heavy,
+        TextColor3 = Color.Text,
+        TextScaled = true,
+        Text = "✕",
+        ZIndex = 50,
+        Parent = SKL.popover,
+    }, { corner(8) })
+
+    local function closeSkillPopover()
+        SKL.popoverBackdrop.Visible = false
+    end
+    local function openSkillPopover(name: string, effect: string, cost: string, status: string)
+        SKL.popName.Text = name
+        SKL.popEffect.Text = effect
+        SKL.popCost.Text = if cost == "???" then "" else ("Cost: " .. cost)
+        SKL.popStatus.Text = status
+        SKL.popoverBackdrop.Visible = true
+    end
+    SKL.openSkillPopover = openSkillPopover
+
+    rootTrove:Add(SKL.popoverBackdrop.Activated:Connect(closeSkillPopover))
+    -- The ✕ button inside the popover (use FindFirstChild at runtime rather than
+    -- a captured local to avoid a top-level ref; the close backdrop handles it).
+    do
+        local closeBtn = SKL.popover:FindFirstChild("Close") :: TextButton?
+        if closeBtn then
+            rootTrove:Add(closeBtn.Activated:Connect(closeSkillPopover))
+        end
+    end
+
+    -- ── Wire coin mirror to CoinsChanged ─────────────────────────────────
+    -- Connect DIRECTLY (not via Trove): DemoClient.CoinsChanged is a GoodSignal,
+    -- and Trove 1.8.0 mis-probes its Connection (`.Destroy` errors). This matches
+    -- the existing CoinsChanged subscribers (e.g. paintCoins); the connection
+    -- lives for the session alongside the persistent PlayerGui.
+    DemoClient.CoinsChanged:Connect(function()
+        SKL.coinLabel.Text = ("🪙 %d"):format(DemoClient.getDisplayCoins())
+    end)
+
+    -- ── Build the 3-column node tree ──────────────────────────────────────
+    -- Column container for each path, arranged horizontally by Scale position.
+    for colIdx, path in ipairs(PATHS) do
+        local colX = (colIdx - 1) * COL_W_SCALE
+        local col = apply(Instance.new("Frame"), {
+            Name = "Col_" .. path.label,
+            BackgroundTransparency = 1,
+            Position = UDim2.new(colX, 0, 0, TREE_TOP),
+            Size = UDim2.new(COL_W_SCALE, 0, 1, -TREE_TOP),
+            ZIndex = 21,
+            Parent = skillsList,
+        }, { padding(10) }) -- inset so columns get a visible gap + headers never touch
+
+        -- Path header: a rounded tab tinted in the path color so the 3 paths read
+        -- as distinct labelled columns (instead of three colours of text colliding).
+        local header = apply(Instance.new("Frame"), {
+            Name = "PathHeader",
+            BackgroundColor3 = path.color,
+            BackgroundTransparency = 0.8, -- subtle tint block
+            BorderSizePixel = 0,
+            Size = UDim2.new(1, 0, 0, HEADER_H),
+            ZIndex = 22,
+            Parent = col,
+        }, { corner(10), stroke(path.color, 1) })
+        apply(Instance.new("TextLabel"), {
+            Name = "Label",
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            FontFace = Font.Heavy,
+            TextColor3 = path.color,
+            TextScaled = true,
+            Text = path.icon .. " " .. path.label,
+            ZIndex = 23,
+            Parent = header,
+        }, { padding(6) })
+
+        -- Nodes + connectors stacked vertically below the header.
+        for nodeIdx, node in ipairs(path.nodes) do
+            -- Y position of this node's top inside the column frame.
+            local nodeTop = HEADER_H + HEADER_GAP + (nodeIdx - 1) * (NODE_SIZE + CONN_H)
+
+            -- Connector line ABOVE the node (from the node above's bottom to this one's top).
+            -- For the first node (nodeIdx==1) there is no connector.
+            if nodeIdx > 1 then
+                -- Color the connector: lit if the node above is "owned", dim otherwise.
+                local prevState = path.nodes[nodeIdx - 1].state
+                local connColor = if prevState == "owned" then path.color else Color.SlotEmpty
+                apply(Instance.new("Frame"), {
+                    Name = "Connector",
+                    AnchorPoint = Vector2.new(0.5, 0),
+                    Position = UDim2.new(0.5, 0, 0, nodeTop - CONN_H),
+                    Size = UDim2.fromOffset(4, CONN_H),
+                    BackgroundColor3 = connColor,
+                    BorderSizePixel = 0,
+                    ZIndex = 22,
+                    Parent = col,
+                }, { corner(2) })
+            end
+
+            -- Node circle: state-dependent appearance.
+            local nodeAlpha = if node.state == "locked" then 0.5 else 0
+            local nodeBg = if node.state == "owned"
+                then path.color
+                else (if node.state == "buyable" then Color.PanelLight else Color.SlotEmpty)
+            local nodeTextColor = if node.state == "owned"
+                then Color.TextOnBright
+                else (if node.state == "buyable" then path.color else Color.TextDim)
+
+            local nodeBtn = apply(Instance.new("TextButton"), {
+                Name = "Node_" .. nodeIdx,
+                AnchorPoint = Vector2.new(0.5, 0),
+                Position = UDim2.new(0.5, 0, 0, nodeTop),
+                Size = UDim2.fromOffset(NODE_SIZE, NODE_SIZE),
+                AutoButtonColor = node.state ~= "locked",
+                BackgroundColor3 = nodeBg,
+                BackgroundTransparency = nodeAlpha,
+                BorderSizePixel = 0,
+                FontFace = Font.Heavy,
+                TextColor3 = nodeTextColor,
+                TextScaled = true,
+                -- Owned: checkmark; Buyable: coin emoji; Locked: lock.
+                Text = if node.state == "owned" then "✅" elseif node.state == "buyable" then "💰" else "🔒",
+                ZIndex = 23,
+                Parent = col,
+            }, {
+                corner(NODE_SIZE / 2), -- full circle
+                stroke(if node.state == "buyable" then path.color else Color.Stroke, 2),
+            })
+
+            -- Price label below buyable nodes.
+            if node.state == "buyable" then
+                apply(Instance.new("TextLabel"), {
+                    Name = "Price",
+                    AnchorPoint = Vector2.new(0.5, 0),
+                    Position = UDim2.new(0.5, 0, 0, nodeTop + NODE_SIZE + 2),
+                    Size = UDim2.fromOffset(NODE_SIZE + 14, 18),
+                    BackgroundTransparency = 1,
+                    FontFace = Font.Bold,
+                    TextColor3 = Color.Coin,
+                    TextScaled = true,
+                    Text = node.cost,
+                    ZIndex = 22,
+                    Parent = col,
+                })
+            end
+
+            -- Tap → popover (all states open a popover; inert on server).
+            do
+                local nName = node.name
+                local nEffect = node.effect
+                local nCost = node.cost
+                local nState = node.state
+                local prevName = if nodeIdx > 1 then path.nodes[nodeIdx - 1].name else ""
+                rootTrove:Add(nodeBtn.Activated:Connect(function()
+                    local status: string
+                    if nState == "owned" then
+                        status = "Owned"
+                    elseif nState == "buyable" then
+                        status = "Coming soon — S5"
+                    else
+                        status = if prevName ~= "" then ("Requires: " .. prevName) else "Locked"
+                    end
+                    openSkillPopover(nName, nEffect, nCost, status)
+                end))
+            end
+        end -- nodes loop
+    end -- paths loop
+end -- skill tree build
 
 -- ── Tab switching ───────────────────────────────────────────────────────────
 local currentTab = "monsters"
@@ -948,6 +1599,13 @@ local function setTab(which: string)
     if isMonsters then
         panel.Size = UDim2.fromScale(0.8, 0.8)
         panel.BackgroundTransparency = 0.25
+    elseif isSkills then
+        -- The 3-path skill tree needs room to breathe — enlarge like Monster so
+        -- the columns + headers don't cram into the compact 360px panel. Kept
+        -- OPAQUE (unlike Monster) so the tree reads cleanly without the 3D world
+        -- showing through behind the nodes.
+        panel.Size = UDim2.fromScale(0.82, 0.86)
+        panel.BackgroundTransparency = 0
     else
         panel.Size = UDim2.fromOffset(LY.PANEL_WIDTH, LY.PANEL_HEIGHT)
         panel.BackgroundTransparency = 0
@@ -1528,7 +2186,7 @@ local function openSheet(item: DemoClient.InventoryItem)
 
     -- EVOLVE button state (data from the server payload; server re-validates).
     if not inBag then
-        sheetEvolve.Text = if item.status == "kandang" then "🏠 Sedang di Kandang" else "⚔ Sedang Bertarung"
+        sheetEvolve.Text = if item.status == "kandang" then "🏠 In the Pen" else "⚔ In Battle"
         sheetEvolve.BackgroundColor3 = Color.SlotEmpty
         sheetEvolve.AutoButtonColor = false
     elseif item.evolveCost == nil then
@@ -1536,7 +2194,7 @@ local function openSheet(item: DemoClient.InventoryItem)
         sheetEvolve.BackgroundColor3 = Color.SlotEmpty
         sheetEvolve.AutoButtonColor = false
     elseif item.level < (item.evolveMilestone or math.huge) then
-        sheetEvolve.Text = string.format("✨ Evolve terbuka di Lv %d", item.evolveMilestone or 0)
+        sheetEvolve.Text = string.format("✨ Evolve unlocks at Lv %d", item.evolveMilestone or 0)
         sheetEvolve.BackgroundColor3 = Color.SlotEmpty
         sheetEvolve.AutoButtonColor = false
     else
@@ -1632,7 +2290,7 @@ for i, r in ipairs(RarityConfig.order) do
     rarityRank[r] = i
 end
 
-LY.SORT_LABELS = { level = "Level ↓", rarity = "Rarity ↓", new = "Terbaru" }
+LY.SORT_LABELS = { level = "Level ↓", rarity = "Rarity ↓", new = "Newest" }
 
 local function render(inventory: DemoClient.Inventory)
     cardsTrove:Clean()
@@ -1962,7 +2620,7 @@ apply(Instance.new("TextLabel"), {
     TextColor3 = Color.Text,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "🏠 KANDANG",
+    Text = "🏠 PEN",
     ZIndex = 42,
     Parent = kandangPanel,
 })
@@ -2045,7 +2703,7 @@ local kandangUpgradeBtn = apply(Instance.new("TextButton"), {
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
-    Text = "⬆️ Upgrade Kandang",
+    Text = "⬆️ Upgrade Pen",
     ZIndex = 42,
     Parent = kandangPanel,
 }, { corner(12), padding(8) })
@@ -2213,7 +2871,7 @@ local function renderKandang()
     -- Upgrade button (data-driven; the server re-validates every tap).
     local nextCost = payload.nextCost
     if nextCost == nil then
-        kandangUpgradeBtn.Text = "🏠 Kandang Lv MAX"
+        kandangUpgradeBtn.Text = "🏠 Pen Lv MAX"
         kandangUpgradeBtn.BackgroundColor3 = Color.SlotEmpty
         kandangUpgradeBtn.AutoButtonColor = false
     else
@@ -2401,7 +3059,7 @@ apply(Instance.new("TextLabel"), {
     TextColor3 = Color.TextDim,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "Perlengkapan hunter — bayar pakai koin!",
+    Text = "Hunter gear — pay with coins!",
     ZIndex = 46,
     Parent = shopPanel,
 })
@@ -2453,7 +3111,7 @@ local shopOwned = apply(Instance.new("TextLabel"), {
     TextColor3 = Color.TextDim,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "Punya: ×0",
+    Text = "Owned: ×0",
     ZIndex = 47,
     Parent = shopCard,
 })
@@ -2469,7 +3127,7 @@ local shopBuyOne = apply(Instance.new("TextButton"), {
     FontFace = Font.Heavy,
     TextColor3 = Color.TextOnBright,
     TextScaled = true,
-    Text = "Beli 1",
+    Text = "Buy 1",
     ZIndex = 46,
     Parent = shopPanel,
 }, { corner(12), padding(8) })
@@ -2497,8 +3155,8 @@ local function renderShop()
     local netDef = CaptureConfig.items.capture_net
     local owned = DemoClient.Items.capture_net or 0
     local coins = DemoClient.getDisplayCoins()
-    shopOwned.Text = ("Punya: ×%d"):format(owned)
-    shopBuyOne.Text = ("Beli 1 — %d 🪙"):format(netDef.price)
+    shopOwned.Text = ("Owned: ×%d"):format(owned)
+    shopBuyOne.Text = ("Buy 1 — %d 🪙"):format(netDef.price)
     shopBuyBundle.Text = ("Paket %d — %d 🪙"):format(netDef.bundleCount, netDef.bundlePrice)
     shopBuyOne.BackgroundColor3 = if coins >= netDef.price then Color3.fromRGB(42, 157, 113) else Color.SlotEmpty
     shopBuyBundle.BackgroundColor3 = if coins >= netDef.bundlePrice
