@@ -1,7 +1,7 @@
 # Systems Index — Brainrot Inc. (rebrand tematik: Monster Relic)
 
-**Version**: 3.3 (Economy session: sinks + rarity + retention)
-**Last Updated**: 2026-06-07
+**Version**: 3.4 (+ #32 Localization / Language System)
+**Last Updated**: 2026-06-08
 **Author**: game-designer
 **Status**: Locked post-pivot + post-rebrand
 
@@ -25,13 +25,15 @@
 
 > **Revision note (2026-06-07, v3.2 Element system LOCKED)**: Open decision Element **resolved** — **light chart mekanik combat**: 5 elemen **Fire > Nature > Water > Volt > Wind > Fire** (lingkaran 1-arah), `elementMod` 1.25/1.00/0.75 config-driven di formula damage Pet AI (dua arah, semua 3 boss tier). Element **di-roll server-side saat capture (uniform 20%)**, **permanen** (no reroll — hanya Personality yang rerollable), elemen boss **fixed per spec**. Field schema baru `BrainrotEntry.element` + backfill migrasi roster lama. Element TIDAK memengaruhi idle production (axis milik Personality) maupun capture success rate. **Blokir boss-system-gdd / capture-v2-gdd / ekstensi Pet AI 3-tier DIBUKA.** Lihat `design/decisions/2026-06-07-element-system.md`.
 
+> **Revision note (2026-06-08, v3.4 Localization)**: Sistem baru **#32 Localization / Language System** ditambahkan. Owner memilih **Approach B (custom string table, ID/EN dipilih pemain in-game)** di atas Roblox cloud LocalizationTable — teks game saat ini campur ID/EN hardcoded, ingin pilihan eksplisit + kontrol penuh. GDD `localization-gdd.md` v1.0. P2 support/infra, depend Persistence (#1) + UI/HUD (#13) + Moment (#12). Tracking: GitHub issue **#30** (build order GDD §10). Tidak ada perubahan sistem lain.
+
 ## Summary
 
-- **Total active MVP systems**: 23 (after restructure)
+- **Total active MVP systems**: 24 (after restructure; + #32 Localization)
 - **Active Phase 2 systems**: 3 (Fame, Visit Base, Brain Cells)
 - **Cancelled systems** (post-pivot): 5
 - **Implemented + shipped**: 3 (#1 Persistence, #2 Personality, #9 Economy)
-- **In design** (GDD shipped, code pending): 2 (#25 Pet AI, #26 Kandang/Showroom pending rename)
+- **In design** (GDD shipped, code pending): 3 (#25 Pet AI, #26 Kandang/Showroom pending rename, #32 Localization)
 - **Not started**: 18
 
 **Legend** — Priority tiers: P0 = foundation/blocker, P1 = core MVP, P2 = MVP-supporting, P3 = Phase 2. Risk: L/M/H.
@@ -312,6 +314,17 @@
   - **Capture Items**: area-tier (`Forest Item`, `Cave Item`, `Sky Item`, etc.). Purchased in Lobby shop with coins. Used in Areas for instant capture of wild Brainrots. Inventory cap (TBD). Tiered prices (TBD).
   - **Raid Tokens**: gated entry for Raid Dungeon Tier 3 boss. **Sources (hybrid per Decision 7)**: (a) 1 daily free at server-clock reset, (b) quest rewards (Daily Quests #17 occasionally drop), (c) Robux DevProduct (Monetization #15). Per-player stack cap (TBD ~10).
 - **Open**: capture item success rate formula; capture item tier pricing; token cap; token consumption on fail (refund or no); token DevProduct ladder pricing.
+
+### 32. Localization / Language System (NEW — ID/EN player choice)
+- **Status**: Not started (GDD shipped 2026-06-08)
+- **Phase**: MVP (support/infra)
+- **Priority**: P2 (MVP-supporting — polish + reach, not a gameplay blocker)
+- **Value**: 3 | **Effort**: 3 | **Risk**: L | **Monetization**: 1
+- **GDD**: `design/gdd/localization-gdd.md` v1.0 — **issue #30**
+- **Depends On**: Persistence (#1, simpan `settings.language` + migrasi), UI/HUD (#13, semua teks), Moment (#12, toast)
+- **Depended On By**: setiap sistem yang menampilkan teks pemain (Capture, Kandang, Shop, Combat, Cinematic)
+- **Notes**: **Approach B (custom string table)** dipilih owner 2026-06-08 — bukan cloud LocalizationTable Roblox. **English-first (2026-06-08)**: owner menetapkan English = bahasa resmi/sumber, terjemahan belakangan. **Precursor SELESAI** — semua teks pemain dinormalisasi ke English **in-place** (DemoConfig prompt, ≈11 toast DemoServer, ≈16 string DemoUI; identifier internal `Kandang*` dibiarkan). Game sekarang satu bahasa: English. **Ditunda** (sampai owner minta translate): modul `Strings` keyed + controller `t(key)` + toggle in-game + persist `settings.language` (default `en`) + server emit key+args. Build bertahap GDD §10. Door terbuka ke Approach A.
+- **Open**: lokasi toggle (Settings panel vs pill top-bar); apakah deteksi `LocaleId` join pertama cukup atau perlu prompt pilih bahasa eksplisit; bahasa ke-3 (Melayu?) nanti.
 
 ---
 
