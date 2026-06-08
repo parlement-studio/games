@@ -44,6 +44,18 @@ The new genre DNA: **Pokémon GO + Adopt Me + Loomian Legacy + Pet Simulator** m
 
 **Trade-off accepted**: Cross-place state handoff complexity (`TeleportService` + `TeleportData` + `MemoryStoreService`). Persistence GDD #1 needs cross-place teleport extension.
 
+> 🔄 **REVISI (2026-06-09) — owner-approved.** Decision 1 di-**update**: bagian
+> **hunting** TIDAK lagi per-area place terpisah. Pilihan baru = **single Overworld
+> seamless** — laut + **4-5 pulau berburu** + **Hunter Camp** (Lobby dilebur jadi
+> pulau-port) dalam **SATU place ber-StreamingEnabled** (no loading antar pulau,
+> shared publik ~26 pemain/salinan). Yang **TETAP place terpisah & instanced**:
+> Super Boss (Tier 2, party), Raid (Tier 3, party), **Kandang** (privat per-owner).
+> Alasan owner: dunia terasa nyambung (vibe archipelago) > banyak loading screen.
+> Konsekuensi: StreamingEnabled wajib; traversal antar pulau = gerak/dock fast-travel
+> (bukan teleport); kapasitas server Overworld lebih besar dari "8/Area" lama.
+> **Spesifikasi penuh**: `design/gdd/world-universe-gdd.md` v1.0 (System #27 / GH #23).
+> Decision 5/6/7 (shared hunting, party-instanced boss/raid, token gate) **tetap**.
+
 ---
 
 ### Decision 2: Capture Mechanic — **Item-based instant capture (no fight required)**

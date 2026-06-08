@@ -1,7 +1,7 @@
 # Systems Index — Brainrot Inc. (rebrand tematik: Monster Relic)
 
-**Version**: 3.4 (+ #32 Localization / Language System)
-**Last Updated**: 2026-06-08
+**Version**: 3.5 (+ #27 World Universe GDD — single-overworld revision)
+**Last Updated**: 2026-06-09
 **Author**: game-designer
 **Status**: Locked post-pivot + post-rebrand
 
@@ -25,6 +25,8 @@
 
 > **Revision note (2026-06-07, v3.2 Element system LOCKED)**: Open decision Element **resolved** — **light chart mekanik combat**: 5 elemen **Fire > Nature > Water > Volt > Wind > Fire** (lingkaran 1-arah), `elementMod` 1.25/1.00/0.75 config-driven di formula damage Pet AI (dua arah, semua 3 boss tier). Element **di-roll server-side saat capture (uniform 20%)**, **permanen** (no reroll — hanya Personality yang rerollable), elemen boss **fixed per spec**. Field schema baru `BrainrotEntry.element` + backfill migrasi roster lama. Element TIDAK memengaruhi idle production (axis milik Personality) maupun capture success rate. **Blokir boss-system-gdd / capture-v2-gdd / ekstensi Pet AI 3-tier DIBUKA.** Lihat `design/decisions/2026-06-07-element-system.md`.
 
+> **Revision note (2026-06-09, v3.5 World Universe)**: GDD fondasi **#27 World Universe** ditulis (`world-universe-gdd.md` v1.0, GH #23) + **arsitektur DIREVISI** owner: dari "Lobby + per-area place terpisah" → **single Overworld seamless** (laut + 4-5 pulau + Hunter Camp port dalam SATU place StreamingEnabled, shared ~26) + place terpisah instanced untuk Super Boss/Raid/Kandang. Vision Pivot Decision 1 dapat revision note. Channel/instance model + TeleportData + MemoryStore + spawn-scaling didefinisikan. Status #27: Not started → **GDD drafted**. Pulau pertama (`land 1`) sudah masuk + collision/spawn fix (2026-06-09).
+>
 > **Revision note (2026-06-08, v3.4 Localization)**: Sistem baru **#32 Localization / Language System** ditambahkan. Owner memilih **Approach B (custom string table, ID/EN dipilih pemain in-game)** di atas Roblox cloud LocalizationTable — teks game saat ini campur ID/EN hardcoded, ingin pilihan eksplisit + kontrol penuh. GDD `localization-gdd.md` v1.0. P2 support/infra, depend Persistence (#1) + UI/HUD (#13) + Moment (#12). Tracking: GitHub issue **#30** (build order GDD §10). Tidak ada perubahan sistem lain.
 
 ## Summary
@@ -33,7 +35,7 @@
 - **Active Phase 2 systems**: 3 (Fame, Visit Base, Brain Cells)
 - **Cancelled systems** (post-pivot): 5
 - **Implemented + shipped**: 3 (#1 Persistence, #2 Personality, #9 Economy)
-- **In design** (GDD shipped, code pending): 3 (#25 Pet AI, #26 Kandang/Showroom pending rename, #32 Localization)
+- **In design** (GDD shipped, code pending): 4 (#25 Pet AI, #26 Kandang/Showroom pending rename, #27 World Universe, #32 Localization)
 - **Not started**: 18
 
 **Legend** — Priority tiers: P0 = foundation/blocker, P1 = core MVP, P2 = MVP-supporting, P3 = Phase 2. Risk: L/M/H.
@@ -264,20 +266,21 @@
 - **Notes**: **Renamed + simplified post-pivot**: from elaborate "Showroom" (display flex) → utilitarian "Kandang" (private cage/pen). Player's private sub-place. Layout: simple grid of pedestals/cages for deployed Brainrots, idle production accrual UI, collect button, storage gauge, upgrade panel. Visit Base #24 (Phase 2) makes it visit-able read-only. Capacity scales with persistence-owned upgrade levels (factoryLevel / workerSlotLevel / storageLevel — these survive). **Vibe shift**: no longer "showcase your evolved Brainrot in a museum" — more "your private working coop where Brainrots do their job".
 
 ### 27. World Universe Architecture (NEW — FOUNDATION)
-- **Status**: Not started
+- **Status**: **GDD drafted** (`world-universe-gdd.md` v1.0, 2026-06-09) — code pending
 - **Phase**: MVP
 - **Priority**: **P0 (FOUNDATION — blocks all subsequent system work)**
 - **Value**: 5 | **Effort**: 4 | **Risk**: H | **Monetization**: 2
-- **GDD**: `design/gdd/world-universe-gdd.md` (planned — TIER 1 PRIORITY)
+- **GDD**: `design/gdd/world-universe-gdd.md` v1.0 — **GH #23**
 - **Depends On**: (none — foundation infra)
 - **Depended On By**: **everything spatial** — Kandang (#26), Capture v2 (#4), Boss System (#6), Party (#29), Trade (#30), UI/HUD (#13), Onboarding (#14)
-- **Notes**: **NEW post-pivot foundation system** (Vision Pivot Doc Decision 1). Roblox Universe architecture: 1 Lobby place + N Area sub-places + M Super Boss sub-places + K Raid Dungeon sub-places + per-player private Kandang sub-place. **Required infrastructure**:
-  - Multi-place project layout (per-place project trees or shared modules)
-  - `TeleportService` + `TeleportData` protocol for cross-place state handoff
-  - `MemoryStoreService` for cross-server coordination (party formation, matchmaking, leaderboards)
-  - Persistence cross-place handoff design (persistence-gdd v1.4.1 extension §11)
-  - Area + Super Boss + Dungeon enumeration catalog (which areas exist, themes, unlock requirements)
-- **Open**: place count at launch (3 Areas? 5? 10?); area unlock progression (player level? quest completion?); super boss roster size; dungeon roster size.
+- **Notes**: **ARSITEKTUR DIREVISI (2026-06-09, owner-approved)** — bukan lagi "Lobby + per-area place terpisah". Sekarang: **single Overworld seamless** (laut + **4-5 pulau berburu** + **Hunter Camp** port + Colony Boss Tier-1, SATU place ber-StreamingEnabled, shared publik ~26/salinan) + **place terpisah instanced** untuk Super Boss (Tier-2, party), Raid (Tier-3, party, token-gate), **Kandang** (privat per-owner, reserved by UserId). Lobby dilebur jadi pulau-port. Lihat Vision Pivot Decision 1 revision + GDD §2. **Infra**:
+  - `WorldConfig` place registry + StreamingEnabled (overworld)
+  - `TeleportService` + `TeleportData` (server-authoritative; client tak dipercaya) — cross-place HANYA Overworld↔Raid/SuperBoss/Kandang; antar-pulau = gerak/dock fast-travel (bukan teleport)
+  - `MemoryStoreService` — kandang instance by UserId + party reservations
+  - Persistence cross-place handoff (persistence-gdd ekstensi §11: save-before-teleport + session-lock teleport-aware)
+  - Spawn density scaling per-region (anti sepi/rebutan)
+- **Open** (GDD §10): tema/tier 4-5 pulau; Tier-2 place sendiri vs lebur ke raid; perahu vs dock fast-travel; `overworldMaxPlayers` final (playtest); Hunter Camp sebagai pulau-port.
+- **Catatan**: pulau pertama (`land 1`) sudah masuk + collision/spawn diperbaiki (2026-06-09).
 
 ### 28. (Reserved — Boss System now at slot #6 to preserve narrative ordering with cancelled Raid #6)
 
