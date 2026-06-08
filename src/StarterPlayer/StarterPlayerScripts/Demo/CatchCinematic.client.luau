@@ -119,6 +119,51 @@ local function flyNet(from: Vector3, to: Vector3, dur: number)
     net:Destroy()
 end
 
+-- FAIL variant: a net BOUNCES off the monster back toward `to` (the player),
+-- fading + shrinking + tumbling as it goes (it failed to hold the catch).
+-- Self-cleaning; safe to run via task.spawn alongside the camera shake.
+local function netBounceBack(from: Vector3, to: Vector3, dur: number)
+    local net = Instance.new("Part")
+    net.Name = "CatchNetMiss"
+    net.Shape = Enum.PartType.Ball
+    net.Size = Vector3.new(1.6, 1.6, 1.6)
+    net.Anchored = true
+    net.CanCollide = false
+    net.CanQuery = false
+    net.Material = Enum.Material.Neon
+    net.Color = Color3.fromRGB(230, 230, 240)
+    net.Transparency = 0.35
+    net.CFrame = CFrame.new(from)
+    net.Parent = workspace
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size = UDim2.fromOffset(60, 60)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = net
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.fromScale(1, 1)
+    label.Font = Enum.Font.GothamBold
+    label.TextScaled = true
+    label.Text = "🕸️"
+    label.Parent = billboard
+
+    -- Bounce DOWN-and-back: control point dips below the line so it reads as a
+    -- deflection, not a clean throw.
+    local mid = (from + to) / 2 - Vector3.new(0, CINE.arcHeight * 0.4, 0)
+    local elapsed = 0
+    while elapsed < dur do
+        local dt = RunService.RenderStepped:Wait()
+        elapsed += dt
+        local t = math.clamp(elapsed / dur, 0, 1)
+        local pos = bezier(from, mid, to, t)
+        net.CFrame = CFrame.new(pos) * CFrame.Angles(elapsed * 10, elapsed * 16, 0)
+        net.Transparency = 0.35 + 0.6 * t
+        net.Size = Vector3.one * (1.6 * (1 - 0.55 * t))
+    end
+    net:Destroy()
+end
+
 -- One particle burst (element-colored) at `position`. Self-cleans.
 local function burst(position: Vector3, color: Color3, rate: number, speed: number, life: number)
     local part = Instance.new("Part")
@@ -181,7 +226,7 @@ end
 -- ── Sequence ─────────────────────────────────────────────────────────────────
 local running = false
 
-local function playCinematic(model: Model, element: any)
+local function playCinematic(model: Model, element: any, success: boolean)
     -- One at a time: a second catch mid-sequence is ignored (the model still
     -- despawns server-side, just without a second overlapping shot).
     if running then
@@ -264,55 +309,89 @@ local function playCinematic(model: Model, element: any)
         local from = launchOrigin() or (monsterPos + Vector3.new(0, 6, 8))
         flyNet(from, monsterPos + Vector3.new(0, 1, 0), CINE.netFlightSec)
 
-        -- 3) Impact: burst + camera/monster shake ("struggle").
-        burst(monsterPos + Vector3.new(0, 1, 0), color, 40, 18, 0.7)
-        if humanoid then
-            humanoid.WalkSpeed = 0
-        end
-        local shakeElapsed = 0
-        while shakeElapsed < CINE.shakeSec do
-            local dt = RunService.RenderStepped:Wait()
-            shakeElapsed += dt
-            -- Camera handheld jitter.
-            local mag = 0.35 * (1 - shakeElapsed / CINE.shakeSec)
-            local jitter = Vector3.new(
-                (math.random() - 0.5) * 2 * mag,
-                (math.random() - 0.5) * 2 * mag,
-                (math.random() - 0.5) * 2 * mag
-            )
-            camera.CFrame = target + jitter
-            -- Monster wobble in the net.
-            if model.Parent then
-                model:PivotTo(
-                    CFrame.new(monsterPos)
-                        * CFrame.Angles(0, math.sin(shakeElapsed * 50) * 0.25, math.sin(shakeElapsed * 37) * 0.15)
-                )
+        if success then
+            -- ── SUCCESS: struggle → suck-in → poof ──────────────────────────
+            -- 3) Impact: burst + camera/monster shake ("struggle").
+            burst(monsterPos + Vector3.new(0, 1, 0), color, 40, 18, 0.7)
+            if humanoid then
+                humanoid.WalkSpeed = 0
             end
-        end
-        camera.CFrame = target
-
-        -- 4) Suck-in: shrink toward zero while spinning.
-        if model.Parent then
-            local startScale = model:GetScale()
-            local shrinkElapsed = 0
-            while shrinkElapsed < CINE.shrinkSec do
+            local shakeElapsed = 0
+            while shakeElapsed < CINE.shakeSec do
                 local dt = RunService.RenderStepped:Wait()
-                shrinkElapsed += dt
-                local t = math.clamp(shrinkElapsed / CINE.shrinkSec, 0, 1)
-                -- Ease-in cubic: slow start, fast vanish.
-                local s = startScale * (1 - t * t * t)
-                if model.Parent and s > 0.01 then
-                    pcall(function()
-                        model:ScaleTo(s)
-                    end)
-                    model:PivotTo(CFrame.new(monsterPos + Vector3.new(0, t * 1.5, 0)) * CFrame.Angles(0, t * 18, 0))
+                shakeElapsed += dt
+                -- Camera handheld jitter.
+                local mag = 0.35 * (1 - shakeElapsed / CINE.shakeSec)
+                local jitter = Vector3.new(
+                    (math.random() - 0.5) * 2 * mag,
+                    (math.random() - 0.5) * 2 * mag,
+                    (math.random() - 0.5) * 2 * mag
+                )
+                camera.CFrame = target + jitter
+                -- Monster wobble in the net.
+                if model.Parent then
+                    model:PivotTo(
+                        CFrame.new(monsterPos)
+                            * CFrame.Angles(0, math.sin(shakeElapsed * 50) * 0.25, math.sin(shakeElapsed * 37) * 0.15)
+                    )
                 end
             end
-        end
+            camera.CFrame = target
 
-        -- 5) Poof + zoom back out.
-        burst(monsterPos + Vector3.new(0, 1, 0), color, 28, 10, 0.6)
-        task.wait(0.12)
+            -- 4) Suck-in: shrink toward zero while spinning.
+            if model.Parent then
+                local startScale = model:GetScale()
+                local shrinkElapsed = 0
+                while shrinkElapsed < CINE.shrinkSec do
+                    local dt = RunService.RenderStepped:Wait()
+                    shrinkElapsed += dt
+                    local t = math.clamp(shrinkElapsed / CINE.shrinkSec, 0, 1)
+                    -- Ease-in cubic: slow start, fast vanish.
+                    local s = startScale * (1 - t * t * t)
+                    if model.Parent and s > 0.01 then
+                        pcall(function()
+                            model:ScaleTo(s)
+                        end)
+                        model:PivotTo(CFrame.new(monsterPos + Vector3.new(0, t * 1.5, 0)) * CFrame.Angles(0, t * 18, 0))
+                    end
+                end
+            end
+
+            -- 5) Poof + zoom back out.
+            burst(monsterPos + Vector3.new(0, 1, 0), color, 28, 10, 0.6)
+            task.wait(0.12)
+        else
+            -- ── FAIL: the net pops off, the monster shakes free, NO shrink ───
+            -- The wild stays in the world (server keeps it); we convey the miss
+            -- with a deflection. NOTE: we do NOT move the monster — it is
+            -- server-network-owned + unanchored on a miss, so a client PivotTo
+            -- would just fight physics. A Highlight flash + net bounce + camera
+            -- kick read the "escape" cleanly and are fully client-local.
+            burst(monsterPos + Vector3.new(0, 1, 0), Color3.fromRGB(225, 225, 235), 26, 14, 0.55)
+            local hl = Instance.new("Highlight")
+            hl.FillColor = Color3.fromRGB(255, 80, 80)
+            hl.OutlineColor = Color3.fromRGB(255, 235, 235)
+            hl.FillTransparency = 0.55
+            hl.Adornee = model
+            hl.Parent = model
+            Debris:AddItem(hl, CINE.failShakeSec + 0.25)
+            -- Net deflects back toward the player while the camera kicks.
+            task.spawn(netBounceBack, monsterPos + Vector3.new(0, 1, 0), from, CINE.failBounceSec)
+            local shakeElapsed = 0
+            while shakeElapsed < CINE.failShakeSec do
+                local dt = RunService.RenderStepped:Wait()
+                shakeElapsed += dt
+                local mag = 0.28 * (1 - shakeElapsed / CINE.failShakeSec)
+                local jitter = Vector3.new(
+                    (math.random() - 0.5) * 2 * mag,
+                    (math.random() - 0.5) * 2 * mag,
+                    (math.random() - 0.5) * 2 * mag
+                )
+                camera.CFrame = target + jitter
+            end
+            camera.CFrame = target
+            task.wait(0.1)
+        end
     end)
 
     if not ok then
@@ -329,7 +408,10 @@ DemoRemotes.CatchCinematic.OnClientEvent:Connect(function(payload)
     if typeof(model) ~= "Instance" or not model:IsA("Model") then
         return
     end
-    playCinematic(model, payload.element)
+    -- Default to the success sequence when the field is absent (back-compat with
+    -- the pre-catch-rate payload shape).
+    local success = payload.success ~= false
+    playCinematic(model, payload.element, success)
 end)
 
 print("[CatchCinematic][client] ready")

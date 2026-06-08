@@ -166,6 +166,12 @@ type PlayerState = {
     factoryLevel: number,
     -- ── Combat (Tahap 2) ─────────────────────────────────────────────────
     fighters: { FighterRecord }, -- active summoned fighters (capped at maxActiveFighters)
+    -- ── Capture pity (catch-rate anti-frustration) ───────────────────────
+    -- Consecutive FAILED catch attempts per personality (resets to 0 on a
+    -- successful catch of that personality). Session-only (not persisted) — its
+    -- whole purpose is to smooth a single play session's bad luck. Read by the
+    -- PackCatchMint bridge to bump the per-attempt success rate.
+    catchPity: { [string]: number },
 }
 
 -- Tracks a placed creature so we can restore it after a catch.
@@ -1195,36 +1201,47 @@ end
 -- the minted entry INHERITS that element (what you see is what you catch).
 -- An invalid/missing element falls back to a fresh server roll inside
 -- Schema.newBrainrot — never trusted blindly.
+-- SERVER-authoritative RNG for the capture success roll (never seeded from a
+-- client; one module-level generator like RarityConfig's defaultRng).
+local catchRng = Random.new()
+
 local packCatchMint = Instance.new("BindableFunction")
 packCatchMint.Name = "PackCatchMint"
 packCatchMint.Parent = ServerStorage
-packCatchMint.OnInvoke = function(player: Player, personality: unknown, element: unknown): boolean
+-- Returns a RESULT TABLE so the world owner (BrainrotPack) can branch the
+-- cinematic + lifecycle without any roster/economy knowledge:
+--   { outcome = "success" } → minted + caught (play success cinematic, despawn)
+--   { outcome = "fail" }    → paid attempt MISSED (play fail cinematic, KEEP wild)
+--   { outcome = "rejected" }→ nothing happened (roster full / can't afford /
+--                             rate-limited): wild stays, NO cinematic.
+-- `rarity`/`element` ride along for messaging.
+packCatchMint.OnInvoke = function(player: Player, personality: unknown, element: unknown): { [string]: any }
     if typeof(player) ~= "Instance" or not player:IsA("Player") then
-        return false
+        return { outcome = "rejected" }
     end
     local state = states[player]
     if not state then
-        return false
+        return { outcome = "rejected" }
     end
     -- Same rate limit bucket as the original catch path.
     if not allowAction(state, "catch", DemoConfig.rateLimits.catch) then
-        return false
+        return { outcome = "rejected" }
     end
     if type(personality) ~= "string" or not isValidPersonality[personality] then
-        return false
+        return { outcome = "rejected" }
     end
 
     -- ECONOMY SINK (capture). Two modes, AFFORDABILITY FIRST in both (an
-    -- unaffordable catch aborts with feedback BEFORE any mutation, so the
+    -- unaffordable attempt aborts with feedback BEFORE any roll/mutation, so the
     -- wild stays catchable):
-    --   ITEM MODE (S4, captureUsesItems=true): a catch consumes ONE Capture
-    --     Net from the persisted backpack (bought in the Kandang menu shop;
-    --     onboarding seeds 3 free nets).
+    --   ITEM MODE (S4, captureUsesItems=true): an attempt consumes ONE Capture
+    --     Net from the persisted backpack (bought at the Merchant; onboarding
+    --     seeds free nets).
     --   LEGACY MODE (fallback switch): free-capture counter then a direct
     --     coin debit (the pre-S4 flow, kept revertible in one config line).
     local data = PlayerDataService.getData(player)
     if not data then
-        return false
+        return { outcome = "rejected" }
     end
     local useItems = DemoConfig.captureUsesItems == true
     local cost = CaptureConfig.captureCostCoins
@@ -1234,66 +1251,122 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
         if nets < 1 then
             DemoRemotes.Moment:FireClient(player, {
                 kind = "info",
-                text = "🕸️ Capture Net habis! Beli di menu Kandang (tekan F di gerbang).",
+                text = "🕸️ Out of Capture Nets! Buy from the Merchant.",
             })
-            return false
+            return { outcome = "rejected" }
         end
     else
         usedFree = (data.freeCapturesRemaining or 0) > 0
         if not usedFree and state.coins < cost then
             DemoRemotes.Moment:FireClient(player, {
                 kind = "info",
-                text = ("🪙 Koin tidak cukup! Butuh %d untuk menangkap."):format(cost),
+                text = ("🪙 Not enough Coins! Need %d to catch."):format(cost),
             })
-            return false
+            return { outcome = "rejected" }
         end
     end
 
+    -- Consume the paid attempt (net / free capture / coins) and return a note.
+    -- Called on SUCCESS (always) and on FAIL (only when consumeNetOnFail). A
+    -- net counter change rides BackpackUpdate (NO kandang push: capturing must
+    -- never pop the kandang menu open).
+    local function settlePrice(): string
+        if useItems then
+            local remaining = 0
+            PlayerDataService.update(player, function(d)
+                d.items = d.items or {}
+                d.items.capture_net = math.max(0, (d.items.capture_net or 0) - 1)
+                remaining = d.items.capture_net
+                return true
+            end)
+            pushBackpack(player)
+            return ("-1🕸️ (sisa %d)"):format(remaining)
+        elseif usedFree then
+            PlayerDataService.update(player, function(d)
+                d.freeCapturesRemaining = math.max(0, (d.freeCapturesRemaining or 0) - 1)
+                return true
+            end)
+            return "FREE (onboarding)"
+        else
+            state.coins = math.max(0, state.coins - cost)
+            flushCoins(player, false)
+            return "-" .. cost .. " coins"
+        end
+    end
+
+    -- ── CATCH-RATE ROLL (server-authoritative) ──────────────────────────────
+    -- Roll the HIDDEN rarity first (what you'd GET on a success), derive the
+    -- success probability from it (rarer = harder, RarityConfig.catchRateMult)
+    -- plus the per-personality pity bonus, clamp, then roll. A success mints an
+    -- entry with this exact rarity — what made it hard to catch is what you get.
+    local catchCfg = DemoConfig.catch
+    local rarity = RarityConfig.rollRarity()
+    local success: boolean
+    if catchCfg and catchCfg.enabled then
+        local streak = state.catchPity[personality] or 0
+        local rate = catchCfg.baseCatchRate * RarityConfig.catchRateMultFor(rarity) + streak * catchCfg.pityStepPerFail
+        rate = math.clamp(rate, catchCfg.minCatchRate, catchCfg.maxCatchRate)
+        success = catchRng:NextNumber() < rate
+    else
+        success = true -- catch-rate disabled: legacy guaranteed catch
+    end
+
+    if not success then
+        -- MISS. Spend the attempt (if configured), bump the pity streak, toast
+        -- the escape. The wild is NOT minted and NOT despawned.
+        local note = "no cost"
+        if not catchCfg or catchCfg.consumeNetOnFail then
+            note = settlePrice()
+        end
+        pushCoins(player)
+        pushInventory(player)
+        state.catchPity[personality] = (state.catchPity[personality] or 0) + 1
+        DemoRemotes.Moment:FireClient(player, {
+            kind = "info",
+            text = "💨 Escaped! The Monster broke free of the net.",
+        })
+        print(
+            ("[Catch] %s FAILED to catch pack %s (hidden %s, streak %d) — %s"):format(
+                player.Name,
+                personality,
+                rarity,
+                state.catchPity[personality],
+                note
+            )
+        )
+        return { outcome = "fail", rarity = rarity }
+    end
+
+    -- HIT. Mint PERSIST-FIRST with the rolled rarity; only settle the price if
+    -- the add committed (a rejected add must not consume a net / free / coins).
     local entry = Schema.newBrainrot({
         species = speciesByPersonality[personality] or 1,
         personality = personality :: any,
         -- Inherit the wild's displayed element; Schema re-rolls if invalid.
         element = if type(element) == "string" then element :: any else nil,
+        rarity = rarity,
         source = "manual",
         hotspotId = "pack",
     })
     local ok = PlayerDataService.addBrainrot(player, entry)
     if not ok then
         warn("[Catch] " .. player.Name .. " pack add rejected for " .. personality)
-        return false
+        return { outcome = "rejected" }
     end
-
-    -- Settle the price AFTER the add committed (a rejected add must not
-    -- consume a net / free capture / coins).
-    local priceNote: string
-    if useItems then
-        local remaining = 0
-        PlayerDataService.update(player, function(d)
-            d.items = d.items or {}
-            d.items.capture_net = math.max(0, (d.items.capture_net or 0) - 1)
-            remaining = d.items.capture_net
-            return true
-        end)
-        priceNote = ("-1🕸️ (sisa %d)"):format(remaining)
-        -- Net counter lives in the Merchant shop + the menu's Item tab —
-        -- both ride BackpackUpdate (NO kandang push: catching must never
-        -- pop the kandang menu open).
-        pushBackpack(player)
-    elseif usedFree then
-        PlayerDataService.update(player, function(d)
-            d.freeCapturesRemaining = math.max(0, (d.freeCapturesRemaining or 0) - 1)
-            return true
-        end)
-        priceNote = "FREE (onboarding)"
-    else
-        state.coins = math.max(0, state.coins - cost)
-        flushCoins(player, false)
-        priceNote = "-" .. cost .. " coins"
-    end
+    local priceNote = settlePrice()
+    state.catchPity[personality] = 0 -- a catch resets the pity streak
     pushCoins(player)
     pushInventory(player)
-    print(("[Catch] %s caught pack %s (%s) — %s"):format(player.Name, personality, entry.element, priceNote))
-    return true
+    print(
+        ("[Catch] %s caught pack %s (%s %s) — %s"):format(
+            player.Name,
+            personality,
+            entry.rarity,
+            entry.element,
+            priceNote
+        )
+    )
+    return { outcome = "success", rarity = entry.rarity, element = entry.element }
 end
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -2207,13 +2280,13 @@ local function handleUpgradeKandang(player: Player)
     local level = state.factoryLevel
     local cost = EconomyConfig.upgradeCost("factory", level)
     if cost == math.huge then
-        DemoRemotes.Moment:FireClient(player, { kind = "info", text = "🏠 Kandang sudah level maksimum!" })
+        DemoRemotes.Moment:FireClient(player, { kind = "info", text = "🏠 Pen is already max level!" })
         return
     end
     if state.coins < cost then
         DemoRemotes.Moment:FireClient(player, {
             kind = "info",
-            text = ("🪙 Koin tidak cukup! Upgrade butuh %d."):format(cost),
+            text = ("🪙 Not enough Coins! Upgrade needs %d."):format(cost),
         })
         return
     end
@@ -2236,7 +2309,7 @@ local function handleUpgradeKandang(player: Player)
     local bonusPct = math.floor(DemoConfig.kandang.upgrade.bonusPerLevel * 100 + 0.5)
     DemoRemotes.Moment:FireClient(player, {
         kind = "info",
-        text = ("🏠 Kandang naik ke Lv%d! Produksi +%d%% per level."):format(state.factoryLevel, bonusPct),
+        text = ("🏠 Pen upgraded to Lv%d! Production +%d%% per level."):format(state.factoryLevel, bonusPct),
     })
     print(("[Upgrade] %s kandang -> Lv%d (-%d coins)"):format(player.Name, state.factoryLevel, cost))
 end
@@ -2284,14 +2357,14 @@ local function handleEvolve(player: Player, brainrotId: unknown)
 
     local stage = entry.evoStage or 0
     if stage >= EVOLUTION.maxStage then
-        DemoRemotes.Moment:FireClient(player, { kind = "info", text = "💫 Monster ini sudah STAGE MAX!" })
+        DemoRemotes.Moment:FireClient(player, { kind = "info", text = "💫 This Monster is already MAX STAGE!" })
         return
     end
     local milestone = EVOLUTION.levelMilestones[stage + 1]
     if entry.level < milestone then
         DemoRemotes.Moment:FireClient(player, {
             kind = "info",
-            text = ("✨ Butuh Lv %d untuk evolve (sekarang Lv %d)."):format(milestone, entry.level),
+            text = ("✨ Need Lv %d to evolve (currently Lv %d)."):format(milestone, entry.level),
         })
         return
     end
@@ -2299,7 +2372,7 @@ local function handleEvolve(player: Player, brainrotId: unknown)
     if state.coins < cost then
         DemoRemotes.Moment:FireClient(player, {
             kind = "info",
-            text = ("🪙 Koin tidak cukup! Evolve butuh %d."):format(cost),
+            text = ("🪙 Not enough Coins! Evolve needs %d."):format(cost),
         })
         return
     end
@@ -2328,7 +2401,7 @@ local function handleEvolve(player: Player, brainrotId: unknown)
     local stageEmoji = ({ "✨", "🌟", "💫" })[newStage] or "✨"
     DemoRemotes.Moment:FireClient(player, {
         kind = "info",
-        text = ("%s %s berevolusi ke Stage %d! Stat x%.2f"):format(
+        text = ("%s %s evolved to Stage %d! Stats x%.2f"):format(
             stageEmoji,
             string.upper(entry.personality),
             newStage,
@@ -2365,7 +2438,7 @@ local function handleBuyCaptureItem(player: Player, bundle: unknown)
     if state.coins < cost then
         DemoRemotes.Moment:FireClient(player, {
             kind = "info",
-            text = ("🪙 Koin tidak cukup! %s butuh %d."):format(def.name, cost),
+            text = ("🪙 Not enough Coins! %s needs %d."):format(def.name, cost),
         })
         return
     end
@@ -2510,6 +2583,7 @@ local function hydrate(player: Player, data: Types_PlayerData)
         slots = {},
         rateBuckets = {},
         fighters = {}, -- no active fighters on join (ephemeral, not persisted)
+        catchPity = {}, -- per-personality consecutive-fail streak (session-only)
         -- COINS-MADE: start the attribution window now so the first flush only
         -- credits production that happens AFTER hydrate (no offline double-count;
         -- offline coins are handled separately via pendingOffline).

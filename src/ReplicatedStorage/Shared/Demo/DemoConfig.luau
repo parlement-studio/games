@@ -385,7 +385,7 @@ return {
             -- String | Default: "KandangTerminal"
             terminalName = "KandangTerminal",
             -- Prompt strings (player-facing). ActionText | ObjectText.
-            actionText = "Buka Kandang",
+            actionText = "Open Pen",
             objectText = "",
             -- Hold duration on the prompt (seconds). Range: 0-2 | Default: 0
             holdSec = 0,
@@ -410,7 +410,7 @@ return {
         -- Overhead label above the NPC head (BillboardGui).
         labelText = "🛒 Merchant",
         -- Prompt strings (player-facing). ActionText | ObjectText.
-        actionText = "Belanja",
+        actionText = "Shop",
         objectText = "Merchant",
         -- Hold duration on the prompt (seconds). Range: 0-2 | Default: 0
         holdSec = 0,
@@ -453,6 +453,54 @@ return {
         throwEnabled = true,
         throwAnimationId = "",
         throwReleaseSec = 0.2,
+        -- FAIL VARIANT (catch missed): the same throw + net flight plays, then
+        -- the net BOUNCES OFF and the monster stays (no shrink/poof). These tune
+        -- the bounce-back beat.
+        -- Net bounce-back flight time (monster -> back toward the player).
+        -- Range: 0.15-0.6 | Default: 0.3
+        failBounceSec = 0.3,
+        -- Camera shake on the miss (shorter/softer than the success struggle).
+        -- Range: 0.15-0.6 | Default: 0.3
+        failShakeSec = 0.3,
+    },
+
+    -- ── CATCH RATE (capture can FAIL) ───────────────────────────────────────
+    -- A capture attempt is no longer a guaranteed catch. The SERVER rolls the
+    -- monster's hidden rarity first, derives a success probability from it, then
+    -- rolls success. Rarer monsters are harder (RarityConfig.catchRateMult).
+    -- A consecutive-fail "pity" bonus (anti-frustration) raises the odds each
+    -- time you miss the SAME personality and resets on a catch. Everything here
+    -- is applied SERVER-SIDE ONLY (the client never sees or supplies the roll).
+    --   catchRate = clamp(
+    --       baseCatchRate * RarityConfig.catchRateMult[rarity]
+    --           + failStreak * pityStepPerFail,
+    --       minCatchRate, maxCatchRate)
+    catch = {
+        -- Master switch. false = legacy behavior (every attempt always catches).
+        -- Boolean | Default: true
+        enabled = true,
+        -- Base success probability for a Common monster before pity/clamp.
+        -- Range: 0.1-1.0 | Default: 0.7
+        baseCatchRate = 0.7,
+        -- Hard clamp on the FINAL per-attempt rate. minCatchRate is the floor so
+        -- a Legendary on a fresh streak is never literally 0% (kid-friendly);
+        -- maxCatchRate keeps even a long pity streak from being a guaranteed
+        -- catch on the rarest tiers. Range: 0-1 | Defaults: 0.15 / 0.95
+        minCatchRate = 0.15,
+        maxCatchRate = 0.95,
+        -- PITY: probability ADDED per consecutive failed attempt on the SAME
+        -- personality (resets to 0 on a successful catch of it). A handful of
+        -- misses ramps the odds toward maxCatchRate so a player is never stuck.
+        -- Range: 0-0.5 | Default: 0.12 (≈ 3-4 misses to climb a full tier)
+        pityStepPerFail = 0.12,
+        -- Consume the Capture Net (or coin/free cost) even when the catch FAILS.
+        -- LOCKED true: a failed throw still spends the attempt — real risk + a
+        -- consistent economy sink. Boolean | Default: true
+        consumeNetOnFail = true,
+        -- Cooldown (seconds) before the SAME wild can be re-attempted after a
+        -- miss. Covers the fail cinematic so a spam-retry can't double-trigger.
+        -- Range: 0.5-5 | Default: 1.5
+        failCooldownSec = 1.5,
     },
 
     -- ── WILD BRAINROT AI (server-authoritative roaming) ─────────────────────

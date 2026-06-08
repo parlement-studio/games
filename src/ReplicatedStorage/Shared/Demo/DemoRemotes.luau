@@ -106,10 +106,14 @@ local SERVER_TO_CLIENT = {
     -- prompt; open the shop modal. Item counts come from BackpackUpdate and
     -- prices from the replicated CaptureConfig, so the payload stays empty.
     "OpenShopMenu",
-    -- CATCH CINEMATIC: CatchCinematic({ model, personality, element }) — a
-    -- catch SUCCEEDED; the server froze the wild for a short hold so the
-    -- catching client can play the net-throw + suck-in + camera sequence
-    -- (presentation only — the roster mint already committed).
+    -- CATCH CINEMATIC: CatchCinematic({ model, personality, element, success }) —
+    -- a capture attempt RESOLVED; the catching client plays the net-throw +
+    -- camera sequence (presentation only — the roster mint / charge already
+    -- committed). `success = true` → struggle + suck-in + poof on the frozen
+    -- wild (server despawns it after holdSec). `success = false` → MISS: the net
+    -- bounces off + the wild flashes free (server keeps it; no shrink). The
+    -- field is omitted only by the legacy always-success path (client treats
+    -- absent → success).
     "CatchCinematic",
 }
 

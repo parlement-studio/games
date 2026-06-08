@@ -109,6 +109,10 @@ type Slot = {
     -- Per-slot respawn delay (seconds): PackConfig.respawnSec for minions,
     -- PackConfig.boss.respawnSec for the boss.
     respawnSec: number,
+    -- CAPTURE FAIL cooldown: os.clock() until which this wild ignores catch
+    -- triggers + wander after a MISSED catch (covers the fail cinematic so a
+    -- spam-retry can't double-fire). nil = not cooling down.
+    cooldownUntil: number?,
 }
 
 local slots: { Slot } = {}
@@ -481,6 +485,53 @@ end
 -- The minted entry INHERITS the element shown on the wild's overhead label.
 -- Falls back to the old isolated despawn-only behavior if the bridge is
 -- absent (DemoServer not running).
+-- A MISSED catch (catch-rate roll failed server-side). The roster owner has
+-- already charged the attempt + toasted "Lolos"; here we keep the wild in the
+-- world but briefly FREEZE it so the fail cinematic's net-bounce reads cleanly
+-- and a spam-retry can't double-fire, then restore it after the cooldown. The
+-- catch prompt is NEVER removed — the wild stays catchable for the next try.
+local function handlePackCatchFail(slot: Slot, player: Player, element: any)
+    local model = slot.model
+    if not model or model.Parent == nil then
+        return
+    end
+    local catchCfg = DemoConfig.catch
+    local cooldown = (catchCfg and catchCfg.failCooldownSec) or 1.5
+    slot.cooldownUntil = os.clock() + cooldown
+
+    local humanoid = model:FindFirstChildWhichIsA("Humanoid")
+    if humanoid then
+        humanoid:MoveTo(model:GetPivot().Position)
+        humanoid.WalkSpeed = 0
+        humanoid.AutoRotate = false
+    end
+
+    local cine = DemoConfig.catchCinematic
+    if cine and cine.enabled then
+        DemoRemotes.CatchCinematic:FireClient(player, {
+            model = model,
+            personality = slot.personality,
+            element = element,
+            success = false,
+        })
+    end
+
+    -- Un-freeze after the cooldown (only if this exact wild is still around —
+    -- it may have been defeated in combat / respawned in the meantime).
+    task.delay(cooldown, function()
+        if slot.model == model and model.Parent then
+            local h = model:FindFirstChildWhichIsA("Humanoid")
+            if h then
+                h.WalkSpeed = PackConfig.walkSpeed * (if slot.isBoss then PackConfig.boss.walkSpeedMult else 1)
+                h.AutoRotate = true
+            end
+        end
+        if slot.cooldownUntil and os.clock() >= slot.cooldownUntil then
+            slot.cooldownUntil = nil
+        end
+    end)
+end
+
 local function handlePackCatch(prompt: ProximityPrompt, player: Player)
     local slot = packPromptToRecord[prompt]
     if not slot then
@@ -491,30 +542,48 @@ local function handlePackCatch(prompt: ProximityPrompt, player: Player)
     if not slot.model or slot.model.Parent == nil then
         return -- already gone; the respawn loop will refill
     end
+    -- Ignore triggers while this wild is mid fail-cinematic (cooldown active).
+    if slot.cooldownUntil and os.clock() < slot.cooldownUntil then
+        return
+    end
 
-    -- PERSIST FIRST: mint the roster entry before touching the world.
+    -- RESOLVE the attempt through the roster owner: affordability + the hidden
+    -- rarity roll + the catch-rate success roll all happen SERVER-SIDE there.
+    -- The result table tells us how to treat the world model. The element is
+    -- snapshotted from the wild's label BEFORE any mutation.
+    local element = slot.model:GetAttribute("Element")
+    local outcome = "success"
     local mint = ServerStorage:FindFirstChild("PackCatchMint")
     if mint and mint:IsA("BindableFunction") then
-        local element = slot.model:GetAttribute("Element")
-        local ok = false
-        local invoked, err = pcall(function()
-            ok = mint:Invoke(player, slot.personality, element) == true
+        local invoked, res = pcall(function()
+            return mint:Invoke(player, slot.personality, element)
         end)
         if not invoked then
-            warn("[Pack] PackCatchMint invoke failed: " .. tostring(err))
+            warn("[Pack] PackCatchMint invoke failed: " .. tostring(res))
             return
         end
-        if not ok then
-            return -- rejected (roster full / not loaded / rate-limited): wild stays
+        -- Tolerate the legacy boolean return as well as the new result table.
+        if type(res) == "table" then
+            outcome = tostring(res.outcome)
+        elseif res == true then
+            outcome = "success"
+        else
+            outcome = "rejected"
         end
     end
 
-    -- Detach the model from the live loops IMMEDIATELY (so wander/respawn and a
-    -- re-trigger all treat it as gone) but DEFER the destroy: the catcher plays
-    -- a cinematic on it first. We stash the model in `caughtModel` and hand the
-    -- slot's `model` to nil right away.
+    if outcome == "rejected" then
+        return -- nothing minted/charged (roster full / can't afford / limited): wild stays
+    end
+    if outcome == "fail" then
+        handlePackCatchFail(slot, player, element)
+        return -- MISSED: wild kept in the world, fail cinematic plays
+    end
+
+    -- SUCCESS. Detach the model from the live loops IMMEDIATELY (so wander/respawn
+    -- and a re-trigger all treat it as gone) but DEFER the destroy: the catcher
+    -- plays a cinematic on it first.
     local caughtModel = slot.model
-    local element = caughtModel:GetAttribute("Element")
     slot.model = nil
     -- Tear the prompt out of our map; ProximityPromptService retains a stale
     -- reference until the prompt is destroyed, which happened with the model.
@@ -548,6 +617,7 @@ local function handlePackCatch(prompt: ProximityPrompt, player: Player)
             model = caughtModel,
             personality = slot.personality,
             element = element,
+            success = true,
         })
         -- Destroy after the client has had the full hold window (the client
         -- sequence is shorter than holdSec — see DemoConfig.catchCinematic).
@@ -573,6 +643,9 @@ local function stepWander(now: number)
         local model = slot.model
         if not model or model.Parent == nil then
             continue -- respawn loop will refill
+        end
+        if slot.cooldownUntil and now < slot.cooldownUntil then
+            continue -- frozen mid fail-cinematic; don't issue wander moves
         end
         if now < slot.nextMoveAt then
             continue -- still pausing

@@ -84,6 +84,21 @@ local RarityConfig = {
         Legendary = 6.0,
     } :: { [string]: number },
 
+    -- CATCH-RATE multiplier (CAPTURE feature, LOCKED 2026-06-08): rarer monsters
+    -- are HARDER to catch. The capture roll computes
+    --   catchRate = clamp(baseCatchRate * catchRateMult[rarity] + pity, min, max)
+    -- (base + clamp + pity live in DemoConfig.catch; this is the per-rarity
+    -- difficulty factor only — single source of truth for "rarity affects catch").
+    -- A value of 1.0 = no penalty (full base rate); lower = harder.
+    -- Range per value: 0.05-1.0 | Defaults: 1.0 / 0.85 / 0.65 / 0.45 / 0.30
+    catchRateMult = {
+        Common = 1.0, -- easiest: base rate applies as-is
+        Uncommon = 0.85,
+        Rare = 0.65,
+        Epic = 0.45,
+        Legendary = 0.30, -- hardest: ~1/3 the base rate before pity
+    } :: { [string]: number },
+
     -- Display-only metadata (badge tint per tier, R3 table). Hex strings so
     -- the UI builds Color3 itself (JSON-safe, theme-agnostic).
     display = {
@@ -120,6 +135,16 @@ end
 function RarityConfig.evolveCostMultFor(rarity: any): number
     if RarityConfig.isValidRarity(rarity) then
         return RarityConfig.evolveCostMult[rarity]
+    end
+    return 1.0
+end
+
+-- Defensive catch-rate-mult lookup (same neutral-fallback contract: an
+-- invalid/missing rarity resolves to 1.0 so the capture roll can never explode
+-- on bad content — it just applies the full base rate).
+function RarityConfig.catchRateMultFor(rarity: any): number
+    if RarityConfig.isValidRarity(rarity) then
+        return RarityConfig.catchRateMult[rarity]
     end
     return 1.0
 end
