@@ -212,20 +212,20 @@ return function()
     -- ── ROSTER (E6) ───────────────────────────────────────────────────────
 
     describe("roster operations", function()
-        it("adds a Brainrot and keeps rosterCount in sync", function()
+        it("adds a Monster and keeps rosterCount in sync", function()
             -- Arrange
             local player = mockPlayer(2009)
             PlayerDataService._setProfileForTest(2009, Schema.default())
-            local entry = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local entry = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
 
             -- Act
-            local ok = PlayerDataService.addBrainrot(player, entry)
+            local ok = PlayerDataService.addMonster(player, entry)
 
             -- Assert
             expect(ok).to.equal(true)
             local data = PlayerDataService.getData(player)
             expect(data.rosterCount).to.equal(1)
-            expect(PlayerDataService.getBrainrot(player, entry.id)).to.be.ok()
+            expect(PlayerDataService.getMonster(player, entry.id)).to.be.ok()
         end)
 
         it("rejects the 201st add at the cap (E6) without mutating the roster", function()
@@ -238,10 +238,10 @@ return function()
             end
             data.rosterCount = Config.rosterCap
             PlayerDataService._setProfileForTest(2010, data)
-            local extra = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local extra = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
 
             -- Act
-            local ok, reason = PlayerDataService.addBrainrot(player, extra)
+            local ok, reason = PlayerDataService.addMonster(player, extra)
 
             -- Assert
             expect(ok).to.equal(false)
@@ -249,15 +249,15 @@ return function()
             expect(PlayerDataService.getData(player).rosterCount).to.equal(Config.rosterCap)
         end)
 
-        it("removes a Brainrot and decrements the count", function()
+        it("removes a Monster and decrements the count", function()
             -- Arrange
             local player = mockPlayer(2011)
             PlayerDataService._setProfileForTest(2011, Schema.default())
-            local entry = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
-            PlayerDataService.addBrainrot(player, entry)
+            local entry = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            PlayerDataService.addMonster(player, entry)
 
             -- Act
-            local ok = PlayerDataService.removeBrainrot(player, entry.id)
+            local ok = PlayerDataService.removeMonster(player, entry.id)
 
             -- Assert
             expect(ok).to.equal(true)
@@ -268,13 +268,13 @@ return function()
             -- Arrange
             local player = mockPlayer(2012)
             PlayerDataService._setProfileForTest(2012, Schema.default())
-            local entry = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local entry = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
             entry.fav = true
-            PlayerDataService.addBrainrot(player, entry)
+            PlayerDataService.addMonster(player, entry)
 
             -- Act: unforced remove rejected; forced remove succeeds.
-            local ok1, reason = PlayerDataService.removeBrainrot(player, entry.id)
-            local ok2 = PlayerDataService.removeBrainrot(player, entry.id, true)
+            local ok1, reason = PlayerDataService.removeMonster(player, entry.id)
+            local ok2 = PlayerDataService.removeMonster(player, entry.id, true)
 
             -- Assert
             expect(ok1).to.equal(false)
@@ -337,7 +337,7 @@ return function()
             -- Act: first commit returns a payload; replay must return THAT payload.
             local _, result1, dup1 = PlayerDataService.update(player, function(data)
                 data.coins += 10
-                return { newCoins = data.coins, brainrotId = "br-1" }
+                return { newCoins = data.coins, monsterId = "br-1" }
             end, key)
             local _, result2, dup2 = PlayerDataService.update(player, function(data)
                 data.coins += 10 -- would double-charge if it ran
@@ -349,7 +349,7 @@ return function()
             expect(dup2).to.equal(true)
             expect(result2).to.be.ok()
             expect(result2.newCoins).to.equal(10)
-            expect(result2.brainrotId).to.equal("br-1")
+            expect(result2.monsterId).to.equal("br-1")
             expect(PlayerDataService.getData(player).coins).to.equal(10)
         end)
 
@@ -393,12 +393,12 @@ return function()
         )
 
         it("commits a compound debit + addToRoster both-or-neither when it succeeds", function()
-            -- Arrange: a capture-style mutation (charge coins AND add a Brainrot).
+            -- Arrange: a capture-style mutation (charge coins AND add a Monster).
             local player = mockPlayer(2014)
             local data = Schema.default()
             data.coins = 500
             PlayerDataService._setProfileForTest(2014, data)
-            local entry = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local entry = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
 
             -- Act
             local ok = PlayerDataService.update(player, function(d)
@@ -428,7 +428,7 @@ return function()
             end
             data.rosterCount = Config.rosterCap
             PlayerDataService._setProfileForTest(2014, data)
-            local extra = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local extra = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
 
             -- Act: a capture mutator that debits THEN tries to add (add fails at cap).
             local ok, reason = PlayerDataService.update(player, function(d)

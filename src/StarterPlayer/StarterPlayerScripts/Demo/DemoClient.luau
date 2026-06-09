@@ -1,7 +1,7 @@
 --!strict
 -- StarterPlayerScripts/Demo/DemoClient.luau
 --
--- DEMO-ONLY client CONTROLLER for the "Brainrot Inc." CAPTURE + INVENTORY slice.
+-- DEMO-ONLY client CONTROLLER for the "Monster Relic" CAPTURE + INVENTORY slice.
 -- This is a ModuleScript — the thin presentation-facing layer the UI consumes.
 -- It does NOT build any ScreenGui; it only:
 --   * holds the last server inventory (DemoClient.Inventory = { InventoryItem }),
@@ -27,13 +27,13 @@ local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 
 -- ── Types (the contract the UI builds against) ───────────────────────────
 -- PROGRESSION: each item carries its roster `id` (the SUMMON target) and the
--- Brainrot's current `level`; the UI builds the display label itself (no `name`).
+-- Monster's current `level`; the UI builds the display label itself (no `name`).
 -- STAT SHEET: the server also derives the per-monster stat fields (xp/xpToNext for
 -- the XP bar, hp/power combat stats, wins/coinsMade lifetime flavor) so the detail
 -- modal renders entirely from this payload. All fields are server-authoritative;
 -- the client only displays them (it never computes game state).
 export type InventoryItem = {
-    id: string, -- roster GUID; passed to DemoClient.summon to send out THIS Brainrot
+    id: string, -- roster GUID; passed to DemoClient.summon to send out THIS Monster
     personality: string, -- "Hyper" | "Lazy" | "Chaotic" | "Loyal" | "Rebel"
     element: string, -- "Fire" | "Nature" | "Water" | "Volt" | "Wind" (display badge only)
     rarity: string, -- "Common".."Legendary" (display badge tint only)
@@ -48,7 +48,7 @@ export type InventoryItem = {
     hp: number, -- derived combat Max HP at this level
     power: number, -- derived per-tick combat damage at this level + personality
     wins: number, -- lifetime battles won
-    coinsMade: number, -- lifetime coins this Brainrot produced (floored)
+    coinsMade: number, -- lifetime coins this Monster produced (floored)
 }
 
 export type Inventory = { InventoryItem }
@@ -63,7 +63,7 @@ export type CoinState = {
 -- COMBAT (Tahap 2 + PROGRESSION): server -> client combat feedback. `kind` is
 -- "win" (the fighter defeated a wild, `coins` = coins awarded) or "ko" (the
 -- fighter fainted / timed out and returned to the bag). On a WIN, `leveledTo` is
--- set IFF the fighter's Brainrot leveled up (show a "Level Up!" banner instead of
+-- set IFF the fighter's Monster leveled up (show a "Level Up!" banner instead of
 -- coins); `level` is its current level for display. Presentation only; the server
 -- owns coins, xp, and levels.
 export type BattlePayload = {
@@ -245,13 +245,13 @@ function DemoClient.init()
 end
 
 -- ── Intents (C->S). The server validates + owns the result. ────────────────
--- Place one caught Brainrot of `personality` onto the SPECIFIC empty pedestal
+-- Place one caught Monster of `personality` onto the SPECIFIC empty pedestal
 -- `standIndex`. The player picked the podium (its Place prompt) and the creature
 -- (a row in the place menu); the server validates both and owns the result.
 -- ID-KEYED (bugfix): deploys the EXACT monster tapped, not "any of that
 -- personality" — uniqueness (element/rarity/evo) made the old behavior wrong.
-function DemoClient.deployToStand(standIndex: number, brainrotId: string)
-    DemoRemotes.DeployToStand:FireServer(standIndex, brainrotId)
+function DemoClient.deployToStand(standIndex: number, monsterId: string)
+    DemoRemotes.DeployToStand:FireServer(standIndex, monsterId)
 end
 
 -- KANDANG MENU: ask the server for a fresh kandang snapshot (replied via the
@@ -274,8 +274,8 @@ end
 
 -- EVOLUTION sink (S2): evolve a bag monster one stage. Server validates the
 -- milestone + funds (x rarity) and replies via InventoryUpdate + a banner.
-function DemoClient.evolve(brainrotId: string)
-    DemoRemotes.EvolveMonster:FireServer(brainrotId)
+function DemoClient.evolve(monsterId: string)
+    DemoRemotes.EvolveMonster:FireServer(monsterId)
 end
 
 -- SHOP sink (S4): buy 1 Capture Net (bundle=false) or the 10-bundle (true).
@@ -284,13 +284,13 @@ function DemoClient.buyCaptureItem(bundle: boolean)
     DemoRemotes.BuyCaptureItem:FireServer(bundle)
 end
 
--- COMBAT (Tahap 2 + PROGRESSION): summon a SPECIFIC owned Brainrot (by its roster
--- `brainrotId`) as a temporary field fighter that auto-battles the nearest wild.
+-- COMBAT (Tahap 2 + PROGRESSION): summon a SPECIFIC owned Monster (by its roster
+-- `monsterId`) as a temporary field fighter that auto-battles the nearest wild.
 -- Summoning by explicit id so XP/levels attach to the exact individual. The server
 -- validates ownership (in roster, not deployed, not already fighting) + rate-limits;
 -- the roster entry is NOT consumed (summoning is ephemeral).
-function DemoClient.summon(brainrotId: string)
-    DemoRemotes.SummonFighter:FireServer(brainrotId)
+function DemoClient.summon(monsterId: string)
+    DemoRemotes.SummonFighter:FireServer(monsterId)
 end
 
 -- AUTO-COLLECT: the live coin total to display RIGHT NOW. Extrapolates from the

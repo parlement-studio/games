@@ -1,7 +1,7 @@
 --!strict
 -- Shared/Demo/DemoRemotes.luau
 --
--- DEMO-ONLY RemoteEvent registry for the "Brainrot Inc." vertical slice.
+-- DEMO-ONLY RemoteEvent registry for the "Monster Relic" vertical slice.
 -- getOrCreate pattern: the first requirer (the server) creates the RemoteEvents
 -- as children of THIS module; later requirers (the client) wait for and reuse
 -- them. Returns a flat table of the RemoteEvents keyed by their exact name.
@@ -10,15 +10,15 @@
 -- DemoServer, DemoClient, and the UI that consumes them.
 --
 --   Client -> Server:  OpenCrate(), Deploy(personality), Undeploy(slotIndex),
---                       Collect(), DeployToStand(standIndex, brainrotId),
---                       SummonFighter(brainrotId)
+--                       Collect(), DeployToStand(standIndex, monsterId),
+--                       SummonFighter(monsterId)
 --   Server -> Client:  StateUpdate(state), CrateOpened(reveal), Moment(moment),
 --                       InventoryUpdate(items), CoinUpdate({coins, pending}),
 --                       OpenPlaceMenu(standIndex),
 --                       BattleEvent({ kind = "win"|"ko", personality, coins? })
 --
 -- SHOWROOM LOOP (place → display → idle-production → collect):
---   DeployToStand(standIndex, personality)  C->S : place ONE caught Brainrot of
+--   DeployToStand(standIndex, personality)  C->S : place ONE caught Monster of
 --                                 `personality` onto the SPECIFIC empty pedestal
 --                                 `standIndex` (the player picks the podium by
 --                                 triggering its Place prompt). Replaces the old
@@ -47,7 +47,7 @@ local CLIENT_TO_SERVER = {
     "Undeploy",
     "Collect",
     "DeployToStand",
-    -- COMBAT (Tahap 2): SummonFighter(personality) — summon an OWNED Brainrot of
+    -- COMBAT (Tahap 2): SummonFighter(personality) — summon an OWNED Monster of
     -- `personality` as a temporary field fighter that auto-battles the nearest
     -- wild. Server validates ownership + rate-limits; the bag is NOT consumed.
     "SummonFighter",
@@ -63,7 +63,7 @@ local CLIENT_TO_SERVER = {
     -- DemoConfig.kandang.upgrade.bonusPerLevel per level. Server validates
     -- funds + cap + rate-limits; persists base.buildings.b1.factoryLevel.
     "UpgradeKandang",
-    -- ECONOMY SINK (S2): EvolveMonster(brainrotId) — pay the activation cost
+    -- ECONOMY SINK (S2): EvolveMonster(monsterId) — pay the activation cost
     -- to evolve an ELIGIBLE bag monster one stage (milestone level + coins,
     -- x rarity). Server validates everything; persists entry.evoStage.
     "EvolveMonster",

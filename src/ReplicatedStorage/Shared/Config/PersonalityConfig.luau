@@ -6,7 +6,7 @@
 --
 -- Consumers (Idle Production #3, Battle #5, Raid #6, Evolution #8, Moment #12,
 -- Reroll #11) READ this table; they NEVER hardcode personality numbers. No
--- derived stats are stored on Brainrots — every numeric effect is recomputed at
+-- derived stats are stored on Monsters — every numeric effect is recomputed at
 -- runtime by querying this table, so a config rebalance applies retroactively to
 -- the whole roster with no migration (§2.2 #4).
 --
@@ -142,7 +142,7 @@ local PersonalityConfig = {
             -- PRODUCTION
             -- Range: 0.0..3.0. Default 0.50 (= -50% per source doc).
             productionMultiplier = 0.50,
-            -- Morale aura buffs ADJACENT non-Lazy Brainrots' production (F1).
+            -- Morale aura buffs ADJACENT non-Lazy Monsters' production (F1).
             moraleAura = {
                 -- Multiplier applied to each affected neighbor's rate.
                 -- Range: 1.0..2.0. Default 1.15 (+15% to neighbors).
@@ -184,8 +184,8 @@ local PersonalityConfig = {
 
             -- BATTLE (F4)
             battleBehaviorTag = "random_moveset",
-            -- If Chaotic may pull skills from ANY Brainrot's moveset (else own).
-            -- Default true (per source doc: "from any Brainrot's moveset").
+            -- If Chaotic may pull skills from ANY Monster's moveset (else own).
+            -- Default true (per source doc: "from any Monster's moveset").
             randomFromAnyMoveset = true,
         },
 
@@ -226,7 +226,7 @@ local PersonalityConfig = {
             -- Per-eligibility-check chance an overworked Rebel starts a Walkout.
             -- Range: 0.0..1.0. Default 0.15.
             walkoutChance = 0.15,
-            -- Chance a co-located Brainrot is dragged into an active Walkout.
+            -- Chance a co-located Monster is dragged into an active Walkout.
             -- Range: 0.0..1.0. Default 0.40. (<1 bounds chains — see E2.)
             walkoutContagionChance = 0.40,
             -- How long a single Walkout lasts. Server seconds.

@@ -3,7 +3,7 @@
 --
 -- The Personality System CORE (Creative Pillar #2), per
 -- design/gdd/personality-gdd.md (v1.1). SERVER-ONLY, server-authoritative.
--- The shared MODIFIER LAYER: it stores one enum field per Brainrot (via
+-- The shared MODIFIER LAYER: it stores one enum field per Monster (via
 -- Persistence) and exposes config-driven trait queries + a tiny runtime state
 -- machine (Working / OnBreak / Walkout) that consumers (Idle #3, Battle #5,
 -- Raid #6, Evolution #8, Moment #12, Reroll #11) read to flavor THEIR behavior.
@@ -15,11 +15,11 @@
 -- in config). Per gameplay-systems rules: numbers in config, logic in code.
 --
 -- ── SIGNATURE RECONCILIATION (implementability vs GDD §2.2 prose) ───────────
--- The GDD prose lists some queries as `(id)`. But the per-Brainrot `personality`
+-- The GDD prose lists some queries as `(id)`. But the per-Monster `personality`
 -- enum lives in the per-PLAYER roster owned by Persistence (keyed by
--- BrainrotEntry.id), and the CALLER (Idle / Battle) already holds the
--- BrainrotEntry. So this core takes the PERSONALITY enum (pure config queries)
--- or a BrainrotEntry (production query) rather than a bare `id` it would have to
+-- MonsterEntry.id), and the CALLER (Idle / Battle) already holds the
+-- MonsterEntry. So this core takes the PERSONALITY enum (pure config queries)
+-- or a MonsterEntry (production query) rather than a bare `id` it would have to
 -- resolve against a player it does not own:
 --   * getBattleBehavior(personality)   -> { behaviorTag, params }     (F4)
 --   * isImmuneToNegative(personality)  -> boolean
@@ -49,9 +49,9 @@ local Signal = require(ReplicatedStorage.Packages.Signal)
 local PlayerDataService = require(ServerStorage.PlayerData.PlayerDataService)
 
 type Personality = Types.Personality
-type BrainrotEntry = Types.BrainrotEntry
+type MonsterEntry = Types.MonsterEntry
 
--- Per-Brainrot ephemeral runtime state (§3.2). Server memory only, NOT
+-- Per-Monster ephemeral runtime state (§3.2). Server memory only, NOT
 -- persisted; re-initialized to Working on a fresh session.
 export type PersonalityRuntime = {
     state: string, -- "Working" | "OnBreak" | "Walkout"   default "Working"
@@ -132,14 +132,14 @@ local clock: () -> number = os.clock
 local logger: ((event: string, payload: { [string]: any }) -> ())? = nil
 
 -- In-battle lock checker (E4). Battle (#5) installs this so a reroll is rejected
--- while the Brainrot id is a combatant in an active session. DEFAULT: never
+-- while the Monster id is a combatant in an active session. DEFAULT: never
 -- locked, so the core is usable before Battle exists.
 local battleLockChecker: (id: string) -> boolean = function(_id: string): boolean
     return false
 end
 
 -- ── State ──────────────────────────────────────────────────────────────────
--- Ephemeral per-Brainrot runtime, keyed by entry.id (§3.2). Lost on restart.
+-- Ephemeral per-Monster runtime, keyed by entry.id (§3.2). Lost on restart.
 local runtimeState: { [string]: PersonalityRuntime } = {}
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ end
 
 -- ── Production modifier (F1) ─────────────────────────────────────────────────
 
--- F1: resolves the effective per-cycle production MULTIPLIER for a Brainrot.
+-- F1: resolves the effective per-cycle production MULTIPLIER for a Monster.
 -- Idle Production multiplies ITS own base rate by `multiplier` and respects
 -- `paused`. This applies the personality factors:
 --   personalityMult           = traits[p].productionMultiplier
@@ -279,9 +279,9 @@ end
 --   moraleFactor               = non-Lazy AND ctx.hasLazyNeighbor -> neighborMultiplier
 --   paused                     = runtime state is OnBreak or Walkout
 -- Chaotic records lastCycleOutcome and fires a chaotic_double/chaotic_zero
--- Moment (E3 single-producer is valid: per-Brainrot, not relative to others).
+-- Moment (E3 single-producer is valid: per-Monster, not relative to others).
 -- Bounds: multiplier >= 0 always (zero-floored by zeroMultiplier / paused).
-function PersonalityService.getProductionModifier(entry: BrainrotEntry, context: ProductionContext?): ProductionModifier
+function PersonalityService.getProductionModifier(entry: MonsterEntry, context: ProductionContext?): ProductionModifier
     local ctx = context or {}
     local key = resolveOrFallback(entry.personality)
     local trait = traitFor(key) :: PersonalityConfig.Trait
@@ -388,7 +388,7 @@ function PersonalityService.rollPersonality(): string
     return drawWeighted(getValidatedWeights())
 end
 
--- Resets a Brainrot's runtime to Working and clears its timers / drag / outcome
+-- Resets a Monster's runtime to Working and clears its timers / drag / outcome
 -- (used by reroll + repair, §2.4 #2 / §2.5).
 function PersonalityService.resetToWorking(id: string)
     runtimeState[id] = {
@@ -424,7 +424,7 @@ function PersonalityService.rerollPersonality(player: Player, id: string, opts: 
         return false, "in_battle"
     end
 
-    local entry = PlayerDataService.getBrainrot(player, id)
+    local entry = PlayerDataService.getMonster(player, id)
     if entry == nil then
         return false, "not_found"
     end
@@ -489,7 +489,7 @@ end
 -- and emit PersonalityRevealed (via the changed signal carrying old=nil). Never
 -- crashes; consumers defensively treat an unknown enum as fallbackPersonality
 -- for the single tick before repair completes. Returns (repaired, personality).
-function PersonalityService.validateOrRepair(player: Player, id: string, entry: BrainrotEntry): (boolean, string)
+function PersonalityService.validateOrRepair(player: Player, id: string, entry: MonsterEntry): (boolean, string)
     if PersonalityConfig.traits[entry.personality] ~= nil then
         return false, entry.personality -- already valid: nothing to repair
     end
@@ -531,7 +531,7 @@ end
 -- breakChance). Non-Hyper / non-Working is a no-op. Returns true iff it broke.
 -- `now` is the server clock value the CALLER passes (so a tick batch shares one
 -- timestamp); defaults to the injected clock.
-function PersonalityService.tryStartBreak(entry: BrainrotEntry, now: number?): boolean
+function PersonalityService.tryStartBreak(entry: MonsterEntry, now: number?): boolean
     local key = resolveOrFallback(entry.personality)
     local trait = traitFor(key)
     if trait == nil or trait.breakChance == nil then
@@ -561,19 +561,19 @@ end
 --
 -- buildingContext (caller-supplied; the caller owns adjacency / occupancy):
 --   rebelCount: number       -- count of Rebels co-located in the SAME building
---   neighbors: { BrainrotEntry } -- other co-located Brainrots (n ~= entry)
+--   neighbors: { MonsterEntry } -- other co-located Monsters (n ~= entry)
 --   cooldownUntil: number?   -- os.time()/clock the building's walkout cooldown
 --                               ends; if now < cooldownUntil, the trigger is
 --                               suppressed (E2 guard d).
 -- Returns (started: boolean, draggedIds: { string }).
 export type BuildingContext = {
     rebelCount: number,
-    neighbors: { BrainrotEntry },
+    neighbors: { MonsterEntry },
     cooldownUntil: number?,
 }
 
 function PersonalityService.tryStartWalkout(
-    entry: BrainrotEntry,
+    entry: MonsterEntry,
     buildingContext: BuildingContext,
     now: number?
 ): (boolean, { string })

@@ -58,18 +58,18 @@ return function()
     -- A controllable clock: returns whatever `t` is set to.
     local fakeClock = { t = 0 }
 
-    -- Seed one Brainrot into a player's profile and return (player, entry).
-    local function seedBrainrot(userId, personality)
+    -- Seed one Monster into a player's profile and return (player, entry).
+    local function seedMonster(userId, personality)
         local player = mockPlayer(userId)
         PlayerDataService._setProfileForTest(userId, Schema.default(), player)
-        local entry = Schema.newBrainrot({
+        local entry = Schema.newMonster({
             species = 1,
             personality = personality,
             source = "manual",
             hotspotId = "",
         })
-        PlayerDataService.addBrainrot(player, entry)
-        return player, PlayerDataService.getBrainrot(player, entry.id)
+        PlayerDataService.addMonster(player, entry)
+        return player, PlayerDataService.getMonster(player, entry.id)
     end
 
     beforeEach(function()
@@ -504,7 +504,7 @@ return function()
     describe("rerollPersonality (F5 / E4 / E7)", function()
         it("re-draws + writes the personality field through the atomic path + emits PersonalityChanged", function()
             -- Arrange: a roster Loyal; RNG that draws Hyper (first band).
-            local player, entry = seedBrainrot(3001, "Loyal")
+            local player, entry = seedMonster(3001, "Loyal")
             PersonalityService.setRandom(makeRng({ 0.0 })) -- first key in order = Hyper
             local changed
             PersonalityService.PersonalityChanged:Connect(function(p)
@@ -517,7 +517,7 @@ return function()
             -- Assert: field updated in the profile; event fired.
             expect(ok).to.equal(true)
             expect(result).to.equal("Hyper")
-            expect(PlayerDataService.getBrainrot(player, entry.id).personality).to.equal("Hyper")
+            expect(PlayerDataService.getMonster(player, entry.id).personality).to.equal("Hyper")
             expect(changed.oldPersonality).to.equal("Loyal")
             expect(changed.newPersonality).to.equal("Hyper")
             -- runtime reset to Working.
@@ -526,7 +526,7 @@ return function()
 
         it("is idempotent: a retried idempotencyKey returns the prior result + does NOT re-roll (E7)", function()
             -- Arrange
-            local player, entry = seedBrainrot(3002, "Loyal")
+            local player, entry = seedMonster(3002, "Loyal")
             -- First draw -> Hyper; a SECOND (if it ran) would draw Rebel.
             PersonalityService.setRandom(makeRng({ 0.0, 0.99 }))
             local key = "reroll-tx-1"
@@ -544,13 +544,13 @@ return function()
             expect(ok2).to.equal(true)
             expect(r1).to.equal("Hyper")
             expect(r2).to.equal("Hyper") -- prior stored result, not a fresh roll
-            expect(PlayerDataService.getBrainrot(player, entry.id).personality).to.equal("Hyper")
+            expect(PlayerDataService.getMonster(player, entry.id).personality).to.equal("Hyper")
             expect(fireCount).to.equal(1) -- no second PersonalityChanged on replay
         end)
 
         it("rejects with reason in_battle when the id is battle-locked (E4)", function()
             -- Arrange: a lock checker that locks this id.
-            local player, entry = seedBrainrot(3003, "Loyal")
+            local player, entry = seedMonster(3003, "Loyal")
             PersonalityService.setBattleLockChecker(function(id)
                 return id == entry.id
             end)
@@ -561,7 +561,7 @@ return function()
             -- Assert: rejected, no change.
             expect(ok).to.equal(false)
             expect(reason).to.equal("in_battle")
-            expect(PlayerDataService.getBrainrot(player, entry.id).personality).to.equal("Loyal")
+            expect(PlayerDataService.getMonster(player, entry.id).personality).to.equal("Loyal")
         end)
 
         it("rejects not_found when the player does not own the id", function()
@@ -576,7 +576,7 @@ return function()
             -- Arrange: current Hyper. With guaranteeDifferent, an RNG of 0.0 would
             -- normally pick Hyper (first band); excluding Hyper, the first band is
             -- now Lazy -> must differ.
-            local player, entry = seedBrainrot(3005, "Hyper")
+            local player, entry = seedMonster(3005, "Hyper")
             PersonalityService.setRandom(makeRng({ 0.0 }))
 
             -- Act
@@ -592,7 +592,7 @@ return function()
 
     describe("validateOrRepair (E5)", function()
         it("leaves a valid entry untouched (no repair, no roll)", function()
-            local player, entry = seedBrainrot(3010, "Chaotic")
+            local player, entry = seedMonster(3010, "Chaotic")
             local repaired, personality = PersonalityService.validateOrRepair(player, entry.id, entry)
             expect(repaired).to.equal(false)
             expect(personality).to.equal("Chaotic")
@@ -633,7 +633,7 @@ return function()
             -- Assert: re-rolled to a valid enum, written back, logged, event fired.
             expect(repaired).to.equal(true)
             expect(personality).to.equal("Hyper")
-            expect(PlayerDataService.getBrainrot(player, id).personality).to.equal("Hyper")
+            expect(PlayerDataService.getMonster(player, id).personality).to.equal("Hyper")
             expect(logged).to.equal(true)
             expect(changed.oldPersonality).to.equal(nil) -- (re)assignment, not a reroll
             expect(changed.newPersonality).to.equal("Hyper")

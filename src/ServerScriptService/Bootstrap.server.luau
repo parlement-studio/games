@@ -8,4 +8,4 @@
 -- Real server bootstrapping (service initialization, system wiring) is the
 -- lead-programmer's responsibility. Do NOT add game logic here.
 
-print("[Brainrot Inc.] server up")
+print("[Monster Relic] server up")

@@ -1,9 +1,9 @@
 --!strict
--- ServerScriptService/Demo/BrainrotAI.server.luau
+-- ServerScriptService/Demo/MonsterAI.server.luau
 --
--- DEMO-ONLY wild-Brainrot ROAMING AI for the "Brainrot Inc." slice.
+-- DEMO-ONLY wild-Monster ROAMING AI for the "Monster Relic" slice.
 --
--- The 5 wild creatures (`Brainrot_<P>` in the Workspace) are rigged with a
+-- The 5 wild creatures (`Monster_<P>` in the Workspace) are rigged with a
 -- Humanoid + an invisible HumanoidRootPart (done once in Studio), so the SERVER
 -- can walk them with Humanoid:MoveTo. This script makes each one wander randomly
 -- within `wanderRadius` of the spot it spawned at ("home"), so they mill around
@@ -24,6 +24,13 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local DemoFolder = Shared:WaitForChild("Demo")
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
+local WorldConfig = require(Shared:WaitForChild("Config"):WaitForChild("WorldConfig"))
+
+-- MULTI-PLACE GATE: wild roaming AI belongs ONLY in the Overworld; skip in the
+-- private Sanctuary place (no wild creatures there).
+if WorldConfig.currentPlaceKind() == "kandang" then
+    return
+end
 
 local WILD = DemoConfig.wild
 
@@ -111,4 +118,4 @@ RunService.Heartbeat:Connect(function(dt: number)
     end
 end)
 
-print("[Brainrot AI] wild roaming online (" .. #DemoConfig.demo3d.creatureNames .. " creatures)")
+print("[Monster AI] wild roaming online (" .. #DemoConfig.demo3d.creatureNames .. " creatures)")

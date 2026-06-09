@@ -1,7 +1,7 @@
 --!strict
 -- ServerScriptService/Demo/DemoServer.server.luau
 --
--- DEMO-ONLY server for the "Brainrot Inc." CAPTURE + INVENTORY vertical slice.
+-- DEMO-ONLY server for the "Monster Relic" CAPTURE + INVENTORY vertical slice.
 --
 -- ROUGH PROTOTYPE (briefing demo): relaxed standards, but SERVER-AUTHORITATIVE
 -- so it is a real slice. State is IN-MEMORY ONLY (no DataStore) for fast
@@ -9,8 +9,8 @@
 -- Demo/ namespace so it does not touch the real persistence/idle systems.
 --
 -- THE LOOP (what this script owns):
---   The 5 creature Models pre-placed in the Workspace (`Brainrot_HYPER` ..
---   `Brainrot_REBEL`) each get a "Hold F to Catch" ProximityPrompt on startup.
+--   The 5 creature Models pre-placed in the Workspace (`Monster_HYPER` ..
+--   `Monster_REBEL`) each get a "Hold F to Catch" ProximityPrompt on startup.
 --   When a player holds F near one, ProximityPromptService fires PromptTriggered
 --   on the server -> we add the creature to that player's in-memory INVENTORY,
 --   push the full inventory to that player (InventoryUpdate), remove the creature
@@ -36,8 +36,8 @@ local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 -- PERSISTENCE INTEGRATION: the demo now reads/writes through the AUDITED
 -- Persistence service so coins + caught creatures + which-stand survive a rejoin,
 -- and offline coins accrue while away. We touch ONLY the public PlayerDataService
--- API (getData / isLoaded / addBrainrot / update / setOfflineResolver / DataLoaded)
--- and mint roster entries via Schema.newBrainrot — never DataStoreService directly.
+-- API (getData / isLoaded / addMonster / update / setOfflineResolver / DataLoaded)
+-- and mint roster entries via Schema.newMonster — never DataStoreService directly.
 -- Profiles are loaded by PlayerDataBootstrap on join (kick-on-fail + autosave +
 -- BindToClose); this script just hydrates the live world from the loaded profile.
 --
@@ -79,7 +79,7 @@ end
 -- One bag item pushed to the client. PROGRESSION: the inventory is now DERIVED
 -- FRESH from the authoritative roster on every push (not a drifting local list),
 -- so level-ups show immediately. Each item carries the roster GUID (`id`, used by
--- SUMMON to target a SPECIFIC Brainrot), the personality, the entry's current
+-- SUMMON to target a SPECIFIC Monster), the personality, the entry's current
 -- `level`, and the STAT-SHEET fields the client renders (xp/xpToNext for the bar,
 -- hp/power derived combat stats, wins/coinsMade lifetime flavor). All fields are
 -- derived SERVER-SIDE from the authoritative roster entry — the client never
@@ -94,13 +94,13 @@ type InventoryItem = {
     evolveMilestone: number?, -- level required for the NEXT stage; nil = MAX stage
     status: string, -- "bag" | "kandang" | "summon" — Monster-tab status icon; only "bag" is actionable
     capturedAt: number, -- os.time() at capture (sort "Terbaru")
-    level: number, -- current progression level of this Brainrot (>= 1)
+    level: number, -- current progression level of this Monster (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level (xpCurveBase * level)
     hp: number, -- derived combat Max HP at this level
     power: number, -- derived per-tick combat damage at this level + personality
     wins: number, -- lifetime battles won (history.rwon)
-    coinsMade: number, -- lifetime coins this Brainrot has produced (floored)
+    coinsMade: number, -- lifetime coins this Monster has produced (floored)
 }
 
 -- One occupied Showroom pedestal: which personality stands there + its clone +
@@ -108,7 +108,12 @@ type InventoryItem = {
 -- deployment map entry for the right id).
 type DeployedSlot = {
     personality: string,
-    model: Model,
+    -- The physical display creature on its Cage pedestal. nil when this slot is
+    -- RATE-ONLY: the monster is deployed in the PERSISTED profile but no physical
+    -- pedestal exists in this place (e.g. the Overworld has no Cage). Production
+    -- follows the deployment data, so a model-less slot still accrues coins; every
+    -- deref of `.model` is guarded.
+    model: Model?,
     id: string, -- persisted roster GUID of the deployed creature
     -- KANDANG WANDER: os.clock() gate for this deployed monster's next wander
     -- move (mirrors the pack slots' nextMoveAt). nil on legacy/static slots.
@@ -121,14 +126,14 @@ type DeployedSlot = {
 -- gates so we tick damage at combatTickSec and re-target at seekRetargetSec;
 -- `despawnAt` is the auto-cleanup deadline; `engaged` is the wild it is currently
 -- fighting (so we can clear that wild's InCombat flag if the fighter dies/despawns).
--- PROGRESSION: `brainrotId` links this fighter back to the SPECIFIC roster entry
+-- PROGRESSION: `monsterId` links this fighter back to the SPECIFIC roster entry
 -- that was summoned, so a win awards XP to the right individual. `level` is the
 -- level SNAPSHOT taken at summon time (used to derive this fighter's HP/damage);
 -- a mid-fight level-up does NOT re-derive the active fighter — the next summon
 -- picks up the new level. Kept simple.
 type FighterRecord = {
     personality: string,
-    brainrotId: string,
+    monsterId: string,
     level: number,
     element: string, -- element SNAPSHOT from the summoned entry (element doc E3; drives elementMod)
     rarity: string, -- rarity SNAPSHOT from the summoned entry (rarity doc R3; drives statMult)
@@ -155,8 +160,8 @@ type PlayerState = {
     pending: number, -- UNUSED (kept = 0 for back-compat; auto-collect removed the bank step)
     slots: { [number]: DeployedSlot }, -- standIndex (1..showroomStandCount) -> slot
     rateBuckets: { [string]: { count: number, windowStart: number } },
-    -- COINS-MADE (per-Brainrot flavor tally): os.clock() of the last flush at which
-    -- we attributed idle production to the producing Brainrots. The delta since this
+    -- COINS-MADE (per-Monster flavor tally): os.clock() of the last flush at which
+    -- we attributed idle production to the producing Monsters. The delta since this
     -- stamp is split across the currently-deployed slots on each flush.
     lastCoinAttributeAt: number,
     -- ECONOMY SINK (Upgrade Kandang): live CACHE of the persisted
@@ -288,8 +293,8 @@ PlayerDataService.setOfflineResolver(function(roster, base, elapsed)
         return 0
     end
     local rate = 0
-    for _, brainrotId in b1.deployment do
-        local entry = roster[brainrotId]
+    for _, monsterId in b1.deployment do
+        local entry = roster[monsterId]
         if entry then
             rate += DemoConfig.baseRatePerSlot * prodMult(entry.personality)
         end
@@ -404,7 +409,7 @@ local function pushInventory(player: Player)
         end
     end
     for _, record in state.fighters do
-        statusById[record.brainrotId] = "summon"
+        statusById[record.monsterId] = "summon"
     end
 
     local combat = DemoConfig.combat
@@ -575,13 +580,13 @@ end
 -- BUG 1 FIX: deploy must NOT depend on a wild creature still being in the
 -- Workspace — catching one does `model.Parent = nil` for `creatureRespawnSec`,
 -- so cloning the LIVE creature failed mid-respawn ("missing template"). At
--- STARTUP we snapshot each `Brainrot_<P>` into ServerStorage.BrainrotTemplates,
+-- STARTUP we snapshot each `Monster_<P>` into ServerStorage.MonsterTemplates,
 -- stripped to a pure static prop and named by the CANONICAL personality (e.g.
 -- "Hyper"). Deploy clones from this stable store, so catch/respawn never affects
 -- deploy. ServerStorage is server-only (never replicated) — safe for templates.
-local TEMPLATES_FOLDER_NAME = "BrainrotTemplates"
+local TEMPLATES_FOLDER_NAME = "MonsterTemplates"
 -- COMBAT (Tahap 2): a SEPARATE template store that KEEPS the Humanoid rig (unlike
--- BrainrotTemplates, which strips to a static prop). Fighters need the rig so the
+-- MonsterTemplates, which strips to a static prop). Fighters need the rig so the
 -- server can walk them (Humanoid:MoveTo) and use the built-in health bar.
 local FIGHTER_TEMPLATES_FOLDER_NAME = "FighterTemplates"
 local PERSONA_LABEL_NAME = DemoConfig.demo3d.personaLabelName
@@ -616,11 +621,16 @@ local function getTemplatesFolder(): Folder
     return created
 end
 
--- Build the stable templates at startup. Clones each `Brainrot_<P>` present in
+-- Build the stable templates at startup. Clones each `Monster_<P>` present in
 -- the Workspace into ServerStorage, stripped + named by canonical personality.
 -- Returns the number of templates built. Safe to call once on boot.
 local function buildTemplates(): number
     local folder = getTemplatesFolder()
+    -- Rig SOURCE = ServerStorage.MonsterRigs (loaded from the published asset by
+    -- MonsterRigsBootstrap) — NOT the Workspace. 3D models do not sync across
+    -- places via Argon, so the rigs are shared as a runtime-loaded asset (prefab).
+    -- WaitForChild covers the async LoadAsset finishing first.
+    local rigs = ServerStorage:WaitForChild("MonsterRigs", 30)
     local built = 0
     for _, creatureName in DemoConfig.demo3d.creatureNames do
         local personality = personalityFromName(creatureName)
@@ -630,7 +640,7 @@ local function buildTemplates(): number
         if folder:FindFirstChild(personality) then
             continue -- already snapshotted (idempotent)
         end
-        local source = workspace:FindFirstChild(creatureName)
+        local source = rigs and rigs:FindFirstChild(creatureName)
         if source and source:IsA("Model") then
             local template = source:Clone()
             template:SetAttribute("DemoCaught", nil) -- not a catchable wild creature
@@ -639,7 +649,7 @@ local function buildTemplates(): number
             template.Parent = folder
             built += 1
         else
-            warn("[Deploy][server] no Workspace source to template for " .. creatureName)
+            warn("[Deploy][server] no MonsterRigs source for " .. creatureName)
         end
     end
     return built
@@ -647,7 +657,7 @@ end
 
 -- ── Fighter templates (Tahap 2) ───────────────────────────────────────────
 -- Find (or create) the ServerStorage folder that holds the RIGGED fighter
--- templates (Humanoid kept, unlike the static BrainrotTemplates).
+-- templates (Humanoid kept, unlike the static MonsterTemplates).
 local function getFighterTemplatesFolder(): Folder
     local folder = ServerStorage:FindFirstChild(FIGHTER_TEMPLATES_FOLDER_NAME)
     if folder and folder:IsA("Folder") then
@@ -660,12 +670,14 @@ local function getFighterTemplatesFolder(): Folder
 end
 
 -- Build the RIGGED fighter templates at startup. Mirrors buildTemplates() but
--- KEEPS the Humanoid rig: clones each `Brainrot_<P>` present + rigged in the
+-- KEEPS the Humanoid rig: clones each `Monster_<P>` present + rigged in the
 -- Workspace, removes ONLY the catch ProximityPrompt + the persona BillboardGui
 -- (the fighter gets its own ⚔ label at summon time), clears DemoCaught, restores
 -- full Health, and names by canonical personality. Returns the count built.
 local function buildFighterTemplates(): number
     local folder = getFighterTemplatesFolder()
+    -- Rig SOURCE = ServerStorage.MonsterRigs (asset-loaded prefab), not Workspace.
+    local rigs = ServerStorage:WaitForChild("MonsterRigs", 30)
     local built = 0
     for _, creatureName in DemoConfig.demo3d.creatureNames do
         local personality = personalityFromName(creatureName)
@@ -675,7 +687,7 @@ local function buildFighterTemplates(): number
         if folder:FindFirstChild(personality) then
             continue -- already snapshotted (idempotent)
         end
-        local source = workspace:FindFirstChild(creatureName)
+        local source = rigs and rigs:FindFirstChild(creatureName)
         if source and source:IsA("Model") then
             local template = source:Clone()
             template:SetAttribute("DemoCaught", nil)
@@ -690,7 +702,7 @@ local function buildFighterTemplates(): number
                 end
             end
             -- Full Health on the template at the Lv1 BASE so every clone starts
-            -- fresh; the actual per-summon HP is derived from the Brainrot's level
+            -- fresh; the actual per-summon HP is derived from the Monster's level
             -- (levelScale) in handleSummon, which overrides MaxHealth/Health there.
             local humanoid = template:FindFirstChildWhichIsA("Humanoid")
             if humanoid then
@@ -767,11 +779,11 @@ local RigGrounding = require(DemoFolder:WaitForChild("RigGrounding"))
 -- once that function exists.
 local pushKandangRef: ((Player) -> ())? = nil
 
--- The shared "Brainrot" collision group (no monster-vs-monster shoving) is
+-- The shared "Monster" collision group (no monster-vs-monster shoving) is
 -- normally registered by the pack prototype; register defensively here too so
 -- spawnDisplay's CollisionGroup assignment can never hit an unknown group.
 pcall(function()
-    game:GetService("PhysicsService"):RegisterCollisionGroup("Brainrot")
+    game:GetService("PhysicsService"):RegisterCollisionGroup("Monster")
 end)
 
 -- Build a display clone and stand it on the slot plate.
@@ -787,7 +799,7 @@ end)
 -- Returns the parented clone, or nil if no template is available.
 -- `entry` (optional): the authoritative roster entry — supplies element +
 -- evoStage for the evolution aura/scale (S2). nil = plain spawn.
-local function spawnDisplay(personality: string, stand: BasePart, index: number, entry: Types.BrainrotEntry?): Model?
+local function spawnDisplay(personality: string, stand: BasePart, index: number, entry: Types.MonsterEntry?): Model?
     local template: Instance? = nil
     local rigged = false
     if KANDANG.wanderEnabled then
@@ -817,7 +829,7 @@ local function spawnDisplay(personality: string, stand: BasePart, index: number,
     if rigged then
         -- Rigged wanderer: calm walk speed, engine ground support (NOT
         -- PlatformStand — see the pack fall-through bugfix), full health so no
-        -- health bar shows, shared "Brainrot" collision group so deployed
+        -- health bar shows, shared "Monster" collision group so deployed
         -- monsters never shove each other (or the pack wilds).
         local humanoid = clone:FindFirstChildWhichIsA("Humanoid")
         if humanoid then
@@ -832,7 +844,7 @@ local function spawnDisplay(personality: string, stand: BasePart, index: number,
         end
         for _, desc in clone:GetDescendants() do
             if desc:IsA("BasePart") then
-                desc.CollisionGroup = "Brainrot"
+                desc.CollisionGroup = "Monster"
             end
         end
         -- EVOLUTION (S2): stage-3 monsters are slightly bigger; every evolved
@@ -946,7 +958,7 @@ local function addRecallPrompt(model: Model, player: Player, personality: string
 end
 
 -- ── Place prompts (one per EMPTY stand) ────────────────────────────────────
--- Attach a "Place Brainrot" ProximityPrompt to an EMPTY pedestal. Triggering it
+-- Attach a "Place Monster" ProximityPrompt to an EMPTY pedestal. Triggering it
 -- opens the place menu for this stand (the player then taps a caught creature).
 -- Registered in placePromptToStand (+ the reverse index) so a trigger resolves
 -- in O(1). Idempotent: if the stand already has a Place prompt, this no-ops.
@@ -987,7 +999,7 @@ local function removePlacePrompt(index: number)
 end
 
 -- ── Deploy to a SPECIFIC stand ─────────────────────────────────────────────
--- The player chose the podium AND the SPECIFIC monster (`brainrotId`).
+-- The player chose the podium AND the SPECIFIC monster (`monsterId`).
 --
 -- BUGFIX (id-keyed deploy): this used to be PERSONALITY-keyed — the server
 -- picked ANY free entry of that personality. Pre-uniqueness that was harmless;
@@ -996,7 +1008,7 @@ end
 -- while same-personality Commons piled into the kandang — the reported
 -- "same monster deployed repeatedly" bug). Now the exact id is validated:
 -- owned, not already deployed, not fighting.
-local function handleDeployToStand(player: Player, standIndex: unknown, brainrotId: unknown)
+local function handleDeployToStand(player: Player, standIndex: unknown, monsterId: unknown)
     local state = states[player]
     if not state then
         return
@@ -1012,7 +1024,7 @@ local function handleDeployToStand(player: Player, standIndex: unknown, brainrot
         return
     end
     -- Validate the id (attacker-controlled arg): must be a string.
-    if type(brainrotId) ~= "string" then
+    if type(monsterId) ~= "string" then
         return
     end
     -- The stand must be FREE (no creature there already).
@@ -1026,25 +1038,25 @@ local function handleDeployToStand(player: Player, standIndex: unknown, brainrot
     if not data then
         return -- profile not loaded yet
     end
-    local entry = data.roster[brainrotId]
+    local entry = data.roster[monsterId]
     if not entry then
         return -- not owned; reject
     end
     local b1Now = data.base.buildings[BUILDING_ID]
     if b1Now then
         for _, deployedId in b1Now.deployment do
-            if deployedId == brainrotId then
+            if deployedId == monsterId then
                 return -- already standing in the kandang; reject
             end
         end
     end
     for _, record in state.fighters do
-        if record.brainrotId == brainrotId then
+        if record.monsterId == monsterId then
             return -- currently fighting; reject
         end
     end
     local personality = entry.personality
-    local itemId = brainrotId
+    local itemId = monsterId
 
     local stand = findStand(standIndex)
     if not stand then
@@ -1158,13 +1170,13 @@ local function handleCatch(prompt: ProximityPrompt, player: Player)
     -- (roster_full / not_loaded) we ABORT the catch — we do NOT mark the model
     -- caught, destroy its prompt, or remove it from the world, so the creature
     -- stays catchable and the world matches the (unchanged) persisted profile.
-    local entry = Schema.newBrainrot({
+    local entry = Schema.newMonster({
         species = speciesByPersonality[record.personality] or 1,
         personality = record.personality :: any,
         source = "manual",
         hotspotId = "demo",
     })
-    local ok = PlayerDataService.addBrainrot(player, entry)
+    local ok = PlayerDataService.addMonster(player, entry)
     if not ok then
         warn("[Catch] " .. player.Name .. " add rejected for " .. record.personality)
         return
@@ -1177,7 +1189,7 @@ local function handleCatch(prompt: ProximityPrompt, player: Player)
     modelToRecord[model] = nil -- no longer present/catchable (combat lookup)
     prompt:Destroy()
 
-    -- The roster entry was just minted + persisted via addBrainrot; the bag is
+    -- The roster entry was just minted + persisted via addMonster; the bag is
     -- DERIVED fresh from the roster, so a re-push now includes the new catch.
     pushInventory(player)
 
@@ -1189,10 +1201,10 @@ local function handleCatch(prompt: ProximityPrompt, player: Player)
 end
 
 -- ── PACK CATCH MINT (server-side bridge for the pack prototype) ─────────────
--- The BrainrotPack prototype owns the pack wilds' WORLD lifecycle (spawn /
+-- The MonsterPack prototype owns the pack wilds' WORLD lifecycle (spawn /
 -- wander / respawn) but the ROSTER is owned here. This BindableFunction lets a
 -- pack catch mint a REAL roster entry through the exact same audited path as
--- the original catch (Schema.newBrainrot + addBrainrot + bag re-push), without
+-- the original catch (Schema.newMonster + addMonster + bag re-push), without
 -- the two scripts sharing any internals. Returns true IFF the entry was
 -- committed — the pack only despawns the wild on true (roster_full aborts the
 -- catch, mirroring handleCatch's persist-first ordering).
@@ -1200,7 +1212,7 @@ end
 -- ELEMENT: pack wilds DISPLAY their rolled element on the overhead label, so
 -- the minted entry INHERITS that element (what you see is what you catch).
 -- An invalid/missing element falls back to a fresh server roll inside
--- Schema.newBrainrot — never trusted blindly.
+-- Schema.newMonster — never trusted blindly.
 -- SERVER-authoritative RNG for the capture success roll (never seeded from a
 -- client; one module-level generator like RarityConfig's defaultRng).
 local catchRng = Random.new()
@@ -1208,7 +1220,7 @@ local catchRng = Random.new()
 local packCatchMint = Instance.new("BindableFunction")
 packCatchMint.Name = "PackCatchMint"
 packCatchMint.Parent = ServerStorage
--- Returns a RESULT TABLE so the world owner (BrainrotPack) can branch the
+-- Returns a RESULT TABLE so the world owner (MonsterPack) can branch the
 -- cinematic + lifecycle without any roster/economy knowledge:
 --   { outcome = "success" } → minted + caught (play success cinematic, despawn)
 --   { outcome = "fail" }    → paid attempt MISSED (play fail cinematic, KEEP wild)
@@ -1339,7 +1351,7 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
 
     -- HIT. Mint PERSIST-FIRST with the rolled rarity; only settle the price if
     -- the add committed (a rejected add must not consume a net / free / coins).
-    local entry = Schema.newBrainrot({
+    local entry = Schema.newMonster({
         species = speciesByPersonality[personality] or 1,
         personality = personality :: any,
         -- Inherit the wild's displayed element; Schema re-rolls if invalid.
@@ -1348,7 +1360,7 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
         source = "manual",
         hotspotId = "pack",
     })
-    local ok = PlayerDataService.addBrainrot(player, entry)
+    local ok = PlayerDataService.addMonster(player, entry)
     if not ok then
         warn("[Catch] " .. player.Name .. " pack add rejected for " .. personality)
         return { outcome = "rejected" }
@@ -1370,7 +1382,7 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
 end
 
 -- ════════════════════════════════════════════════════════════════════════════
--- COMBAT (Tahap 2): SUMMON a fighter that auto-battles the nearest wild Brainrot
+-- COMBAT (Tahap 2): SUMMON a fighter that auto-battles the nearest wild Monster
 -- ════════════════════════════════════════════════════════════════════════════
 local COMBAT = DemoConfig.combat
 
@@ -1531,7 +1543,7 @@ local function nearestWild(centerPos: Vector3, maxRange: number): (Model?, BaseP
             consider(model)
         end
     end
-    -- PACK WILDS (incl. 👑 bosses): the BrainrotPack prototype tags every clone
+    -- PACK WILDS (incl. 👑 bosses): the MonsterPack prototype tags every clone
     -- with "PackWild" (CollectionService) — the single, decoupled discovery
     -- point. Pack wilds carry Personality/Element/DamageMult/etc. attributes
     -- the combat exchange + reward paths read.
@@ -1561,7 +1573,7 @@ local function defeatWild(player: Player, state: PlayerState, wild: Model)
 
     wild:SetAttribute("InCombat", nil)
 
-    -- PACK WILD (incl. boss): the BrainrotPack prototype owns its lifecycle —
+    -- PACK WILD (incl. boss): the MonsterPack prototype owns its lifecycle —
     -- its respawn sweep sees the 0-HP corpse, arms the per-slot timer (5s
     -- minion / 30s boss), tears the corpse down, and respawns it. Do NOT run
     -- the original-wild respawn path on it.
@@ -1589,19 +1601,19 @@ local function defeatWild(player: Player, state: PlayerState, wild: Model)
     respawnCreature(record, wild)
 end
 
--- PROGRESSION: award XP to the SPECIFIC Brainrot (`brainrotId`) that won, atomically
+-- PROGRESSION: award XP to the SPECIFIC Monster (`monsterId`) that won, atomically
 -- through the audited update() transaction (the mutator is NON-yielding). XP comes
 -- ONLY from a win; it may carry over multiple levels in one award. Returns
 -- (leveledTo, currentLevel): `leveledTo` is the new level IFF a level-up happened
 -- (else nil); `currentLevel` is the entry's level after the award (for display).
 -- Persistence handles saving (update marks dirty -> autosave/leave-save).
-local function awardWinXp(player: Player, brainrotId: string, xpMult: number?): (number?, number?)
+local function awardWinXp(player: Player, monsterId: string, xpMult: number?): (number?, number?)
     local leveledTo: number? = nil
     local currentLevel: number? = nil
     -- BOSS REWARD: a pack 👑 boss passes its XpMult (e.g. 4x); nil/invalid = 1.
     local mult = if type(xpMult) == "number" and xpMult > 0 then xpMult else 1
     PlayerDataService.update(player, function(data)
-        local e = data.roster[brainrotId]
+        local e = data.roster[monsterId]
         if not e then
             return
         end
@@ -1620,7 +1632,7 @@ local function awardWinXp(player: Player, brainrotId: string, xpMult: number?): 
 end
 
 -- PROGRESSION: build + register a fighter for `player` from a SPECIFIC roster
--- `brainrotId` (so XP attaches to the exact individual). Validated + rate-limited:
+-- `monsterId` (so XP attaches to the exact individual). Validated + rate-limited:
 -- the id must be a string that is in the player's roster, NOT currently deployed
 -- (not a value in b1.deployment), and NOT already an active fighter; the player
 -- must also be under the maxActiveFighters cap. The roster entry is NOT consumed
@@ -1628,7 +1640,7 @@ end
 -- `level` (levelScale, battle-gdd F2), and the level is snapshot on the record.
 -- Spawns the rigged clone summonOffsetStuds in front of the player, server-owned,
 -- with a ⚔ label. No-op (graceful) on a bad arg / no character / missing template.
-local function handleSummon(player: Player, brainrotId: unknown)
+local function handleSummon(player: Player, monsterId: unknown)
     local state = states[player]
     if not state then
         return
@@ -1637,7 +1649,7 @@ local function handleSummon(player: Player, brainrotId: unknown)
         return
     end
     -- Validate the id (attacker-controlled arg): must be a string.
-    if type(brainrotId) ~= "string" then
+    if type(monsterId) ~= "string" then
         return
     end
     -- Cap: bound active fighters per player.
@@ -1649,7 +1661,7 @@ local function handleSummon(player: Player, brainrotId: unknown)
     if not data then
         return
     end
-    local entry = data.roster[brainrotId]
+    local entry = data.roster[monsterId]
     if not entry then
         return -- not owned; reject
     end
@@ -1657,14 +1669,14 @@ local function handleSummon(player: Player, brainrotId: unknown)
     local b1 = data.base.buildings[BUILDING_ID]
     if b1 then
         for _, deployedId in b1.deployment do
-            if deployedId == brainrotId then
+            if deployedId == monsterId then
                 return -- currently on a stand; reject
             end
         end
     end
     -- NOT ALREADY FIGHTING: the id must not be linked to a live fighter.
     for _, record in state.fighters do
-        if record.brainrotId == brainrotId then
+        if record.monsterId == monsterId then
             return -- already summoned; reject
         end
     end
@@ -1759,7 +1771,7 @@ local function handleSummon(player: Player, brainrotId: unknown)
     local now = os.clock()
     local record: FighterRecord = {
         personality = personality,
-        brainrotId = brainrotId,
+        monsterId = monsterId,
         level = level,
         element = element,
         rarity = rarity,
@@ -1775,7 +1787,7 @@ local function handleSummon(player: Player, brainrotId: unknown)
         jitterAt = 0,
     }
     table.insert(state.fighters, record)
-    -- The summoned Brainrot is now BUSY (an active fighter): re-derive the bag so
+    -- The summoned Monster is now BUSY (an active fighter): re-derive the bag so
     -- it drops out of the inventory list immediately.
     pushInventory(player)
     print(("[Combat] %s summoned %s Lv%d (%d active)"):format(player.Name, personality, level, #state.fighters))
@@ -1932,7 +1944,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                     end
 
                     -- PACK WILDS carry a Personality attribute (their `Pack_<P>`
-                    -- name does not match the `Brainrot_` prefix parser).
+                    -- name does not match the `Monster_` prefix parser).
                     local attrPersonality = wild:GetAttribute("Personality")
                     local wildPersonality = (if type(attrPersonality) == "string" then attrPersonality else nil)
                         or personalityFromName(wild.Name)
@@ -1976,11 +1988,11 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                         end
                         defeatWild(player, state, wild)
                         record.engaged = nil
-                        -- PROGRESSION: award XP to the WINNING Brainrot (atomic +
+                        -- PROGRESSION: award XP to the WINNING Monster (atomic +
                         -- persisted). May level it up one or more times. Boss
                         -- kills pass the XpMult attribute (e.g. 4x).
                         local leveledTo, currentLevel =
-                            awardWinXp(player, record.brainrotId, if type(xpMult) == "number" then xpMult else nil)
+                            awardWinXp(player, record.monsterId, if type(xpMult) == "number" then xpMult else nil)
                         -- Re-derive the bag so the new level shows immediately (the
                         -- active fighter stays excluded; recall/KO returns it later).
                         pushInventory(player)
@@ -2039,7 +2051,7 @@ local function stepCombat()
             end
             i -= 1
         end
-        -- PROGRESSION: a removed fighter (KO/despawn) frees its Brainrot — it is no
+        -- PROGRESSION: a removed fighter (KO/despawn) frees its Monster — it is no
         -- longer BUSY, so re-derive the bag once per player so it reappears (with
         -- any level it earned this run).
         if removedAny then
@@ -2280,7 +2292,7 @@ local function handleUpgradeKandang(player: Player)
     local level = state.factoryLevel
     local cost = EconomyConfig.upgradeCost("factory", level)
     if cost == math.huge then
-        DemoRemotes.Moment:FireClient(player, { kind = "info", text = "🏠 Pen is already max level!" })
+        DemoRemotes.Moment:FireClient(player, { kind = "info", text = "🏠 Sanctuary is already max level!" })
         return
     end
     if state.coins < cost then
@@ -2309,7 +2321,7 @@ local function handleUpgradeKandang(player: Player)
     local bonusPct = math.floor(DemoConfig.kandang.upgrade.bonusPerLevel * 100 + 0.5)
     DemoRemotes.Moment:FireClient(player, {
         kind = "info",
-        text = ("🏠 Pen upgraded to Lv%d! Production +%d%% per level."):format(state.factoryLevel, bonusPct),
+        text = ("🏠 Sanctuary upgraded to Lv%d! Production +%d%% per level."):format(state.factoryLevel, bonusPct),
     })
     print(("[Upgrade] %s kandang -> Lv%d (-%d coins)"):format(player.Name, state.factoryLevel, cost))
 end
@@ -2321,7 +2333,7 @@ end
 -- the stage bump committed. The monster must be in the BAG (not deployed /
 -- not fighting) so no live clone ever needs retro-fitting — the aura + stat
 -- bump apply on the next spawn/summon.
-local function handleEvolve(player: Player, brainrotId: unknown)
+local function handleEvolve(player: Player, monsterId: unknown)
     local state = states[player]
     if not state then
         return
@@ -2329,14 +2341,14 @@ local function handleEvolve(player: Player, brainrotId: unknown)
     if not allowAction(state, "evolve", DemoConfig.rateLimits.deploy) then
         return
     end
-    if type(brainrotId) ~= "string" then
+    if type(monsterId) ~= "string" then
         return -- attacker-controlled arg; reject
     end
     local data = PlayerDataService.getData(player)
     if not data then
         return
     end
-    local entry = data.roster[brainrotId]
+    local entry = data.roster[monsterId]
     if not entry then
         return -- not owned; reject
     end
@@ -2344,13 +2356,13 @@ local function handleEvolve(player: Player, brainrotId: unknown)
     local b1 = data.base.buildings[BUILDING_ID]
     if b1 then
         for _, deployedId in b1.deployment do
-            if deployedId == brainrotId then
+            if deployedId == monsterId then
                 return
             end
         end
     end
     for _, record in state.fighters do
-        if record.brainrotId == brainrotId then
+        if record.monsterId == monsterId then
             return
         end
     end
@@ -2380,7 +2392,7 @@ local function handleEvolve(player: Player, brainrotId: unknown)
     -- PERSIST FIRST, re-validating inside the mutator (anti double-fire).
     local newStage = stage + 1
     local ok = PlayerDataService.update(player, function(d)
-        local e = d.roster[brainrotId]
+        local e = d.roster[monsterId]
         if not e then
             error("gone", 0)
         end
@@ -2471,9 +2483,9 @@ if game:GetService("RunService"):IsStudio() then
     local devXp = Instance.new("BindableFunction")
     devXp.Name = "DevAwardXp"
     devXp.Parent = ServerStorage
-    devXp.OnInvoke = function(player: Player, brainrotId: string, wins: number): boolean
+    devXp.OnInvoke = function(player: Player, monsterId: string, wins: number): boolean
         for _ = 1, math.clamp(wins, 1, 200) do
-            awardWinXp(player, brainrotId)
+            awardWinXp(player, monsterId)
         end
         pushInventory(player)
         return true
@@ -2609,22 +2621,27 @@ local function hydrate(player: Player, data: Types_PlayerData)
     -- BAG: the inventory is DERIVED FRESH from the roster (minus deployed/fighting
     -- ids) by pushInventory below — there is no local bag list to seed here.
 
-    -- DEPLOYED: re-spawn each deployed creature onto its saved stand + re-attach
-    -- the recall prompt. A missing stand/template is skipped gracefully (the
-    -- persisted deployment entry is left intact so a later hydrate can retry).
+    -- DEPLOYED: record EVERY deployed slot for PRODUCTION accounting. The rate is
+    -- computed from the deployment map (currentRate sums state.slots), so coins
+    -- must accrue in ANY place the player is in — Overworld included, where there
+    -- is no Cage. Where a physical pedestal DOES exist (the Cage, in the Sanctuary
+    -- place) we ALSO spawn the display creature + wire the recall prompt; where it
+    -- does not, the slot is RATE-ONLY (model = nil). The persisted deployment entry
+    -- is always left intact.
     for id, standIndex in deployedIds do
         local entry = data.roster[id]
         if entry then
+            local model: Model? = nil
             local stand = findStand(standIndex)
             if stand then
-                local model = spawnDisplay(entry.personality, stand, standIndex, entry)
+                model = spawnDisplay(entry.personality, stand, standIndex, entry)
                 if model then
-                    state.slots[standIndex] = { personality = entry.personality, model = model, id = id }
                     setStandLabel(stand, string.upper(entry.personality), true)
                     removePlacePrompt(standIndex)
                     addRecallPrompt(model, player, entry.personality, standIndex)
                 end
             end
+            state.slots[standIndex] = { personality = entry.personality, model = model, id = id }
         end
     end
 
@@ -2810,7 +2827,7 @@ end
 -- Single dispatcher routes catch (wild) / recall (deployed) / place (empty) prompts.
 ProximityPromptService.PromptTriggered:Connect(onPromptTriggered)
 DemoRemotes.DeployToStand.OnServerEvent:Connect(handleDeployToStand)
--- COMBAT (Tahap 2): summon an owned Brainrot as a temporary auto-battling fighter.
+-- COMBAT (Tahap 2): summon an owned Monster as a temporary auto-battling fighter.
 DemoRemotes.SummonFighter.OnServerEvent:Connect(handleSummon)
 -- KANDANG MENU: snapshot request + tap-to-recall + upgrade sink.
 DemoRemotes.RequestKandang.OnServerEvent:Connect(handleRequestKandang)

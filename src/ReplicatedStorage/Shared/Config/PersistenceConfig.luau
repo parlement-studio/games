@@ -125,7 +125,7 @@ return {
     clockSkewToleranceSec = 60,
 
     -- ── ROSTER ───────────────────────────────────────────────────────────
-    -- Max Brainrots a player may own (MVP). Enforced atomically (E6).
+    -- Max Monsters a player may own (MVP). Enforced atomically (E6).
     -- Range: 50-1000 | Default: 200 (MVP).
     rosterCap = 200,
 

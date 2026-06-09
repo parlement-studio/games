@@ -1,7 +1,7 @@
 --!strict
 -- ServerStorage/PlayerData/PlayerDataService.luau
 --
--- The main Persistence service for Brainrot Inc., per
+-- The main Persistence service for Monster Relic, per
 -- design/gdd/persistence-gdd.md (v1.2). SERVER-ONLY, server-authoritative.
 -- EVERY other system reads/mutates player state THROUGH this API; none touch
 -- DataStoreService directly.
@@ -37,7 +37,7 @@ local Migrations = require(script.Parent.Migrations)
 local SessionLock = require(script.Parent.SessionLock)
 
 type PlayerData = Types.PlayerData
-type BrainrotEntry = Types.BrainrotEntry
+type MonsterEntry = Types.MonsterEntry
 type OfflineResolver = Types.OfflineResolver
 
 -- A live in-memory profile for one player.
@@ -497,10 +497,10 @@ end
 -- / free captures atomically should call update() directly and invoke
 -- Schema.addToRoster / Schema.removeFromRoster inside their mutator.
 
--- Adds a Brainrot to the roster IFF below the cap (E6). Returns
+-- Adds a Monster to the roster IFF below the cap (E6). Returns
 -- (true, entry) | (false, "roster_full") | (false, "duplicate_id"). Optional
 -- idempotencyKey de-dupes a retried add.
-function PlayerDataService.addBrainrot(player: Player, entry: BrainrotEntry, idempotencyKey: string?): (boolean, any)
+function PlayerDataService.addMonster(player: Player, entry: MonsterEntry, idempotencyKey: string?): (boolean, any)
     -- Pre-check the rejection reasons so callers get the PRECISE sentinel
     -- ("roster_full" / "duplicate_id") and no idempotency key is consumed on a
     -- rejected add. The authoritative check still runs inside the transaction.
@@ -530,9 +530,9 @@ function PlayerDataService.addBrainrot(player: Player, entry: BrainrotEntry, ide
     return true, result
 end
 
--- Removes a Brainrot by id. Returns (true, removedEntry) | (false, reason).
+-- Removes a Monster by id. Returns (true, removedEntry) | (false, reason).
 -- Refuses to remove a fav-locked entry unless `force` is true (E6).
-function PlayerDataService.removeBrainrot(
+function PlayerDataService.removeMonster(
     player: Player,
     id: string,
     force: boolean?,
@@ -566,8 +566,8 @@ function PlayerDataService.removeBrainrot(
     return true, result
 end
 
--- Reads a single Brainrot by id (nil if absent).
-function PlayerDataService.getBrainrot(player: Player, id: string): BrainrotEntry?
+-- Reads a single Monster by id (nil if absent).
+function PlayerDataService.getMonster(player: Player, id: string): MonsterEntry?
     local p = profileFor(player)
     if p == nil then
         return nil

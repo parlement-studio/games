@@ -1,11 +1,11 @@
 --!strict
 -- Shared/Demo/PackConfig.luau
 --
--- PROTOTYPE config for the "Brainrot Pack" spawner (5 packs of 3 around the
+-- PROTOTYPE config for the "Monster Pack" spawner (5 packs of 3 around the
 -- showroom). This is ISOLATED from DemoConfig on purpose: the pack spawner is a
 -- pure prototype that does its own spawn/respawn/wander/catch and does NOT touch
 -- the existing catch/roster/economy/combat/persistence systems. The 5 packs
--- REPLACE the existing 5 wild brainrots in the showroom row (the showroom itself
+-- REPLACE the existing 5 wild monsters in the showroom row (the showroom itself
 -- stays as the deploy building).
 --
 -- Replicates the DemoConfig style: every tunable is a literal, every magic
@@ -19,32 +19,32 @@ return {
     -- ── IDENTITY ─────────────────────────────────────────────────────────
     -- The 5 personalities the pack spawner handles, in canonical order. Each
     -- pack slot will spawn a clone of the matching personality (a pack of 3
-    -- "Lazy" brainrots, 3 "Hyper" brainrots, …). Mirrors DemoConfig.personalityOrder
+    -- "Lazy" monsters, 3 "Hyper" monsters, …). Mirrors DemoConfig.personalityOrder
     -- so the visible identity lines up with the rest of the demo. The pack
-    -- script resolves each personality to a Brainrot_<P> source in the Workspace
+    -- script resolves each personality to a Monster_<P> source in the Workspace
     -- (case-insensitive) at template-build time.
     personalityOrder = { "Hyper", "Lazy", "Chaotic", "Loyal", "Rebel" },
 
     -- ── PACK COMPOSITION ─────────────────────────────────────────────────
-    -- How many brainrots of the same type live in ONE pack. 5 types × count = the
+    -- How many monsters of the same type live in ONE pack. 5 types × count = the
     -- total simultaneous wild population. Range: 1-10 | Default: 3
     count = 3,
     -- The Source-of-truth Workspace name for each pack type (DemoConfig calls
     -- this `creaturePrefix + UPPER(personality)` — keep the prefix in sync with
     -- DemoConfig.demo3d.creaturePrefix if you ever change it). Read-only here.
-    creaturePrefix = "Brainrot_",
+    creaturePrefix = "Monster_",
 
     -- ── TEMPLATE STORE ──────────────────────────────────────────────────
     -- Name of the ServerStorage folder the pack script snapshots the 5
-    -- Brainrot_<P> source models into (cloned at boot). Strips the existing
+    -- Monster_<P> source models into (cloned at boot). Strips the existing
     -- catch ProximityPrompt + the floating persona label, KEEPS the Humanoid
     -- rig so clones can walk + show the built-in health bar. String.
     templateFolderName = "WildPackTemplates",
     -- Name of the Workspace folder that holds the (invisible) pack-center
     -- marker Parts. One Part per personality, each tagged with
-    -- Attribute("BrainrotType", "<P>") so the pack script can find it.
+    -- Attribute("MonsterType", "<P>") so the pack script can find it.
     -- String.
-    spawnFolderName = "BrainrotPacks",
+    spawnFolderName = "MonsterPacks",
     -- Name of the BillboardGui that exists on the original 5 (the floating
     -- persona label). Stripped from the snapshot so clones start clean. The
     -- pack script does NOT add a label back (prototype scope). String.
@@ -67,7 +67,7 @@ return {
     -- slot markers sit at a sensible height for the script. Range: 0-20 | Default: 0.4
     packCenterYOffset = 0.4,
     -- Slot offsets inside ONE pack form a small triangle of side
-    -- `slotSpreadStuds` around the pack center, so 3 same-type brainrots
+    -- `slotSpreadStuds` around the pack center, so 3 same-type monsters
     -- cluster visibly without overlapping. Range: 0.5-10 | Default: 2.0
     slotSpreadStuds = 2.0,
 

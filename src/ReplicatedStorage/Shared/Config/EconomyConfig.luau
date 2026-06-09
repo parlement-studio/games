@@ -139,10 +139,10 @@ EconomyConfig.minMutation = 1
 -- primary faucet.
 -- Each range: 0-100000 (min <= max).
 EconomyConfig.questRewards = {
-    capture_n = { min = 100, max = 200 }, -- "tangkap N Brainrot"
+    capture_n = { min = 100, max = 200 }, -- "tangkap N Monster"
     win_raids = { min = 150, max = 300 }, -- "menang M raid"
     collect_x = { min = 100, max = 200 }, -- "kumpulkan X coins"
-    evolve_one = { min = 200, max = 350 }, -- "evolve 1 Brainrot" (rarer goal, higher pay)
+    evolve_one = { min = 200, max = 350 }, -- "evolve 1 Monster" (rarer goal, higher pay)
 }
 
 -- Fallback flat reward if a quest type has no range entry (defensive default,
@@ -256,16 +256,16 @@ EconomyConfig.slotUnlock = {
 }
 
 -- ── REROLL CURVE (LOCKED by monetization brainstorm — DO NOT retune) ─────────
--- Per-Brainrot escalating Meme Coins cost; resets to tier 1 after 24h with no
--- reroll. Mechanic (which reroll # a Brainrot is on, the 24h timer) is OWNED by
+-- Per-Monster escalating Meme Coins cost; resets to tier 1 after 24h with no
+-- reroll. Mechanic (which reroll # a Monster is on, the 24h timer) is OWNED by
 -- Reroll #11; Economy owns only the COST VALUES here and the spend. Robux path
 -- is Monetization #15.
 EconomyConfig.reroll = {
-    -- Cost ladder by reroll count on a given Brainrot (1st, 2nd, 3rd, 4th+).
+    -- Cost ladder by reroll count on a given Monster (1st, 2nd, 3rd, 4th+).
     -- Index 4 is the FLAT CAP (4th and every subsequent reroll within 24h).
     -- LOCKED VALUES — changing them is a design decision, not free-tuning.
     costs = { 250, 600, 1200, 2000 },
-    -- Hours of no-reroll inactivity after which a Brainrot's reroll tier resets
+    -- Hours of no-reroll inactivity after which a Monster's reroll tier resets
     -- to 1 (250). Range: 1-72 | Default: 24 (LOCKED)
     resetHours = 24,
 }
@@ -319,7 +319,7 @@ function EconomyConfig.slotUnlockCost(k: number): number
     return math.floor(cfg.base * cfg.growth ^ k)
 end
 
--- F-SINK-REROLL — cost of the k-th reroll on a given Brainrot (k is 1-based).
+-- F-SINK-REROLL — cost of the k-th reroll on a given Monster (k is 1-based).
 -- k <= 0 returns the first-tier cost (defensive); k >= length returns the cap.
 function EconomyConfig.rerollCost(k: number): number
     local costs = EconomyConfig.reroll.costs

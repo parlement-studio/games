@@ -1,13 +1,13 @@
 --!strict
 -- DemoUI.client.luau
 --
--- Client UI for the "Brainrot Inc." CAPTURE + INVENTORY demo.
+-- Client UI for the "Monster Relic" CAPTURE + INVENTORY demo.
 --
--- The 5 creatures are Models pre-placed in the Workspace (`Brainrot_HYPER` ..
--- `Brainrot_REBEL`); each carries a server-built "Hold F to Catch" ProximityPrompt
+-- The 5 creatures are Models pre-placed in the Workspace (`Monster_HYPER` ..
+-- `Monster_REBEL`); each carries a server-built "Hold F to Catch" ProximityPrompt
 -- whose built-in prompt UI shows automatically near the creature. This script
 -- does NOT build that prompt — it renders:
---   1. A bottom-center HINT: "Walk up to a Brainrot and hold [F] to catch it!".
+--   1. A bottom-center HINT: "Walk up to a Monster and hold [F] to catch it!".
 --   2. A top-right 🎒 INVENTORY (N) button. Click it OR press B to TOGGLE a panel.
 --   3. The INVENTORY PANEL (read-only): a scrolling list of caught creatures
 --      (emoji + name + color-coded personality badge), a count, a ✕ close
@@ -17,8 +17,8 @@
 --      own) + a small "+N/s" rate line. The counter is driven every frame
 --      (throttled) from DemoClient.getDisplayCoins() so it rises continuously.
 --   5. The PLACE MENU (modal): opened by DemoClient.PlaceMenuRequested when the
---      player triggers an EMPTY podium's "Place Brainrot" (F) prompt. Lists the
---      player's caught Brainrots as TAPPABLE rows; tapping one sends
+--      player triggers an EMPTY podium's "Place Monster" (F) prompt. Lists the
+--      player's caught Monsters as TAPPABLE rows; tapping one sends
 --      DeployToStand(standIndex, personality) and closes the menu. The player
 --      picks the podium (which prompt) AND the creature (which row).
 --
@@ -167,7 +167,7 @@ local rootTrove = Trove.new()
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local screen = rootTrove:Add(Instance.new("ScreenGui"))
-screen.Name = "BrainrotDemoUI"
+screen.Name = "MonsterDemoUI"
 screen.ResetOnSpawn = false
 screen.IgnoreGuiInset = true
 -- MOBILE SAFE AREA: keep HUD out from under notches / the home indicator. With
@@ -183,7 +183,7 @@ screen.Parent = playerGui
 -- at the absolute top-right corner of the screen. Everything else stays on the
 -- inset-respecting `screen` gui.
 local edgeGui = rootTrove:Add(Instance.new("ScreenGui"))
-edgeGui.Name = "BrainrotDemoEdgeUI"
+edgeGui.Name = "MonsterDemoEdgeUI"
 edgeGui.ResetOnSpawn = false
 edgeGui.IgnoreGuiInset = true
 edgeGui.ScreenInsets = Enum.ScreenInsets.None
@@ -1182,7 +1182,7 @@ end -- renderItems
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- §6 SKILL TAB — 3-path presentation tree (S5 deferred, no server logic).
--- Paths: SUMMONER (green) · PEN (blue) · HUNTER (purple).
+-- Paths: SUMMONER (green) · SANCTUARY (blue) · HUNTER (purple).
 -- Nodes: ✅ Owned · 💰 Buyable (inert "Coming soon") · 🔒 Locked.
 -- Coin balance mirror + disabled Reset button at the top.
 -- Cross-function refs live in SKL{} to stay under the 200-local limit.
@@ -1251,12 +1251,12 @@ do -- skill tree build (scoped to avoid polluting top-level registers)
             },
             {
                 icon = "🏠",
-                label = "PEN",
+                label = "SANCTUARY",
                 color = PATH_PEN_COLOR,
                 nodes = {
-                    { name = "Pen Efficiency", effect = "???", cost = "???", state = "locked" },
+                    { name = "Sanctuary Efficiency", effect = "???", cost = "???", state = "locked" },
                     { name = "Auto Harvest", effect = "???", cost = "???", state = "locked" },
-                    { name = "Pen Mastery", effect = "???", cost = "???", state = "locked" },
+                    { name = "Sanctuary Mastery", effect = "???", cost = "???", state = "locked" },
                 },
             },
             {
@@ -2186,7 +2186,7 @@ local function openSheet(item: DemoClient.InventoryItem)
 
     -- EVOLVE button state (data from the server payload; server re-validates).
     if not inBag then
-        sheetEvolve.Text = if item.status == "kandang" then "🏠 In the Pen" else "⚔ In Battle"
+        sheetEvolve.Text = if item.status == "kandang" then "🏠 In the Sanctuary" else "⚔ In Battle"
         sheetEvolve.BackgroundColor3 = Color.SlotEmpty
         sheetEvolve.AutoButtonColor = false
     elseif item.evolveCost == nil then
@@ -2231,7 +2231,7 @@ end
 rootTrove:Add(sheetClose.Activated:Connect(closeSheet))
 rootTrove:Add(sheetBackdrop.Activated:Connect(closeSheet))
 
--- ⚔ Summon: send THIS Brainrot (by roster id) out to auto-battle, then close.
+-- ⚔ Summon: send THIS Monster (by roster id) out to auto-battle, then close.
 rootTrove:Add(sheetSummon.Activated:Connect(function()
     local item = sheetItem
     if not item or (item.status ~= nil and item.status ~= "bag") then
@@ -2405,8 +2405,8 @@ rootTrove:Add(UserInputService.InputBegan:Connect(function(input: InputObject, p
 end))
 
 -- ════════════════════════════════════════════════════════════════════════════
--- PLACE MENU (modal) — opened from a podium's "Place Brainrot" (F) prompt.
--- Lists the player's caught Brainrots as TAPPABLE rows; tapping one sends
+-- PLACE MENU (modal) — opened from a podium's "Place Monster" (F) prompt.
+-- Lists the player's caught Monsters as TAPPABLE rows; tapping one sends
 -- DeployToStand(standIndex, personality) and closes the menu. Separate from the
 -- B inventory panel (which is now read-only).
 -- ════════════════════════════════════════════════════════════════════════════
@@ -2620,7 +2620,7 @@ apply(Instance.new("TextLabel"), {
     TextColor3 = Color.Text,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "🏠 PEN",
+    Text = "🏠 SANCTUARY",
     ZIndex = 42,
     Parent = kandangPanel,
 })
@@ -2703,7 +2703,7 @@ local kandangUpgradeBtn = apply(Instance.new("TextButton"), {
     FontFace = Font.Heavy,
     TextColor3 = Color.Text,
     TextScaled = true,
-    Text = "⬆️ Upgrade Pen",
+    Text = "⬆️ Upgrade Sanctuary",
     ZIndex = 42,
     Parent = kandangPanel,
 }, { corner(12), padding(8) })
@@ -2871,7 +2871,7 @@ local function renderKandang()
     -- Upgrade button (data-driven; the server re-validates every tap).
     local nextCost = payload.nextCost
     if nextCost == nil then
-        kandangUpgradeBtn.Text = "🏠 Pen Lv MAX"
+        kandangUpgradeBtn.Text = "🏠 Sanctuary Lv MAX"
         kandangUpgradeBtn.BackgroundColor3 = Color.SlotEmpty
         kandangUpgradeBtn.AutoButtonColor = false
     else

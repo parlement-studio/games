@@ -358,7 +358,7 @@ return function()
             pds.CoinsChanged:Connect(function()
                 fires += 1
             end)
-            local key = "reroll:brainrot-xyz:k1"
+            local key = "reroll:monster-xyz:k1"
             local ok1, result1 = EconomyService.spend(player, 250, "reroll", key)
             local ok2, result2 = EconomyService.spend(player, 250, "reroll", key)
             expect(ok1).to.equal(true)

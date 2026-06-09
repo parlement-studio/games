@@ -8,4 +8,4 @@
 -- Real client bootstrapping (controllers, UI wiring) is the lead-programmer's
 -- responsibility. Do NOT add game logic here.
 
-print("[Brainrot Inc.] client up")
+print("[Monster Relic] client up")

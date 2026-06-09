@@ -59,11 +59,11 @@ return function()
         end)
     end)
 
-    describe("Schema.newBrainrot", function()
+    describe("Schema.newMonster", function()
         it("mints an entry with a unique id, level 1, and seeded history", function()
             -- Arrange / Act
-            local a = Schema.newBrainrot({ species = 7, personality = "Hyper", source = "manual", hotspotId = "hs1" })
-            local b = Schema.newBrainrot({ species = 7, personality = "Hyper", source = "manual", hotspotId = "hs1" })
+            local a = Schema.newMonster({ species = 7, personality = "Hyper", source = "manual", hotspotId = "hs1" })
+            local b = Schema.newMonster({ species = 7, personality = "Hyper", source = "manual", hotspotId = "hs1" })
 
             -- Assert
             expect(a.id).never.to.equal(b.id) -- unique GUIDs
@@ -80,7 +80,7 @@ return function()
 
         it("rolls a valid element when args omit it (E3 standard capture path)", function()
             -- Act
-            local entry = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local entry = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
 
             -- Assert
             expect(Schema.isValidElement(entry.element)).to.equal(true)
@@ -88,7 +88,7 @@ return function()
 
         it("keeps a supplied VALID element (deterministic caller)", function()
             -- Act
-            local entry = Schema.newBrainrot({
+            local entry = Schema.newMonster({
                 species = 1,
                 personality = "Loyal",
                 element = "Volt",
@@ -102,7 +102,7 @@ return function()
 
         it("re-rolls (never trusts) a supplied INVALID element", function()
             -- Act
-            local entry = Schema.newBrainrot({
+            local entry = Schema.newMonster({
                 species = 1,
                 personality = "Loyal",
                 element = "Shadow" :: any,
@@ -119,14 +119,14 @@ return function()
             -- Act + Assert: 30 mints — never a boss-tier rarity from grass.
             for _ = 1, 30 do
                 local entry =
-                    Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+                    Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
                 expect(entry.rarity == "Common" or entry.rarity == "Uncommon").to.equal(true)
             end
         end)
 
         it("keeps a supplied VALID rarity (boss-drop path, e.g. Rare)", function()
             -- Act
-            local entry = Schema.newBrainrot({
+            local entry = Schema.newMonster({
                 species = 1,
                 personality = "Loyal",
                 rarity = "Rare",
@@ -140,7 +140,7 @@ return function()
 
         it("falls back to the wild roll on a supplied INVALID rarity", function()
             -- Act
-            local entry = Schema.newBrainrot({
+            local entry = Schema.newMonster({
                 species = 1,
                 personality = "Loyal",
                 rarity = "Mythic" :: any,
@@ -547,7 +547,7 @@ return function()
             -- Arrange
             local data = Schema.default()
             local seqBefore = data.nextSeq
-            local entry = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local entry = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
 
             -- Act
             local ok = Schema.addToRoster(data, entry)
@@ -567,7 +567,7 @@ return function()
                 data.roster["id-" .. i] = { id = "id-" .. i, personality = "Loyal" }
             end
             data.rosterCount = Config.rosterCap
-            local extra = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local extra = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
 
             -- Act
             local ok, reason = Schema.addToRoster(data, extra)
@@ -582,7 +582,7 @@ return function()
         it("refuses to remove a fav-locked entry unless forced", function()
             -- Arrange
             local data = Schema.default()
-            local entry = Schema.newBrainrot({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
+            local entry = Schema.newMonster({ species = 1, personality = "Loyal", source = "manual", hotspotId = "" })
             entry.fav = true
             Schema.addToRoster(data, entry)
 

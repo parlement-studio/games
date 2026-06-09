@@ -1,7 +1,7 @@
 --!strict
 -- ServerStorage/PlayerData/Schema.luau
 --
--- The authoritative persisted shape for one player of Brainrot Inc., per
+-- The authoritative persisted shape for one player of Monster Relic, per
 -- design/gdd/persistence-gdd.md (v1.2) §3.2-§3.4. SERVER-ONLY (lives in
 -- ServerStorage, never replicated). PURE: every builder here returns a plain
 -- table of JSON-safe scalars/tables — NO Instances, NO functions, NO closures
@@ -20,13 +20,13 @@ local PersistenceConfig = require(ReplicatedStorage.Shared.Config.PersistenceCon
 local RarityConfig = require(ReplicatedStorage.Shared.Config.RarityConfig)
 
 type PlayerData = Types.PlayerData
-type BrainrotEntry = Types.BrainrotEntry
+type MonsterEntry = Types.MonsterEntry
 type BaseData = Types.BaseData
 type Building = Types.Building
 type Personality = Types.Personality
 type Element = Types.Element
 type Rarity = Types.Rarity
-type NewBrainrotArgs = Types.NewBrainrotArgs
+type NewMonsterArgs = Types.NewMonsterArgs
 
 local Schema = {}
 
@@ -153,7 +153,7 @@ function Schema.default(): PlayerData
     }
 end
 
--- Mints a new Brainrot entry (the atomic capture commit calls this). species /
+-- Mints a new Monster entry (the atomic capture commit calls this). species /
 -- personality / source / hotspotId are supplied by Capture; `id` is minted
 -- here via a server-side GUID. NEVER reused.
 --
@@ -165,7 +165,7 @@ end
 -- `rarity` (rarity doc R1/R5): same contract — nil = wild-catch roll (80/20
 -- via RarityConfig.rollWeights); a boss-drop path supplies its tier explicitly
 -- (e.g. "Rare"); a supplied-but-INVALID value falls back to the wild roll.
-function Schema.newBrainrot(args: NewBrainrotArgs): BrainrotEntry
+function Schema.newMonster(args: NewMonsterArgs): MonsterEntry
     local element: Element
     if args.element ~= nil and ElementConfig.isValidElement(args.element) then
         element = args.element :: Element
@@ -201,7 +201,7 @@ function Schema.newBrainrot(args: NewBrainrotArgs): BrainrotEntry
 end
 
 -- Backwards-compatible alias (GDD prose references both names).
-Schema.defaultBrainrot = Schema.newBrainrot
+Schema.defaultMonster = Schema.newMonster
 
 -- Wraps a profile for durable storage (what SetAsync writes). Embeds the FENCE
 -- STAMP (ADR-002 M-2): the owning server's JobId + lock generation, for forensic
@@ -226,12 +226,12 @@ end
 -- cap check lives HERE (C5), so the rejection is part of the transaction and a
 -- caller composing debit+add never debits on a "roster_full" outcome.
 
--- Adds a Brainrot entry to `data.roster` IFF below the cap. Maintains the O(1)
+-- Adds a Monster entry to `data.roster` IFF below the cap. Maintains the O(1)
 -- `data.rosterCount` cache. Returns:
 --   (true, entry)            on success
 --   (false, "roster_full")   at the cap (E6, C5)
 --   (false, "duplicate_id")  GUID collision (effectively impossible)
-function Schema.addToRoster(data: PlayerData, entry: BrainrotEntry): (boolean, any)
+function Schema.addToRoster(data: PlayerData, entry: MonsterEntry): (boolean, any)
     if data.rosterCount >= PersistenceConfig.rosterCap then
         return false, "roster_full"
     end
@@ -243,7 +243,7 @@ function Schema.addToRoster(data: PlayerData, entry: BrainrotEntry): (boolean, a
     return true, entry
 end
 
--- Removes a Brainrot by id from `data.roster`. Maintains `data.rosterCount`.
+-- Removes a Monster by id from `data.roster`. Maintains `data.rosterCount`.
 -- Refuses to remove a fav-locked entry unless `force` is true (E6). Returns:
 --   (true, removedEntry)     on success
 --   (false, "not_found")     no such id

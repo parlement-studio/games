@@ -1,7 +1,7 @@
 --!strict
 -- Shared/Types.luau
 --
--- The authoritative persisted shapes for Brainrot Inc., per
+-- The authoritative persisted shapes for Monster Relic, per
 -- design/gdd/persistence-gdd.md (v1.2) §3. These types are shared so the
 -- client can build a READ-ONLY mirror of the player profile — there are NO
 -- secrets here (no txLog/nextSeq/lock data is part of the client mirror; the
@@ -12,8 +12,8 @@
 -- NEVER store Instances or functions in any of these shapes (DataStore
 -- serializes tables of JSON-safe scalars only).
 --
--- Canonical field names (locked, §3.6): the per-Brainrot GUID is `id`; the
--- per-Brainrot counter/provenance block is `history`. No aliases.
+-- Canonical field names (locked, §3.6): the per-Monster GUID is `id`; the
+-- per-Monster counter/provenance block is `history`. No aliases.
 
 -- Personality enum (personality-gdd §3.1). The ONLY personality data persisted;
 -- runtime state (Working/OnBreak/Walkout) is ephemeral and never stored.
@@ -32,9 +32,9 @@ export type Element = "Fire" | "Nature" | "Water" | "Volt" | "Wind"
 -- Weights/multipliers live in Shared/Config/RarityConfig.luau.
 export type Rarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
 
--- Per-Brainrot lifetime counters + capture provenance.
-export type BrainrotHistory = {
-    coins: number, -- lifetime Meme Coins this Brainrot has produced (Idle #3)
+-- Per-Monster lifetime counters + capture provenance.
+export type MonsterHistory = {
+    coins: number, -- lifetime Meme Coins this Monster has produced (Idle #3)
     rdef: number, -- raids defended (Raid #6)
     rwon: number, -- raids won (Raid #6)
     fame: number, -- fame contribution (provisioned, 0 at launch)
@@ -43,8 +43,8 @@ export type BrainrotHistory = {
     hotspotId: string, -- where it was caught (flavor + analytics)
 }
 
--- One owned Brainrot. Keyed in `roster` by its own `id` (GUID).
-export type BrainrotEntry = {
+-- One owned Monster. Keyed in `roster` by its own `id` (GUID).
+export type MonsterEntry = {
     id: string, -- GUID, minted server-side at capture; also the roster map key
     species: number, -- numeric species id (not a display name)
     personality: Personality, -- persisted enum
@@ -53,7 +53,7 @@ export type BrainrotEntry = {
     level: number, -- progression; default 1
     xp: number, -- accumulated XP; default 0
     evoStage: number, -- evolution stage; 0 = base
-    history: BrainrotHistory,
+    history: MonsterHistory,
     fav: boolean, -- favorite flag: locks from auto/bulk release
 }
 
@@ -63,7 +63,7 @@ export type Building = {
     factoryLevel: number, -- upgrade_factory level (0..30)
     workerSlotLevel: number, -- upgrade_worker_slot level (0..10)
     storageLevel: number, -- upgrade_storage level (0..12)
-    deployment: { [string]: string? }, -- tostring(slotIndex) -> Brainrot id | nil
+    deployment: { [string]: string? }, -- tostring(slotIndex) -> Monster id | nil
     walkoutCooldownUntil: number, -- os.time() the Rebel walkout cooldown ends; 0 = none
 }
 
@@ -71,7 +71,7 @@ export type Building = {
 export type BaseData = {
     buildings: { [string]: Building }, -- keyed by building id; MVP: { b1 = ... }
     pendingOnline: number, -- ONLINE pending sub-accumulator (sibling of pendingOffline.coins)
-    deployedCount: number, -- cached count of deployed Brainrots across all buildings
+    deployedCount: number, -- cached count of deployed Monsters across all buildings
 }
 
 -- Accrued-but-uncollected OFFLINE rewards (pending-collect model, §2.4).
@@ -90,7 +90,7 @@ export type PlayerStats = {
 
 -- The whole player profile (the payload inside the stored wrapper).
 export type PlayerData = {
-    roster: { [string]: BrainrotEntry }, -- map keyed by GUID
+    roster: { [string]: MonsterEntry }, -- map keyed by GUID
     rosterCount: number, -- cached count of roster entries (kept in sync)
 
     coins: number, -- Meme Coins (soft currency); server-authoritative; >= 0
@@ -152,11 +152,11 @@ export type SessionLockValue = {
     gen: number, -- monotonic ownership generation (fence token)
 }
 
--- Arguments to mint a new Brainrot (Capture supplies these; id is minted).
--- `element` is OPTIONAL: when nil, Schema.newBrainrot rolls it server-side via
+-- Arguments to mint a new Monster (Capture supplies these; id is minted).
+-- `element` is OPTIONAL: when nil, Schema.newMonster rolls it server-side via
 -- ElementConfig.rollElement (the standard capture path); a caller may supply a
 -- pre-rolled value (e.g. a deterministic test) which is validated at mint.
-export type NewBrainrotArgs = {
+export type NewMonsterArgs = {
     species: number,
     personality: Personality,
     element: Element?,
@@ -172,6 +172,6 @@ export type NewBrainrotArgs = {
 -- roster, base, and clamped elapsed seconds; the resolver returns integer coins
 -- accrued. Default (until Idle installs one) returns 0 — Persistence never
 -- fabricates economy numbers (it owns the CLOCK, not the RATES).
-export type OfflineResolver = (roster: { [string]: BrainrotEntry }, base: BaseData, elapsedSeconds: number) -> number
+export type OfflineResolver = (roster: { [string]: MonsterEntry }, base: BaseData, elapsedSeconds: number) -> number
 
 return {}

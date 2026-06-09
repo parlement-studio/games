@@ -253,7 +253,7 @@ local function backfill(data: any)
     data.settings = data.settings or {}
     data.createdAt = data.createdAt or os.time()
 
-    -- Per-Brainrot repair. The roster map key is the canonical id.
+    -- Per-Monster repair. The roster map key is the canonical id.
     for id, entry in pairs(data.roster) do
         entry.id = entry.id or id
         entry.species = entry.species or 0

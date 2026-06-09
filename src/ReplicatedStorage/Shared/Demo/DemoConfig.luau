@@ -1,11 +1,11 @@
 --!strict
 -- Shared/Demo/DemoConfig.luau
 --
--- DEMO-ONLY tunables for the "Brainrot Inc." playable vertical slice.
+-- DEMO-ONLY tunables for the "Monster Relic" playable vertical slice.
 -- This is the ROUGH PROTOTYPE config (briefing demo). It is intentionally
 -- isolated under the `Demo/` namespace and is NOT the production config — the
 -- real systems read PersonalityConfig / IdleConfig (see design/gdd/*). Values
--- here are flavored from idea/brainrotInc.md + personality-gdd + idle-production-gdd
+-- here are flavored from idea/monsterInc.md + personality-gdd + idle-production-gdd
 -- but simplified for fast iteration (in-memory state, no DataStore).
 --
 -- Every tunable is commented with a range/default per .claude/rules/config-data.md.
@@ -23,13 +23,13 @@ return {
     -- Number of factory worker slots a player has in the demo. Fixed (no
     -- upgrades in the slice). Range: 1-12 | Default: 6
     factorySlots = 6,
-    -- Coins/sec produced by ONE deployed Brainrot at baseline (before any
+    -- Coins/sec produced by ONE deployed Monster at baseline (before any
     -- personality multiplier or moment factor). Range: 0.1-100 | Default: 2
     baseRatePerSlot = 2,
     -- Crate cost in coins. FREE for the demo so players can spam-open and feel
     -- the personality variety immediately. Range: 0-1e6 | Default: 0
     crateCost = 0,
-    -- Roster cap (how many owned Brainrots before OpenCrate is refused).
+    -- Roster cap (how many owned Monsters before OpenCrate is refused).
     -- Demo guard so memory + UI lists stay sane. Range: 1-500 | Default: 30
     rosterCap = 30,
 
@@ -50,7 +50,7 @@ return {
     -- survive a crash/leave between routine autosaves. Keep this small relative to
     -- the autosave interval but well above a frame. Range: 1-10 | Default: 2
     coinFlushSec = 2,
-    -- Minimum seconds between two Moments emitted by the SAME Brainrot. Throttles
+    -- Minimum seconds between two Moments emitted by the SAME Monster. Throttles
     -- moment spam so pop-ups stay readable. Range: 1-30 | Default: 4
     momentCooldownSec = 4,
 
@@ -246,19 +246,19 @@ return {
 
     -- ── 3D SCENE DEMO ────────────────────────────────────────────────────
     -- Tunables specific to the PLAYABLE 3D-scene slice. The 5 deployed workers
-    -- are Models pre-placed in workspace, named EXACTLY `Brainrot_<P>` where
+    -- are Models pre-placed in workspace, named EXACTLY `Monster_<P>` where
     -- <P> is an UPPERCASE personality id (HYPER/LAZY/CHAOTIC/LOYAL/REBEL). The
     -- server finds them by name each tick (it does NOT manage the Workspace).
     demo3d = {
         -- Prefix + the exact in-workspace model names the server scans for. The
         -- personality is the suffix (mapped case-insensitively to personalityOrder).
-        creaturePrefix = "Brainrot_",
+        creaturePrefix = "Monster_",
         creatureNames = {
-            "Brainrot_HYPER",
-            "Brainrot_LAZY",
-            "Brainrot_CHAOTIC",
-            "Brainrot_LOYAL",
-            "Brainrot_REBEL",
+            "Monster_HYPER",
+            "Monster_LAZY",
+            "Monster_CHAOTIC",
+            "Monster_LOYAL",
+            "Monster_REBEL",
         },
         -- Name of the head part to anchor the catch prompt to. Falls back to the
         -- model PrimaryPart, then the first BasePart found. String | Default: "Head"
@@ -293,7 +293,7 @@ return {
         -- ── PLACE (pick which creature stands on a SPECIFIC empty podium) ──
         -- Every EMPTY DisplayStand carries a "Place" ProximityPrompt. Triggering
         -- it opens the place menu for THAT stand; the player taps a caught
-        -- Brainrot to deploy it there (server-authoritative). A stand has EITHER
+        -- Monster to deploy it there (server-authoritative). A stand has EITHER
         -- a Place prompt (empty) OR a Recall prompt (occupied) — never both.
         -- How long the player must HOLD the place key (ProximityPrompt
         -- HoldDuration, seconds). 0 = instant tap. Range: 0-3 | Default: 0
@@ -316,7 +316,7 @@ return {
     -- The Showroom Model lives in the Workspace (built in Studio; Argon does
     -- NOT manage Workspace). It holds N display pedestals named
     -- `<showroomStandPrefix><i>` for i = 1..showroomStandCount (e.g.
-    -- "DisplayStand1".."DisplayStand6"). A deployed Brainrot stands on TOP of a
+    -- "DisplayStand1".."DisplayStand6"). A deployed Monster stands on TOP of a
     -- free pedestal and produces coins over time. The server finds stands by
     -- name; it does NOT manage / create the Workspace geometry.
     showroom = {
@@ -326,8 +326,10 @@ return {
         -- Exact name prefix of each pedestal Part. The stand index is the
         -- numeric suffix (1..showroomStandCount). String | Default: "DisplayStand"
         showroomStandPrefix = "DisplayStand",
-        -- Name of the Showroom Model in the Workspace. String | Default: "Showroom"
-        modelName = "Showroom",
+        -- Name of the base Model in the Workspace (the "Cage" / Sanctuary base
+        -- where deployed monsters live). Renamed from "Showroom" → "Cage"
+        -- (2026-06-09). String | Default: "Cage"
+        modelName = "Cage",
         -- Vertical clearance (studs) added above the pedestal top so the placed
         -- creature's feet clear the glowing `Top` child. Range: 0-4 | Default: 0.4
         standClearanceStuds = 0.4,
@@ -385,7 +387,7 @@ return {
             -- String | Default: "KandangTerminal"
             terminalName = "KandangTerminal",
             -- Prompt strings (player-facing). ActionText | ObjectText.
-            actionText = "Open Pen",
+            actionText = "Open Sanctuary",
             objectText = "",
             -- Hold duration on the prompt (seconds). Range: 0-2 | Default: 0
             holdSec = 0,
@@ -503,8 +505,8 @@ return {
         failCooldownSec = 1.5,
     },
 
-    -- ── WILD BRAINROT AI (server-authoritative roaming) ─────────────────────
-    -- The wild creatures (Brainrot_<P>) are rigged with a Humanoid + an
+    -- ── WILD MONSTER AI (server-authoritative roaming) ─────────────────────
+    -- The wild creatures (Monster_<P>) are rigged with a Humanoid + an
     -- (invisible) HumanoidRootPart so the server can walk them via Humanoid:MoveTo.
     -- The AI keeps each one near its SPAWN ("home") so they mill around the wild
     -- area without invading the Showroom. The server OWNS this (NetworkOwner=server).
@@ -524,10 +526,10 @@ return {
         aiTickSec = 0.4,
     },
 
-    -- ── COMBAT (Tahap 2: SUMMON a fighter that auto-battles a wild Brainrot) ──
-    -- A player summons an OWNED Brainrot from their bag as a TEMPORARY field
+    -- ── COMBAT (Tahap 2: SUMMON a fighter that auto-battles a wild Monster) ──
+    -- A player summons an OWNED Monster from their bag as a TEMPORARY field
     -- FIGHTER (the bag is NOT consumed — summoning is ephemeral). The fighter
-    -- roams to the NEAREST wild `Brainrot_<P>` and auto-battles it in real time.
+    -- roams to the NEAREST wild `Monster_<P>` and auto-battles it in real time.
     -- Win = owner gets coins, the wild faints + respawns (reuses the catch path).
     -- Fighter KO = it despawns (gentle, non-destructive — never owned the bag).
     -- The Humanoid's built-in over-head health bar is the combat HP display.
@@ -544,7 +546,7 @@ return {
         -- Matches the wild MaxHealth of 100 so a Lv1 fight reads cleanly on the
         -- built-in health bar. Range: 1-1000 | Default: 100
         fighterBaseHP = 100,
-        -- Wild Brainrot Max HP (the wild Humanoid MaxHealth). Wilds are treated as
+        -- Wild Monster Max HP (the wild Humanoid MaxHealth). Wilds are treated as
         -- level 1 for now, so this is also their effective HP. Kept here for
         -- symmetry with fighterBaseHP. Range: 1-1000 | Default: 100
         wildBaseHP = 100,
@@ -560,7 +562,7 @@ return {
         combatRingRadiusStuds = 4,
         -- PET LEASH: a wild is only a valid target if it is within this distance
         -- of the OWNER PLAYER's character (HumanoidRootPart) — NOT the fighter's
-        -- position, and NOT unbounded. A summoned Brainrot behaves like a pet: it
+        -- position, and NOT unbounded. A summoned Monster behaves like a pet: it
         -- only engages wilds inside this radius centered on the player, and follows
         -- the player otherwise. Range: 8-120 | Default: 30
         detectionRangeStuds = 30,
@@ -657,9 +659,9 @@ return {
     -- XP comes ONLY from WINNING battles; LEVEL boosts ONLY combat stats
     -- (HP / ATK / damage), NEVER coin production (production stays personality-
     -- only). XP + level persist on the individual roster entry (the data fields
-    -- already exist — see Schema.newBrainrot mints level=1, xp=0).
+    -- already exist — see Schema.newMonster mints level=1, xp=0).
     progression = {
-        -- XP a fighter's specific Brainrot gains each time it defeats a wild.
+        -- XP a fighter's specific Monster gains each time it defeats a wild.
         -- Range: 1-1000 | Default: 50
         xpPerWin = 50,
         -- XP curve base. xpToNext(level) = xpCurveBase * level, so Lv1->2 = 100,
@@ -669,7 +671,7 @@ return {
         -- base * (1 + statGrowthPerLevel * (level - 1)). 0.08 = +8% per level.
         -- Range: 0.0-1.0 | Default: 0.08
         statGrowthPerLevel = 0.08,
-        -- Hard level ceiling (battle-gdd F2). A Brainrot never levels past this.
+        -- Hard level ceiling (battle-gdd F2). A Monster never levels past this.
         -- Range: 1-1000 | Default: 100
         maxLevel = 100,
     },

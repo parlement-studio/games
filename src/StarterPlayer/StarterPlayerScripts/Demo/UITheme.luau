@@ -1,7 +1,7 @@
 --!strict
 -- UITheme.luau
 --
--- Shared style tokens + tiny UI builder helpers for the Brainrot Inc. demo UI.
+-- Shared style tokens + tiny UI builder helpers for the Monster Relic demo UI.
 -- Pure presentation: colors, fonts, sizes, personality color-coding, and a few
 -- ergonomic Instance.new wrappers. No game state, no remotes.
 --

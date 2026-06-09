@@ -13,7 +13,7 @@
 --   Raid Boss  [later]  -> "Legendary"
 -- The roll therefore gives Rare+ a ZERO weight — they can never come from
 -- grass. Boss-drop paths pass the rarity string straight into
--- Schema.newBrainrot (validated, never trusted blindly).
+-- Schema.newMonster (validated, never trusted blindly).
 --
 -- POWER ORDER GUARD (R3): statMult is deliberately moderate (<= x2.0) so the
 -- hierarchy stays level (<= x8.9) > evolution (<= x2.0) >= rarity (<= x2.0)

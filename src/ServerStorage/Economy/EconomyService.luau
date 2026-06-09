@@ -1,7 +1,7 @@
 --!strict
 -- ServerStorage/Economy/EconomyService.luau
 --
--- The Economy / Currency (Meme Coins) service for Brainrot Inc., per
+-- The Economy / Currency (Meme Coins) service for Monster Relic, per
 -- design/gdd/economy-gdd.md (v1.2). SERVER-ONLY, server-authoritative. Every
 -- coin mutation in the entire game routes through award() or spend() here; no
 -- consumer touches `data.coins` or DataStoreService directly.
@@ -39,7 +39,7 @@
 --     loot via award.
 --   * Pet AI #25 owns winCoins; Economy only credits via award with the
 --     pairing-based idemKey "fcw:fighterId:wildId" (economy-gdd v1.2 §3.1).
---   * Reroll #11 owns the 24h reset state (which tier `k` a Brainrot is on);
+--   * Reroll #11 owns the 24h reset state (which tier `k` a Monster is on);
 --     Economy supplies rerollCost(k) and the spend.
 --   * Idle #3 / Persistence persist upgrade levels (factoryLevel / etc.);
 --     Economy reads `n` and supplies upgradeCost(track, n) + the spend.
@@ -182,7 +182,7 @@ function EconomyService.getSlotUnlockCost(k: number): number
     return cfg.slotUnlockCost(k)
 end
 
--- The authoritative cost of the k-th reroll on a Brainrot (k is 1-based).
+-- The authoritative cost of the k-th reroll on a Monster (k is 1-based).
 function EconomyService.getRerollCost(k: number): number
     local cfg = getEconomyConfig()
     return cfg.rerollCost(k)

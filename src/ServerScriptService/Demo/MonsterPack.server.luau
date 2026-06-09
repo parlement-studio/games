@@ -1,10 +1,10 @@
 --!strict
--- ServerScriptService/Demo/BrainrotPack.server.luau
+-- ServerScriptService/Demo/MonsterPack.server.luau
 --
--- PROTOTYPE: per-type clustered respawns ("packs") for wild Brainrots.
+-- PROTOTYPE: per-type clustered respawns ("packs") for wild Monsters.
 --
 -- The 5 personality types each get ONE pack spawn point. Each pack holds
--- `PackConfig.count` (3) brainrots of the SAME type clustered around the
+-- `PackConfig.count` (3) monsters of the SAME type clustered around the
 -- pack center. Pack members wander near their own slot, get caught via a
 -- pack-local ProximityPrompt, and respawn into the SAME slot after
 -- `PackConfig.respawnSec` (5s). The 5 pack centers are placed on a
@@ -24,10 +24,10 @@
 --
 -- SCOPE — what this script does NOT touch (intentionally):
 --   * the player's roster / inventory (catching a pack member just removes
---     the model and starts the respawn timer — no addBrainrot, no economy,
+--     the model and starts the respawn timer — no addMonster, no economy,
 --     no deploy, no combat, no persistence). The existing DemoServer catch
 --     flow is left untouched.
---   * the existing 5 wild brainrots' templates (this script snapshots its
+--   * the existing 5 wild monsters' templates (this script snapshots its
 --     OWN template store, ServerStorage.WildPackTemplates, from the live
 --     workspace models, then deletes the originals).
 --
@@ -62,6 +62,16 @@ local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("Elemen
 local CaptureConfig = require(Shared:WaitForChild("Config"):WaitForChild("CaptureConfig"))
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
 local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
+local WorldConfig = require(Shared:WaitForChild("Config"):WaitForChild("WorldConfig"))
+
+-- MULTI-PLACE GATE: the same code runs in every place; wild packs belong ONLY in
+-- the Overworld. Skip entirely in the private Sanctuary (Cage) place so no wild
+-- monsters spawn in the player's base. (Anywhere not explicitly the Sanctuary —
+-- overworld / unknown / local test — wild spawning runs as before.)
+if WorldConfig.currentPlaceKind() == "kandang" then
+    print("[Pack] Sanctuary place — wild spawning disabled")
+    return
+end
 
 -- The CollectionService tag DemoServer's summon-combat target search reads.
 -- Single decoupling point between this prototype and the combat loop.
@@ -70,7 +80,7 @@ local PACK_WILD_TAG = "PackWild"
 -- ── Personality resolution (mirrors DemoServer) ─────────────────────────────
 -- The name suffix after `creaturePrefix` is the personality (UPPERCASE in the
 -- world). Map it case-insensitively to the canonical key in personalityOrder so
--- `Brainrot_LAZY` -> "Lazy" and `Brainrot_lazy` -> "Lazy" both work.
+-- `Monster_LAZY` -> "Lazy" and `Monster_lazy` -> "Lazy" both work.
 local PREFIX = PackConfig.creaturePrefix
 local personalityByUpper: { [string]: string } = {}
 for _, key in PackConfig.personalityOrder do
@@ -129,18 +139,18 @@ for _, key in PackConfig.personalityOrder do
 end
 
 -- ── Collision group ─────────────────────────────────────────────────────────
--- The originals use the "Brainrot" collision group (added during the dynamic
--- physics pass) so brainrots do not shove each other. Re-register + mirror the
+-- The originals use the "Monster" collision group (added during the dynamic
+-- physics pass) so monsters do not shove each other. Re-register + mirror the
 -- "no self-collision" rule here so the freshly-spawned pack clones inherit the
 -- same behavior, even if the original setup is gone. Idempotent: Register errors
 -- on duplicates and we swallow the error.
 pcall(function()
-    PhysicsService:RegisterCollisionGroup("Brainrot")
+    PhysicsService:RegisterCollisionGroup("Monster")
 end)
-PhysicsService:CollisionGroupSetCollidable("Brainrot", "Brainrot", false)
+PhysicsService:CollisionGroupSetCollidable("Monster", "Monster", false)
 
 -- ── Template store ──────────────────────────────────────────────────────────
--- Snapshot each `Brainrot_<P>` from the Workspace into ServerStorage.WildPackTemplates
+-- Snapshot each `Monster_<P>` from the Workspace into ServerStorage.WildPackTemplates
 -- at boot. Strips the existing catch ProximityPrompt + the persona BillboardGui
 -- but KEEPS the Humanoid rig (so clones can walk). Idempotent — if the folder
 -- already has a template for a personality, skip. Returns the count built.
@@ -157,14 +167,19 @@ end
 
 local function buildTemplates(): number
     local folder = getTemplatesFolder()
+    -- Rig SOURCE = ServerStorage.MonsterRigs (asset-loaded prefab), not Workspace —
+    -- 3D doesn't sync across places; MonsterRigsBootstrap loads it in every place.
+    local rigs = game:GetService("ServerStorage"):WaitForChild("MonsterRigs", 30)
     local built = 0
     for _, personality in PackConfig.personalityOrder do
         if folder:FindFirstChild(personality) then
             continue -- already snapshotted (idempotent)
         end
-        local source = workspace:FindFirstChild(sourceNameFor(personality))
+        local source = rigs and rigs:FindFirstChild(sourceNameFor(personality))
         if not source or not source:IsA("Model") then
-            warn("[Pack] missing source " .. sourceNameFor(personality) .. " in Workspace; cannot template")
+            warn(
+                "[Pack] missing rig " .. sourceNameFor(personality) .. " in ServerStorage.MonsterRigs; cannot template"
+            )
             continue
         end
         local template = source:Clone()
@@ -194,7 +209,7 @@ local function buildTemplates(): number
 end
 
 -- Remove the 5 originals from the Workspace so the pack's clones are the only
--- wild brainrots the player sees. Idempotent — missing models are skipped.
+-- wild monsters the player sees. Idempotent — missing models are skipped.
 local function removeOriginals(): number
     local removed = 0
     for _, personality in PackConfig.personalityOrder do
@@ -210,7 +225,7 @@ end
 -- ── Spawn points ────────────────────────────────────────────────────────────
 -- One invisible Part per personality in `Workspace.<PackConfig.spawnFolderName>`,
 -- placed on a half-circle arc around the Showroom. Each Part is tagged with
--- `Attribute("BrainrotType", "<P>")` so the slot table can be rebuilt from the
+-- `Attribute("MonsterType", "<P>")` so the slot table can be rebuilt from the
 -- scene if needed. Returns the array of marker Parts.
 local function buildSpawnPoints(): { Part }
     -- Place a folder at the showroom so the markers are visually grouped.
@@ -225,15 +240,17 @@ local function buildSpawnPoints(): { Part }
         folder.Parent = workspace
     end
 
-    -- Arc center = Showroom pivot (Z = 26 in the current build; works for any
-    -- showroom position). If the showroom is missing, fall back to the world
-    -- origin so the prototype still runs.
+    -- Arc center = base ("Cage") pivot. If the base model is missing (e.g. it
+    -- now lives in a SEPARATE place — Sanctuary), fall back to the world origin
+    -- so the prototype still runs. (Wild spawning will migrate to the island
+    -- spawn-markers as part of the World Universe build.)
     local arcCenter: Vector3
-    local showroom = workspace:FindFirstChild("Showroom")
-    if showroom and showroom:IsA("Model") then
-        arcCenter = showroom:GetPivot().Position
+    local baseName = DemoConfig.demo3d.modelName
+    local base = workspace:FindFirstChild(baseName)
+    if base and base:IsA("Model") then
+        arcCenter = base:GetPivot().Position
     else
-        warn("[Pack] Showroom missing; falling back to (0, 0, 0) as the arc center")
+        warn(("[Pack] base '%s' missing; falling back to (0,0,0) as the arc center"):format(baseName))
         arcCenter = Vector3.zero
     end
     local arcY = arcCenter.Y + PackConfig.packCenterYOffset
@@ -257,7 +274,7 @@ local function buildSpawnPoints(): { Part }
         marker.Transparency = 1
         marker.Size = Vector3.one
         marker.CFrame = CFrame.new(pos)
-        marker:SetAttribute("BrainrotType", personality)
+        marker:SetAttribute("MonsterType", personality)
         marker.Parent = folder
         markers[#markers + 1] = marker
     end
@@ -334,7 +351,7 @@ end
 --
 -- EVERY pack wild gets: a server-side Element roll (element doc E3) stored as
 -- an attribute (combat reads it for elementMod), a Personality attribute (the
--- model name `Pack_<P>` does not match DemoServer's `Brainrot_` prefix parser),
+-- model name `Pack_<P>` does not match DemoServer's `Monster_` prefix parser),
 -- the PACK_WILD_TAG CollectionService tag (combat target discovery), and an
 -- overhead label.
 local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
@@ -363,7 +380,7 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
     clone.PrimaryPart = root
     for _, desc in clone:GetDescendants() do
         if desc:IsA("BasePart") then
-            desc.CollisionGroup = "Brainrot"
+            desc.CollisionGroup = "Monster"
         end
     end
     -- BOSS: scale the whole rig up BEFORE placement so the drop height and
@@ -412,7 +429,7 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
     local element = ElementConfig.rollElement()
     clone:SetAttribute("Element", element)
     -- Personality attribute: `Pack_<P>` / `PackBoss_<P>` names do not match
-    -- DemoServer's `Brainrot_` prefix parser, so combat reads this instead.
+    -- DemoServer's `Monster_` prefix parser, so combat reads this instead.
     clone:SetAttribute("Personality", slot.personality)
     -- Combat multipliers (read by DemoServer; default 1 when absent).
     if slot.isBoss then
@@ -636,7 +653,7 @@ end
 -- One wander step per slot, gated by the slot's own `nextMoveAt` (so each pack
 -- member pauses between moves independently). When due, pick a random point on
 -- the XZ plane within `wanderRadiusStuds` of the slot and Humanoid:MoveTo it.
--- This mirrors the existing BrainrotAI.wild loop but is keyed by slot, not by
+-- This mirrors the existing MonsterAI.wild loop but is keyed by slot, not by
 -- a top-level creature name list — so pack members are first-class roamers.
 local function stepWander(now: number)
     for _, slot in slots do
@@ -809,7 +826,7 @@ local function initPacks()
     cachedTemplateFolder = templateFolder
     local initialSpawned = 0
     for _, marker in markers do
-        local personality = marker:GetAttribute("BrainrotType")
+        local personality = marker:GetAttribute("MonsterType")
         if not personality or not isValidPersonality[personality] then
             continue
         end
