@@ -50,6 +50,24 @@ return {
     -- pack script does NOT add a label back (prototype scope). String.
     personaLabelName = "PersonaLabel",
 
+    -- ── SPAWN MARKERS (World Universe build) ─────────────────────────────
+    -- Wild spawns are now AUTHOR-PLACED: the spawner reads Parts named these
+    -- from the Workspace as spawn points (instead of the old arc around the
+    -- Cage, which now lives in a separate place). Each is hidden at boot
+    -- (Transparency=1, CanCollide/Query/Touch=false) so it never shows as a
+    -- block or blocks the rig. Personality is assigned round-robin across
+    -- personalityOrder so every type appears.
+    -- Part name = one wild SPAWN spot. String | Default: "spawn-monster"
+    spawnMarkerName = "spawn-monster",
+    -- Part name = one BOSS spot. String | Default: "boss-monster"
+    bossMarkerName = "boss-monster",
+    -- How many wild monsters spawn per spawn-monster marker (clustered as a
+    -- small triangle via slotSpreadStuds). 1 = one catchable monster per marked
+    -- spot. Range: 1-5 | Default: 1
+    monstersPerSpawnMarker = 1,
+
+    -- ── ARC LAYOUT (LEGACY — unused since the marker-driven rewrite) ─────
+    -- Kept for reference; the spawner no longer computes an arc.
     -- ── ARC LAYOUT (5 packs in a half-circle around the showroom) ────────
     -- The pack centers are placed on an arc of `arcRadiusStuds` centered on
     -- the Showroom's pivot, sweeping from `arcAngleStartDeg` to

@@ -222,63 +222,44 @@ local function removeOriginals(): number
     return removed
 end
 
--- ── Spawn points ────────────────────────────────────────────────────────────
--- One invisible Part per personality in `Workspace.<PackConfig.spawnFolderName>`,
--- placed on a half-circle arc around the Showroom. Each Part is tagged with
--- `Attribute("MonsterType", "<P>")` so the slot table can be rebuilt from the
--- scene if needed. Returns the array of marker Parts.
-local function buildSpawnPoints(): { Part }
-    -- Place a folder at the showroom so the markers are visually grouped.
-    local folder = workspace:FindFirstChild(PackConfig.spawnFolderName)
-    if folder and not folder:IsA("Folder") then
-        folder:Destroy()
-        folder = nil
-    end
-    if not folder then
-        folder = Instance.new("Folder")
-        folder.Name = PackConfig.spawnFolderName
-        folder.Parent = workspace
+-- ── Spawn markers (World Universe build) ─────────────────────────────────────
+-- Wild spawns are AUTHOR-PLACED: the level author drops Parts named
+-- `PackConfig.spawnMarkerName` ("spawn-monster") and `PackConfig.bossMarkerName`
+-- ("boss-monster") in the Workspace at the spots wilds should appear. This reads
+-- them and returns (spawnMarkers, bossMarkers). Each marker is HIDDEN at boot
+-- (invisible, non-colliding/-querying/-touching anchor) so it never shows as a
+-- block or interferes with the spawned rig. Replaces the old arc-around-the-Cage
+-- layout (the Cage now lives in a separate place, so there is no anchor here).
+local function collectSpawnMarkers(): ({ BasePart }, { BasePart })
+    local spawnMarkers: { BasePart } = {}
+    local bossMarkers: { BasePart } = {}
+    for _, d in workspace:GetDescendants() do
+        if d:IsA("BasePart") then
+            if d.Name == PackConfig.spawnMarkerName then
+                table.insert(spawnMarkers, d)
+            elseif d.Name == PackConfig.bossMarkerName then
+                table.insert(bossMarkers, d)
+            end
+        end
     end
 
-    -- Arc center = base ("Cage") pivot. If the base model is missing (e.g. it
-    -- now lives in a SEPARATE place — Sanctuary), fall back to the world origin
-    -- so the prototype still runs. (Wild spawning will migrate to the island
-    -- spawn-markers as part of the World Universe build.)
-    local arcCenter: Vector3
-    local baseName = DemoConfig.demo3d.modelName
-    local base = workspace:FindFirstChild(baseName)
-    if base and base:IsA("Model") then
-        arcCenter = base:GetPivot().Position
-    else
-        warn(("[Pack] base '%s' missing; falling back to (0,0,0) as the arc center"):format(baseName))
-        arcCenter = Vector3.zero
+    -- Hide each marker (runtime only — not persisted). Keep it anchored so its
+    -- position stays put; clear collision/query/touch so it is inert.
+    local function hide(p: BasePart)
+        p.Transparency = 1
+        p.CanCollide = false
+        p.CanQuery = false
+        p.CanTouch = false
+        p.Anchored = true
     end
-    local arcY = arcCenter.Y + PackConfig.packCenterYOffset
-
-    local markers: { Part } = {}
-    local n = #PackConfig.personalityOrder
-    local angleStart = math.rad(PackConfig.arcAngleStartDeg)
-    local angleEnd = math.rad(PackConfig.arcAngleEndDeg)
-    -- Even spacing across the arc; n=1 lands at the midpoint.
-    for i, personality in PackConfig.personalityOrder do
-        local t = if n == 1 then 0.5 else (i - 1) / (n - 1)
-        local angle = angleStart + (angleEnd - angleStart) * t
-        local offset =
-            Vector3.new(math.cos(angle) * PackConfig.arcRadiusStuds, 0, math.sin(angle) * PackConfig.arcRadiusStuds)
-        local pos = Vector3.new(arcCenter.X + offset.X, arcY, arcCenter.Z + offset.Z)
-
-        local marker = Instance.new("Part")
-        marker.Name = "PackCenter_" .. personality
-        marker.Anchored = true
-        marker.CanCollide = false
-        marker.Transparency = 1
-        marker.Size = Vector3.one
-        marker.CFrame = CFrame.new(pos)
-        marker:SetAttribute("MonsterType", personality)
-        marker.Parent = folder
-        markers[#markers + 1] = marker
+    for _, p in spawnMarkers do
+        hide(p)
     end
-    return markers
+    for _, p in bossMarkers do
+        hide(p)
+    end
+
+    return spawnMarkers, bossMarkers
 end
 
 -- ── Slot geometry ───────────────────────────────────────────────────────────
@@ -372,12 +353,20 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
         warn("[Pack] template " .. slot.personality .. " has no HumanoidRootPart")
         return nil
     end
-    root.CFrame = slot.cframe + Vector3.new(0, PackConfig.spawnDropStuds, 0)
+    -- Position the WHOLE rig rigidly via PivotTo (NOT a bare root.CFrame): the
+    -- Head hangs off the HumanoidRootPart through a WeldConstraint, which the
+    -- engine only solves on the next physics step. A bare root.CFrame leaves the
+    -- Head at its stale template position (~world origin) at the instant
+    -- RigGrounding.initialHipHeight measures the geometry below — yielding a
+    -- HipHeight of ~120 so the wild floats that high (settleToGround clamps at
+    -- ±3 and cannot recover it). PivotTo moves every part together immediately,
+    -- so the hip-height measurement sees the real, final geometry.
+    clone.PrimaryPart = root
+    clone:PivotTo(slot.cframe + Vector3.new(0, PackConfig.spawnDropStuds, 0))
 
     -- Mirror the dynamic-physics config the originals were given: collide,
     -- non-anchored, PlatformStand so they don't run, named collision group so
     -- they don't shove each other.
-    clone.PrimaryPart = root
     for _, desc in clone:GetDescendants() do
         if desc:IsA("BasePart") then
             desc.CollisionGroup = "Monster"
@@ -461,6 +450,35 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
     -- Wander is due on the next AI tick (no immediate move on spawn).
     slot.nextMoveAt = 0
     return clone
+end
+
+-- ── Ground snap ──────────────────────────────────────────────────────────────
+-- Raycast straight down to find the ground surface under a marker's XZ, so wilds
+-- land on the terrain REGARDLESS of the marker's authored Y (a marker may sit
+-- buried in a hill or float above the ground — either way the wild appears on the
+-- surface at that spot, not 120 studs in the air or wedged inside terrain).
+-- Excludes players + already-spawned pack wilds so the ray reaches the map; the
+-- markers themselves are CanQuery=false (set in collectSpawnMarkers) so they are
+-- skipped too. Falls back to the marker position if nothing is hit.
+local function surfaceCFrameAt(position: Vector3): CFrame
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    local excludes: { Instance } = {}
+    for _, p in Players:GetPlayers() do
+        if p.Character then
+            table.insert(excludes, p.Character)
+        end
+    end
+    for _, w in CollectionService:GetTagged(PACK_WILD_TAG) do
+        table.insert(excludes, w)
+    end
+    params.FilterDescendantsInstances = excludes
+    local origin = Vector3.new(position.X, position.Y + 500, position.Z)
+    local hit = workspace:Raycast(origin, Vector3.new(0, -2000, 0), params)
+    if hit then
+        return CFrame.new(hit.Position)
+    end
+    return CFrame.new(position)
 end
 
 -- ── Catch prompt ────────────────────────────────────────────────────────────
@@ -816,24 +834,39 @@ local function initPacks()
     local removed = removeOriginals()
     print(("[Pack] removed %d original wild monsters from Workspace"):format(removed))
 
-    -- 3) Pack centers on the arc
-    local markers = buildSpawnPoints()
-    print(("[Pack] %d pack centers placed on the arc"):format(#markers))
-
-    -- 4-5) Build slots + spawn initial clones + attach prompts. Cache the
-    -- template folder for the respawn loop so it does no per-tick lookups.
+    -- 3) Read author-placed spawn markers (World Universe build): each
+    -- `spawn-monster` Part = monstersPerSpawnMarker wilds; each `boss-monster`
+    -- Part = one boss. Replaces the old arc-around-the-Cage layout.
     local templateFolder = getTemplatesFolder()
     cachedTemplateFolder = templateFolder
+    local spawnMarkers, bossMarkers = collectSpawnMarkers()
+    print(("[Pack] markers found — %d spawn, %d boss"):format(#spawnMarkers, #bossMarkers))
+    if #spawnMarkers == 0 and #bossMarkers == 0 then
+        warn(
+            ("[Pack] no '%s'/'%s' markers in the Workspace — no wilds will spawn"):format(
+                PackConfig.spawnMarkerName,
+                PackConfig.bossMarkerName
+            )
+        )
+    end
+
+    -- Round-robin personality across ALL spawned wilds so every personality
+    -- appears regardless of how the markers are placed.
+    local pIndex = 0
+    local function nextPersonality(): string
+        pIndex += 1
+        return PackConfig.personalityOrder[(pIndex - 1) % #PackConfig.personalityOrder + 1]
+    end
+
     local initialSpawned = 0
-    for _, marker in markers do
-        local personality = marker:GetAttribute("MonsterType")
-        if not personality or not isValidPersonality[personality] then
-            continue
-        end
-        local slotCFrames = computeSlotCFrames(marker.CFrame, PackConfig.count)
+
+    -- 4) Minions: monstersPerSpawnMarker wilds clustered at each spawn marker,
+    -- ground-snapped so they land on the terrain under the marker's XZ.
+    for _, marker in spawnMarkers do
+        local slotCFrames = computeSlotCFrames(surfaceCFrameAt(marker.Position), PackConfig.monstersPerSpawnMarker)
         for _, slotCFrame in slotCFrames do
             local slot: Slot = {
-                personality = personality,
+                personality = nextPersonality(),
                 cframe = slotCFrame,
                 model = nil,
                 nextAt = 0, -- ready to spawn now
@@ -848,13 +881,15 @@ local function initPacks()
                 initialSpawned += 1
             end
         end
+    end
 
-        -- 👑 BOSS slot: one per pack, at the PACK CENTER (the minion triangle
-        -- rings around it). Longer respawn, no catch prompt (must be defeated).
-        if PackConfig.boss.enabled then
+    -- 5) 👑 Boss: one per boss marker. Longer respawn, no catch prompt (must be
+    -- defeated via summon combat — DemoServer reads the boss mult attributes).
+    if PackConfig.boss.enabled then
+        for _, marker in bossMarkers do
             local bossSlot: Slot = {
-                personality = personality,
-                cframe = marker.CFrame,
+                personality = nextPersonality(),
+                cframe = surfaceCFrameAt(marker.Position),
                 model = nil,
                 nextAt = 0,
                 nextMoveAt = 0,
@@ -873,10 +908,10 @@ local function initPacks()
     end
 
     print(
-        ("[Pack] ready — %d monsters (incl. %d bosses) in %d packs"):format(
+        ("[Pack] ready — %d wilds across %d spawn marker(s) + %d boss marker(s)"):format(
             initialSpawned,
-            if PackConfig.boss.enabled then #markers else 0,
-            #markers
+            #spawnMarkers,
+            #bossMarkers
         )
     )
 
