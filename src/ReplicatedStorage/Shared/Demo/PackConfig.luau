@@ -61,10 +61,18 @@ return {
     spawnMarkerName = "spawn-monster",
     -- Part name = one BOSS spot. String | Default: "boss-monster"
     bossMarkerName = "boss-monster",
-    -- How many wild monsters spawn per spawn-monster marker (clustered as a
-    -- small triangle via slotSpreadStuds). 1 = one catchable monster per marked
-    -- spot. Range: 1-5 | Default: 1
+    -- DEFAULT wild count per spawn-monster marker (clustered around the marker).
+    -- A marker can OVERRIDE this per-spot with a numeric Attribute named
+    -- `spawnCountAttribute` — in Studio: select the Part, Attributes panel, add
+    -- "Count" = 5 — so SOME spots are denser than others. Range: 1-maxPerSpawnMarker
+    -- | Default: 1
     monstersPerSpawnMarker = 1,
+    -- Attribute name read off a spawn-monster marker for its per-spot count.
+    -- Absent/invalid falls back to monstersPerSpawnMarker. String | Default: "Count"
+    spawnCountAttribute = "Count",
+    -- Hard cap on any single marker's count (guards a typo like Count=500 from
+    -- spawning a lag-bomb of rigs). Range: 1-50 | Default: 20
+    maxPerSpawnMarker = 20,
 
     -- ── ARC LAYOUT (LEGACY — unused since the marker-driven rewrite) ─────
     -- Kept for reference; the spawner no longer computes an arc.
@@ -173,6 +181,11 @@ return {
     label = {
         -- Build the overhead labels at all. Boolean | Default: true
         enabled = true,
+        -- Max camera distance (studs) the name label is visible from. Beyond
+        -- this the BillboardGui hides itself, so names only appear as the player
+        -- APPROACHES a monster instead of cluttering the whole island from afar.
+        -- Range: 15-200 | Default: 60
+        maxDistanceStuds = 60,
         -- Label height above the model's label anchor (studs). Range: 1-10 | Default: 3
         offsetYStuds = 3,
         -- Billboard size (pixels). Ranges: 60-300 x 14-60 | Defaults: 150 x 24

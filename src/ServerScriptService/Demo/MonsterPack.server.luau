@@ -268,8 +268,15 @@ end
 -- triangle is oriented so it sits on the ground (no Y component beyond the
 -- center's Y). Reused by the per-pack init pass.
 local function computeSlotCFrames(center: CFrame, count: number): { CFrame }
+    -- A single monster sits exactly ON the marker.
+    if count <= 1 then
+        return { CFrame.new(center.Position) }
+    end
     local frames: { CFrame } = {}
-    local r = PackConfig.slotSpreadStuds
+    -- Grow the ring radius with the count so a DENSER spot does not pile every
+    -- monster on one spot — spacing stays roughly constant. Small counts (<=3)
+    -- keep the original slotSpreadStuds.
+    local r = PackConfig.slotSpreadStuds * math.max(1, count / 3)
     for i = 0, count - 1 do
         -- Evenly distribute `count` slots around the pack center on the XZ plane.
         -- For 3 slots this lands at 0°, 120°, 240°; the cluster is symmetric
@@ -304,6 +311,8 @@ local function addPackLabel(anchor: BasePart, slot: Slot, element: string)
     local offsetY = labelCfg.offsetYStuds + (if slot.isBoss then labelCfg.bossExtraYStuds else 0)
     billboard.StudsOffsetWorldSpace = Vector3.new(0, offsetY, 0)
     billboard.AlwaysOnTop = true
+    -- Only show the name as the player gets near; hide it from across the island.
+    billboard.MaxDistance = labelCfg.maxDistanceStuds
     local text = Instance.new("TextLabel")
     text.BackgroundTransparency = 1
     text.Size = UDim2.fromScale(1, 1)
@@ -860,10 +869,17 @@ local function initPacks()
 
     local initialSpawned = 0
 
-    -- 4) Minions: monstersPerSpawnMarker wilds clustered at each spawn marker,
-    -- ground-snapped so they land on the terrain under the marker's XZ.
+    -- 4) Minions: clustered at each spawn marker, ground-snapped onto the terrain
+    -- under the marker's XZ. Count is per-spot: a marker's "Count" Attribute
+    -- overrides monstersPerSpawnMarker (clamped to maxPerSpawnMarker) so SOME
+    -- spots can be denser than others.
     for _, marker in spawnMarkers do
-        local slotCFrames = computeSlotCFrames(surfaceCFrameAt(marker.Position), PackConfig.monstersPerSpawnMarker)
+        local count = marker:GetAttribute(PackConfig.spawnCountAttribute)
+        if type(count) ~= "number" then
+            count = PackConfig.monstersPerSpawnMarker
+        end
+        count = math.clamp(math.floor(count), 1, PackConfig.maxPerSpawnMarker)
+        local slotCFrames = computeSlotCFrames(surfaceCFrameAt(marker.Position), count)
         for _, slotCFrame in slotCFrames do
             local slot: Slot = {
                 personality = nextPersonality(),
