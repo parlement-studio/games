@@ -310,7 +310,9 @@ local function addPackLabel(anchor: BasePart, slot: Slot, element: string)
     billboard.Size = UDim2.fromOffset(labelCfg.widthPx, labelCfg.heightPx)
     local offsetY = labelCfg.offsetYStuds + (if slot.isBoss then labelCfg.bossExtraYStuds else 0)
     billboard.StudsOffsetWorldSpace = Vector3.new(0, offsetY, 0)
-    billboard.AlwaysOnTop = true
+    -- AlwaysOnTop=false so the name is DEPTH-TESTED: it is occluded by walls /
+    -- terrain between the camera and the monster instead of showing through them.
+    billboard.AlwaysOnTop = false
     -- Only show the name as the player gets near; hide it from across the island.
     billboard.MaxDistance = labelCfg.maxDistanceStuds
     local text = Instance.new("TextLabel")

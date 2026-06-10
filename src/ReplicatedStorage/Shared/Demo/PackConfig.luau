@@ -65,8 +65,8 @@ return {
     -- A marker can OVERRIDE this per-spot with a numeric Attribute named
     -- `spawnCountAttribute` — in Studio: select the Part, Attributes panel, add
     -- "Count" = 5 — so SOME spots are denser than others. Range: 1-maxPerSpawnMarker
-    -- | Default: 1
-    monstersPerSpawnMarker = 1,
+    -- | Default: 3
+    monstersPerSpawnMarker = 3,
     -- Attribute name read off a spawn-monster marker for its per-spot count.
     -- Absent/invalid falls back to monstersPerSpawnMarker. String | Default: "Count"
     spawnCountAttribute = "Count",
@@ -107,10 +107,11 @@ return {
     spawnDropStuds = 5,
 
     -- ── WANDER (per-slot) ───────────────────────────────────────────────
-    -- How far (studs) from its SLOT a pack member may pick a wander target.
-    -- Kept small so the pack reads as a cluster, not 3 independent roamers.
-    -- Range: 1-30 | Default: 6
-    wanderRadiusStuds = 6,
+    -- How far (studs) from its SLOT a pack member may pick a wander target. The
+    -- monster roams the terrain inside this radius (Humanoid:MoveTo walks up/down
+    -- hills), so a bigger value = a wider patrol instead of circling one spot.
+    -- Range: 1-60 | Default: 20
+    wanderRadiusStuds = 20,
     -- Random pause (seconds) between reaching a target and picking the next.
     -- Re-rolled each pause completion in [min, max]. Range: 0.5-15
     wanderPauseMinSec = 1.5,
