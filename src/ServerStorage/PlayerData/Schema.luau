@@ -132,6 +132,11 @@ function Schema.default(): PlayerData
         raidsWon = 0,
         raidsDefended = 0,
 
+        -- FTUE goal checklist flags (first-hour-daily-loop-gdd §3). Additive; the
+        -- other 4 goals derive from rosterCount / deployment / factoryLevel. Old
+        -- profiles without this read as false (FtueService defaults defensively).
+        ftue = { wonDuel = false, killedBoss = false },
+
         nextSeq = 1,
         -- txLog is a MAP idempotencyKey -> small storedResult (ADR-001 C2); the
         -- parallel txLogOrder array preserves insertion order for ring-trim.

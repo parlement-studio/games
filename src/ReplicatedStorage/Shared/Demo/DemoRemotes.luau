@@ -120,6 +120,10 @@ local SERVER_TO_CLIENT = {
     -- field is omitted only by the legacy always-success path (client treats
     -- absent → success).
     "CatchCinematic",
+    -- FTUE: GoalUpdate({ goals = { {id,icon,label,done} }, allDone }) — pushes the
+    -- onboarding goal checklist (first-hour-daily-loop-gdd) on join + whenever a
+    -- goal completes. Client renders the panel and hides it once allDone.
+    "GoalUpdate",
 }
 
 local ALL_NAMES = {}
@@ -154,6 +158,7 @@ export type DemoRemotes = {
     OpenKandangMenu: RemoteEvent,
     OpenShopMenu: RemoteEvent,
     CatchCinematic: RemoteEvent,
+    GoalUpdate: RemoteEvent,
 }
 
 -- The module script instance is the parent for the RemoteEvents.

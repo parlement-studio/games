@@ -238,6 +238,96 @@ rootTrove:Add(stanceBtn.Activated:Connect(function()
     DemoRemotes.SetStance:FireServer(stanceState)
 end))
 
+-- ── FTUE GOAL CHECKLIST (top-left, below the coin HUD) ───────────────────────
+-- The new-player onboarding checklist (server pushes via GoalUpdate). Presentation
+-- only — the server owns all progress. Hidden once every goal is done.
+local ftuePanel = Instance.new("Frame")
+ftuePanel.Name = "FtuePanel"
+ftuePanel.Position = UDim2.fromOffset(12, 140)
+ftuePanel.Size = UDim2.fromOffset(252, 0)
+ftuePanel.AutomaticSize = Enum.AutomaticSize.Y
+ftuePanel.BackgroundColor3 = Color3.fromRGB(30, 33, 46)
+ftuePanel.BackgroundTransparency = 0.1
+ftuePanel.Visible = false
+ftuePanel.Parent = screen
+do
+    local ftueCorner = Instance.new("UICorner")
+    ftueCorner.CornerRadius = UDim.new(0, 12)
+    ftueCorner.Parent = ftuePanel
+    local ftueStroke = Instance.new("UIStroke")
+    ftueStroke.Color = Color3.fromRGB(12, 13, 18)
+    ftueStroke.Thickness = 2
+    ftueStroke.Parent = ftuePanel
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 10)
+    pad.PaddingBottom = UDim.new(0, 10)
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 12)
+    pad.Parent = ftuePanel
+    local list = Instance.new("UIListLayout")
+    list.FillDirection = Enum.FillDirection.Vertical
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Padding = UDim.new(0, 6)
+    list.Parent = ftuePanel
+end
+
+local ftueTitle = Instance.new("TextLabel")
+ftueTitle.LayoutOrder = 0
+ftueTitle.Size = UDim2.new(1, 0, 0, 22)
+ftueTitle.BackgroundTransparency = 1
+ftueTitle.Font = Enum.Font.GothamBold
+ftueTitle.TextSize = 16
+ftueTitle.TextColor3 = Color3.fromRGB(255, 206, 64)
+ftueTitle.TextXAlignment = Enum.TextXAlignment.Left
+ftueTitle.Text = "📋 Goals"
+ftueTitle.Parent = ftuePanel
+
+local ftueRows: { TextLabel } = {}
+
+local function renderGoals(payload: any)
+    if typeof(payload) ~= "table" or typeof(payload.goals) ~= "table" then
+        return
+    end
+    if payload.allDone == true then
+        ftuePanel.Visible = false
+        return
+    end
+    ftuePanel.Visible = true
+    local firstTodoHit = false
+    for i, g in ipairs(payload.goals) do
+        local row = ftueRows[i]
+        if not row then
+            row = Instance.new("TextLabel")
+            row.Name = "Goal" .. i
+            row.BackgroundTransparency = 1
+            row.Size = UDim2.new(1, 0, 0, 20)
+            row.Font = Enum.Font.GothamMedium
+            row.TextSize = 14
+            row.TextXAlignment = Enum.TextXAlignment.Left
+            row.TextTruncate = Enum.TextTruncate.AtEnd
+            row.Parent = ftuePanel
+            ftueRows[i] = row
+        end
+        row.LayoutOrder = i
+        row.Visible = true
+        local done = g.done == true
+        row.Text = ("%s %s %s"):format(if done then "✅" else "⬜", tostring(g.icon or ""), tostring(g.label or ""))
+        if done then
+            row.TextColor3 = Color3.fromRGB(120, 160, 130) -- completed: muted green
+        elseif not firstTodoHit then
+            firstTodoHit = true
+            row.TextColor3 = Color3.fromRGB(255, 255, 255) -- current goal: bright
+        else
+            row.TextColor3 = Color3.fromRGB(168, 176, 196) -- upcoming: dim
+        end
+    end
+    for i = #payload.goals + 1, #ftueRows do
+        ftueRows[i].Visible = false
+    end
+end
+
+rootTrove:Add(DemoRemotes.GoalUpdate.OnClientEvent:Connect(renderGoals))
+
 local function updateScale()
     local cam = workspace.CurrentCamera
     if not cam then

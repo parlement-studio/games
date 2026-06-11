@@ -56,6 +56,7 @@ local PlayerDataService = require(ServerStorage:WaitForChild("PlayerData"):WaitF
 local Schema = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("Schema"))
 local SafeZone = require(script.Parent:WaitForChild("SafeZone"))
 local GroundFollow = require(script.Parent:WaitForChild("GroundFollow"))
+local FtueService = require(script.Parent:WaitForChild("FtueService"))
 
 type Types_PlayerData = Types.PlayerData
 
@@ -1108,6 +1109,7 @@ local function handleDeployToStand(player: Player, standIndex: unknown, monsterI
 
     pushInventory(player)
     pushCoins(player)
+    FtueService.push(player) -- refresh onboarding goals (deploy1)
     print("[Deploy] " .. player.Name .. " -> " .. personality .. " stand " .. standIndex)
     -- One-time confirmation that this slot is now producing (BUG 2 visibility).
     local rate = DemoConfig.baseRatePerSlot * prodMult(personality)
@@ -1201,6 +1203,7 @@ local function handleCatch(prompt: ProximityPrompt, player: Player)
     -- The roster entry was just minted + persisted via addMonster; the bag is
     -- DERIVED fresh from the roster, so a re-push now includes the new catch.
     pushInventory(player)
+    FtueService.push(player) -- refresh onboarding goals (catch3)
 
     -- Remove the shared creature from the world, then schedule its respawn.
     model.Parent = nil
@@ -1378,6 +1381,7 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
     state.catchPity[personality] = 0 -- a catch resets the pity streak
     pushCoins(player)
     pushInventory(player)
+    FtueService.push(player) -- refresh onboarding goals (catch3)
     print(
         ("[Catch] %s caught pack %s (%s %s) — %s"):format(
             player.Name,
@@ -1581,6 +1585,10 @@ local function defeatWild(player: Player, state: PlayerState, wild: Model)
     flushCoins(player, false)
 
     wild:SetAttribute("InCombat", nil)
+
+    -- FTUE: a defeated wild = a battle win (and a boss kill if it's a 👑 boss).
+    -- Placed BEFORE the PackWild early-return below so boss kills still count.
+    FtueService.noteWin(player, wild:GetAttribute("IsBoss") == true)
 
     -- PACK WILD (incl. boss): the MonsterPack prototype owns its lifecycle —
     -- its respawn sweep sees the 0-HP corpse, arms the per-slot timer (5s
@@ -2405,6 +2413,7 @@ local function handleUpgradeKandang(player: Player)
     flushCoins(player, false)
     pushCoins(player) -- the new rate (with the bigger bonus) ships here
     pushKandang(player)
+    FtueService.push(player) -- refresh onboarding goals (upgrade1, sanctuary5)
     local bonusPct = math.floor(DemoConfig.kandang.upgrade.bonusPerLevel * 100 + 0.5)
     DemoRemotes.Moment:FireClient(player, {
         kind = "info",
@@ -2746,6 +2755,7 @@ local function hydrate(player: Player, data: Types_PlayerData)
     pushInventory(player)
     pushCoins(player)
     pushBackpack(player) -- menu Item tab initial state
+    FtueService.push(player) -- initial onboarding goal checklist
 
     -- Welcome-back Moment (only when something accrued). PAYLOAD SHAPE: there was
     -- no pre-existing client Moment handler, so we define a minimal, explicit one:

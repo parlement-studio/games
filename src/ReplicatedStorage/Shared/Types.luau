@@ -110,6 +110,11 @@ export type PlayerData = {
     raidsWon: number, -- lifetime raids won (player-level)
     raidsDefended: number, -- lifetime successful defenses (player-level)
 
+    -- FTUE goal-checklist flags (first-hour-daily-loop-gdd §3). Optional/additive:
+    -- old profiles carry nil (read defensively). The other 4 goals derive from
+    -- rosterCount / deployment / factoryLevel.
+    ftue: { wonDuel: boolean, killedBoss: boolean }?,
+
     nextSeq: number, -- monotonic mutation counter; ++ per committed mutation
     txLog: { [string]: any }, -- map idempotencyKey -> small JSON-safe storedResult; bounded to txLogMaxEntries (ADR-001 C2)
     txLogOrder: { string }, -- insertion-order list of txLog keys; drives the ring-trim eviction (oldest first)

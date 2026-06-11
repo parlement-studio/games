@@ -420,6 +420,32 @@ return {
         distance = 12,
     },
 
+    -- ── FTUE GOAL CHECKLIST (first-hour onboarding) ─────────────────────────
+    -- The 6-step goal checklist a NEW player sees (first-hour-daily-loop-gdd §6.1),
+    -- walking them through the core loop. Each goal's `done` state is DERIVED
+    -- server-side: catch3/deploy1/upgrade1/sanctuary5 from the persisted profile
+    -- (rosterCount / deployment / factoryLevel), winduel/boss1 from the two `ftue`
+    -- flags. The panel hides once every goal is done. Order = display order.
+    ftue = {
+        -- Master switch (false = no checklist). Boolean | Default: true
+        enabled = true,
+        -- Ordered goals. `id` is the stable key the server resolves; icon + label
+        -- are player-facing. Do not reorder without updating nothing else — the
+        -- server keys on `id`, not position.
+        goals = {
+            { id = "catch3", icon = "🎯", label = "Catch 3 monsters" },
+            { id = "deploy1", icon = "🏠", label = "Place a monster in your Cage" },
+            { id = "upgrade1", icon = "⬆️", label = "Upgrade your Sanctuary" },
+            { id = "winduel", icon = "⚔️", label = "Win a battle" },
+            { id = "boss1", icon = "👑", label = "Defeat a Boss" },
+            { id = "sanctuary5", icon = "🏆", label = "Reach Sanctuary Lv 5" },
+        },
+        -- catch3 completes when rosterCount reaches this. Range 1-10 | Default 3
+        catchTarget = 3,
+        -- sanctuary5 completes at this factory level. Range 1-30 | Default 5
+        sanctuaryLevelTarget = 5,
+    },
+
     -- ── CATCH CINEMATIC (client presentation on a successful catch) ─────────
     -- The server freezes the caught wild for `holdSec` and fires
     -- CatchCinematic at the catcher; the client plays: camera dolly-in →
