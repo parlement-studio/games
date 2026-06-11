@@ -74,7 +74,7 @@ function WorldService.travel(player: Player, destKey: string): boolean
 
     local def = WorldConfig.getPlace(destKey)
     if def == nil or not WorldConfig.isPlaceReady(destKey) then
-        notify(player, "Tujuan belum tersedia.")
+        notify(player, "Destination not available yet.")
         warn(
             "[WorldService] destination not ready: "
                 .. destKey
@@ -93,7 +93,7 @@ function WorldService.travel(player: Player, destKey: string): boolean
     -- from the DataStore, so an unsaved teleport = rolled-back progress.
     local saved = PlayerDataService.save(player, { force = true })
     if not saved then
-        notify(player, "Gagal menyimpan progres — coba lagi sebentar.")
+        notify(player, "Failed to save progress — try again in a moment.")
         warn("[WorldService] force-save failed pre-teleport for " .. player.Name)
         return false
     end
@@ -109,7 +109,7 @@ function WorldService.travel(player: Player, destKey: string): boolean
             return TeleportService:ReserveServer(def.placeId)
         end)
         if not okReserve or type(accessCode) ~= "string" then
-            notify(player, "Gagal menyiapkan server privat — coba lagi.")
+            notify(player, "Failed to prepare private server — try again.")
             warn("[WorldService] ReserveServer failed for " .. destKey .. ": " .. tostring(accessCode))
             return false
         end
@@ -137,7 +137,7 @@ function WorldService.travel(player: Player, destKey: string): boolean
         end
     end
 
-    notify(player, "Teleport gagal. Coba lagi sebentar.")
+    notify(player, "Teleport failed. Try again in a moment.")
     return false
 end
 

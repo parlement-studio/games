@@ -178,7 +178,7 @@ screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screen.DisplayOrder = 10
 screen.Parent = playerGui
 
--- EDGE-FLUSH layer (owner feedback: "mentokin saja kanan atas") — a SEPARATE
+-- EDGE-FLUSH layer (owner feedback: "just flush it to the top-right") — a SEPARATE
 -- ScreenGui that IGNORES the safe insets so the top bar + summon panel can sit
 -- at the absolute top-right corner of the screen. Everything else stays on the
 -- inset-respecting `screen` gui.
@@ -250,7 +250,7 @@ apply(Instance.new("TextLabel"), {
 -- TOP BAR (top right) — per the owner's layout mock: a horizontal row of
 -- launcher buttons. Inventory / Monster / Skill open the tabbed menu panel
 -- straight onto their tab; Galery / Mission are PLACEHOLDERS (visible, dimmed,
--- no handler — "taruh saja tetapi tidak perlu di-on togglenya").
+-- no handler — "just place them, no need to wire up the toggle").
 -- ════════════════════════════════════════════════════════════════════════════
 LY.TOPBAR_HEIGHT = 48
 LY.TOPBAR_BTN_WIDTH = 118
@@ -259,7 +259,7 @@ LY.TOPBAR_GAP = 12 -- breathing room between launcher buttons (owner feedback)
 local topBar = apply(Instance.new("Frame"), {
     Name = "TopBar",
     AnchorPoint = Vector2.new(1, 0),
-    -- ABSOLUTE top-right corner (owner: "mentokin saja kanan atas") — lives on
+    -- ABSOLUTE top-right corner (owner: "just flush it to the top-right") — lives on
     -- the inset-IGNORING edgeGui, so 0,0 really is the screen corner.
     Position = UDim2.fromScale(1, 0),
     Size = UDim2.fromOffset(LY.TOPBAR_BTN_WIDTH * 5 + LY.TOPBAR_GAP * 4 + 20, LY.TOPBAR_HEIGHT),
@@ -346,7 +346,7 @@ local rateLabel = apply(Instance.new("TextLabel"), {
 -- SUMMON STATUS PANEL — a SLIDE DRAWER on the right edge (owner request):
 -- closed, only a « handle shows at the screen edge; tapping it slides the
 -- panel in from the right (and the handle flips to »). The live readout
--- (nama, darah, type/elemen) reads the REPLICATED Fighter_* models directly
+-- (name, HP, type/element) reads the REPLICATED Fighter_* models directly
 -- (attributes + Humanoid HP) on a 4 Hz throttle — zero extra remote traffic.
 -- ════════════════════════════════════════════════════════════════════════════
 LY.SUMMON_PANEL_WIDTH = 230
@@ -622,7 +622,7 @@ local monsterControls = apply(Instance.new("Frame"), {
     Parent = panel,
 })
 
--- Filter chips (left): "Semua" + one circle per element.
+-- Filter chips (left): "All" + one circle per element.
 local filterRow = apply(Instance.new("Frame"), {
     Name = "Filters",
     BackgroundTransparency = 1,
@@ -665,7 +665,7 @@ for i, elementKey in ipairs(ElementConfig.order) do
     makeFilterChip(1 + i, elementKey, ElementConfig.display[elementKey].emoji, 44)
 end
 
--- Sort cycle button (right): Level ↓ -> Rarity ↓ -> Terbaru -> ...
+-- Sort cycle button (right): Level ↓ -> Rarity ↓ -> Newest -> ...
 local sortBtn = apply(Instance.new("TextButton"), {
     Name = "SortBtn",
     AnchorPoint = Vector2.new(1, 0),
@@ -2068,7 +2068,7 @@ local sheetWins = apply(Instance.new("TextLabel"), {
     TextColor3 = Color.TextDim,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Text = "🏆 0 menang",
+    Text = "🏆 0 wins",
     ZIndex = 52,
     Parent = sheetPanel,
 })
@@ -2083,7 +2083,7 @@ local sheetCoins = apply(Instance.new("TextLabel"), {
     TextColor3 = Color.Coin,
     TextScaled = true,
     TextXAlignment = Enum.TextXAlignment.Right,
-    Text = "🪙 0 dibuat",
+    Text = "🪙 0 made",
     ZIndex = 52,
     Parent = sheetPanel,
 })
@@ -2199,7 +2199,7 @@ local function openSheet(item: DemoClient.InventoryItem)
         sheetEvolve.AutoButtonColor = false
     else
         sheetEvolve.Text =
-            string.format("✨ EVOLVE ke Stage %d — %d 🪙", (item.evoStage or 0) + 1, item.evolveCost)
+            string.format("✨ EVOLVE to Stage %d — %d 🪙", (item.evoStage or 0) + 1, item.evolveCost)
         sheetEvolve.AutoButtonColor = true
         if DemoClient.getDisplayCoins() >= item.evolveCost then
             sheetEvolve.BackgroundColor3 = Color3.fromRGB(168, 85, 247) -- ready: evolution purple
@@ -2222,8 +2222,8 @@ local function openSheet(item: DemoClient.InventoryItem)
     sheetHp.Text = string.format("❤️ HP %d", item.hp)
     sheetPower.Text = string.format("⚔️ Power %d", item.power)
     sheetEffect.Text = string.format("%s %s", theme.emoji, effectLine(item.personality))
-    sheetWins.Text = string.format("🏆 %d menang", item.wins)
-    sheetCoins.Text = string.format("🪙 %d dibuat", item.coinsMade)
+    sheetWins.Text = string.format("🏆 %d wins", item.wins)
+    sheetCoins.Text = string.format("🪙 %d made", item.coinsMade)
 
     sheetBackdrop.Visible = true
 end
@@ -2254,7 +2254,7 @@ rootTrove:Add(sheetEvolve.Activated:Connect(function()
         return -- busy monsters are read-only
     end
     if item.level < (item.evolveMilestone or math.huge) then
-        return -- level-gated: inert (button already reads "terbuka di Lv N")
+        return -- level-gated: inert (button already reads "Evolve unlocks at Lv N")
     end
     print("[Evolve][ui] evolve " .. item.personality .. " id=" .. item.id)
     DemoClient.evolve(item.id)
@@ -2564,9 +2564,9 @@ DemoClient.PlaceMenuRequested:Connect(openPlaceMenu)
 -- ════════════════════════════════════════════════════════════════════════════
 -- KANDANG MENU (modal) — opened by the single F terminal at the paddock gate.
 -- Two sections in one clean panel:
---   DI KANDANG: deployed monsters — tap a row to AMBIL (recall to bag)
---   DI TAS:     bag monsters       — tap a row to TARUH (deploy to the first
---               free slot; rows show PENUH and stop responding when full)
+--   IN SANCTUARY: deployed monsters — tap a row to COLLECT (recall to bag)
+--   IN BAG:      bag monsters       — tap a row to PLACE (deploy to the first
+--               free slot; rows show FULL and stop responding when full)
 -- Server-authoritative: every tap is just an intent; the server validates and
 -- replies with a fresh snapshot (KandangUpdated) that re-renders the menu live.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -2641,7 +2641,7 @@ local kandangLvPill = apply(Instance.new("TextLabel"), {
     Parent = kandangPanel,
 }, { corner(10), padding(6) })
 
--- Capacity bar: green fill = occupied stands; centered "n/cap slot terisi".
+-- Capacity bar: green fill = occupied stands; centered "n/cap slots filled".
 local kandangCapTrack = apply(Instance.new("Frame"), {
     Name = "CapTrack",
     Position = UDim2.fromOffset(0, LY.KANDANG_CAP_TOP),
@@ -2668,7 +2668,7 @@ local kandangCapText = apply(Instance.new("TextLabel"), {
     FontFace = Font.Bold,
     TextColor3 = Color.Text,
     TextScaled = true,
-    Text = "0/6 slot terisi",
+    Text = "0/6 slots filled",
     ZIndex = 44,
     Parent = kandangCapTrack,
 }, { padding(4) })
@@ -2746,8 +2746,8 @@ local function closeKandangMenu()
     kandangRowsTrove:Clean()
 end
 
--- One section header line ("DI KANDANG — tap untuk ambil") with a small
--- colored accent strip on the left (red = ambil section, green = taruh).
+-- One section header line ("IN SANCTUARY — tap to collect") with a small
+-- colored accent strip on the left (red = collect section, green = place).
 local function kandangSection(text: string, order: number, accent: Color3?)
     local header = kandangRowsTrove:Add(apply(Instance.new("TextLabel"), {
         Name = "Section",
@@ -2778,7 +2778,7 @@ end
 
 -- One tappable row: personality emoji tile + label + action badge. The row
 -- border is tinted by RARITY (same language as the monster cards).
--- `badgeColor` nil = personality color; `onTap` nil = inert (e.g. PENUH).
+-- `badgeColor` nil = personality color; `onTap` nil = inert (e.g. FULL).
 local function kandangRow(
     order: number,
     personality: string,
@@ -2866,7 +2866,7 @@ local function renderKandang()
     local level = payload.level or 0
     kandangLvPill.Text = string.format("Lv %d", level)
     kandangCapFill.Size = UDim2.fromScale(if capacity > 0 then deployedCount / capacity else 0, 1)
-    kandangCapText.Text = string.format("%d/%d slot terisi", deployedCount, capacity)
+    kandangCapText.Text = string.format("%d/%d slots filled", deployedCount, capacity)
 
     -- Upgrade button (data-driven; the server re-validates every tap).
     local nextCost = payload.nextCost
@@ -2877,7 +2877,7 @@ local function renderKandang()
     else
         local bonusPct = math.floor((payload.bonusPerLevel or 0) * 100 + 0.5)
         kandangUpgradeBtn.Text =
-            string.format("⬆️ Upgrade ke Lv%d (+%d%% produksi) — %d 🪙", level + 1, bonusPct, nextCost)
+            string.format("⬆️ Upgrade to Lv%d (+%d%% production) — %d 🪙", level + 1, bonusPct, nextCost)
         kandangUpgradeBtn.AutoButtonColor = true
         if DemoClient.getDisplayCoins() >= nextCost then
             kandangUpgradeBtn.BackgroundColor3 = Color3.fromRGB(42, 157, 113) -- affordable: green
@@ -2892,10 +2892,10 @@ local function renderKandang()
         return order
     end
 
-    -- ── DI KANDANG ──
-    kandangSection("DI KANDANG — tap untuk ambil", nextOrder(), LY.AMBIL_COLOR)
+    -- ── IN SANCTUARY ──
+    kandangSection("IN SANCTUARY — tap to collect", nextOrder(), LY.AMBIL_COLOR)
     if deployedCount == 0 then
-        kandangSection("   (kosong — taruh monster dari tasmu)", nextOrder())
+        kandangSection("   (empty — place a monster from your bag)", nextOrder())
     end
     for _, slot in payload.deployed do
         local index = slot.index
@@ -2907,16 +2907,16 @@ local function renderKandang()
             slot.level or 1,
             rarityTag(slot.rarity)
         )
-        kandangRow(nextOrder(), slot.personality, label, "AMBIL", LY.AMBIL_COLOR, function()
+        kandangRow(nextOrder(), slot.personality, label, "COLLECT", LY.AMBIL_COLOR, function()
             DemoClient.recallDeployed(index)
         end, slot.rarity)
     end
 
-    -- ── DI TAS ──
-    kandangSection("DI TAS — tap untuk taruh", nextOrder(), LY.TARUH_COLOR)
+    -- ── IN BAG ──
+    kandangSection("IN BAG — tap to place", nextOrder(), LY.TARUH_COLOR)
     local inventory = DemoClient.Inventory
     if #inventory == 0 then
-        kandangSection("   (tas kosong — pergi tangkap monster!)", nextOrder())
+        kandangSection("   (bag empty — go catch some monsters!)", nextOrder())
     end
     local firstFree: number? = payload.free[1]
     for _, item in inventory do
@@ -2935,11 +2935,11 @@ local function renderKandang()
         if firstFree then
             local target = firstFree
             local itemId = item.id -- ID-KEYED deploy (the exact tapped monster)
-            kandangRow(nextOrder(), personality, label, "TARUH", LY.TARUH_COLOR, function()
+            kandangRow(nextOrder(), personality, label, "PLACE", LY.TARUH_COLOR, function()
                 DemoClient.deployToStand(target, itemId)
             end, item.rarity)
         else
-            kandangRow(nextOrder(), personality, label, "PENUH", nil, nil, item.rarity)
+            kandangRow(nextOrder(), personality, label, "FULL", nil, nil, item.rarity)
         end
     end
 end
@@ -2980,7 +2980,7 @@ rootTrove:Add(kandangUpgradeBtn.Activated:Connect(function()
 end))
 
 -- ════════════════════════════════════════════════════════════════════════════
--- MERCHANT SHOP (modal) — opened by the Merchant NPC's Belanja prompt.
+-- MERCHANT SHOP (modal) — opened by the Merchant NPC's Shop prompt.
 -- One item card (Capture Net) + two buy buttons. Counts ride BackpackUpdate
 -- (DemoClient.Items), prices come from the replicated CaptureConfig, and the
 -- server re-validates funds on every tap (the buttons are intents, not truth).
@@ -3143,7 +3143,7 @@ local shopBuyBundle = apply(Instance.new("TextButton"), {
     FontFace = Font.Heavy,
     TextColor3 = Color.TextOnBright,
     TextScaled = true,
-    Text = "Paket 10",
+    Text = "Bundle 10",
     ZIndex = 46,
     Parent = shopPanel,
 }, { corner(12), padding(8) })
@@ -3157,7 +3157,7 @@ local function renderShop()
     local coins = DemoClient.getDisplayCoins()
     shopOwned.Text = ("Owned: ×%d"):format(owned)
     shopBuyOne.Text = ("Buy 1 — %d 🪙"):format(netDef.price)
-    shopBuyBundle.Text = ("Paket %d — %d 🪙"):format(netDef.bundleCount, netDef.bundlePrice)
+    shopBuyBundle.Text = ("Bundle %d — %d 🪙"):format(netDef.bundleCount, netDef.bundlePrice)
     shopBuyOne.BackgroundColor3 = if coins >= netDef.price then Color3.fromRGB(42, 157, 113) else Color.SlotEmpty
     shopBuyBundle.BackgroundColor3 = if coins >= netDef.bundlePrice
         then Color3.fromRGB(42, 157, 113)
@@ -3285,7 +3285,7 @@ end
 
 rootTrove:Add(DemoRemotes.Moment.OnClientEvent:Connect(showMoment))
 
--- COMBAT (Tahap 2): show battle win/KO feedback via the SAME transient banner.
+-- COMBAT (Phase 2): show battle win/KO feedback via the SAME transient banner.
 -- DemoClient translates the BattleEvent into a banner-ready { kind, text, coins }.
 DemoClient.BattleFeedback:Connect(showMoment)
 

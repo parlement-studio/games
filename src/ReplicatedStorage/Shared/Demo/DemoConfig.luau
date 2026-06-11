@@ -376,8 +376,8 @@ return {
         -- ── KANDANG MENU (single F interaction at the gate terminal) ───────
         -- One ProximityPrompt on the `KandangTerminal` part replaces BOTH the
         -- per-plate Place prompts AND the per-monster Recall prompts: it opens
-        -- a unified menu where the player places (taruh) bag monsters into the
-        -- first free slot and recalls (ambil) deployed ones with a tap.
+        -- a unified menu where the player places bag monsters into the
+        -- first free slot and recalls (collect) deployed ones with a tap.
         menu = {
             -- Master switch: false = legacy per-plate/per-monster prompts.
             -- Boolean | Default: true
@@ -526,7 +526,7 @@ return {
         aiTickSec = 0.4,
     },
 
-    -- ── COMBAT (Tahap 2: SUMMON a fighter that auto-battles a wild Monster) ──
+    -- ── COMBAT (Phase 2: SUMMON a fighter that auto-battles a wild Monster) ──
     -- A player summons an OWNED Monster from their bag as a TEMPORARY field
     -- FIGHTER (the bag is NOT consumed — summoning is ephemeral). The fighter
     -- roams to the NEAREST wild `Monster_<P>` and auto-battles it in real time.
@@ -641,8 +641,8 @@ return {
         statMult = { 1.25, 1.5, 2.0 },
         -- Hard stage ceiling. Range: 1-3 | Default: 3
         maxStage = 3,
-        -- Extra uniform model scale at the FINAL stage only ("sedikit lebih
-        -- besar", decision doc S2 table). Range: 1.0-1.3 | Default: 1.1
+        -- Extra uniform model scale at the FINAL stage only ("slightly
+        -- bigger", decision doc S2 table). Range: 1.0-1.3 | Default: 1.1
         stage3ScaleMult = 1.1,
         -- AURA placeholder tuning per stage (ParticleEmitter on the root,
         -- color = ElementConfig.display[element].color).

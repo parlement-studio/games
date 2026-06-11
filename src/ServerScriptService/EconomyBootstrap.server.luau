@@ -18,8 +18,8 @@
 --     for HUD display; the SERVER is the price authority on every spend (§4 / E7).
 --   * SpendRejected  (S->C) — { reason: string, requested: number, code: string } —
 --     fired when a server-side spend rejects (insufficient_funds / not_loaded /
---     invalid_reason / etc.) so the UI can show a kid-friendly toast ("Meme Coins
---     tidak cukup"). NOT every error code surfaces to the client; only spend
+--     invalid_reason / etc.) so the UI can show a kid-friendly toast ("Not enough
+--     Meme Coins"). NOT every error code surfaces to the client; only spend
 --     paths route through this remote (await wiring from consumers like Reroll,
 --     Capture, Upgrades).
 --

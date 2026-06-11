@@ -27,18 +27,18 @@ return {
         kandang = {
             reserved = true,
             title = "🏡 Private Sanctuary",
-            body = "Pergi ke Sanctuary pribadimu? Base, Cage, dan koin tetap tersimpan.",
-            confirmText = "Pergi",
-            loadingText = "Menyiapkan Sanctuary pribadimu…",
+            body = "Go to your private Sanctuary? Your base, Cage, and coins stay saved.",
+            confirmText = "Go",
+            loadingText = "Preparing your private Sanctuary…",
         },
         -- The public Overworld (hunting islands). Return destination from the
         -- Sanctuary portal. Not reserved — normal shared servers.
         overworld = {
             reserved = false,
             title = "🌍 Overworld",
-            body = "Kembali ke Overworld (dunia berburu publik)?",
-            confirmText = "Kembali",
-            loadingText = "Kembali ke Overworld…",
+            body = "Return to the Overworld (public hunting world)?",
+            confirmText = "Return",
+            loadingText = "Returning to the Overworld…",
         },
     },
 
@@ -54,7 +54,7 @@ return {
         -- Name of the invisible prompt-host part the server spawns at the pivot.
         promptHostName = "SanctuaryTravelPrompt",
         -- Prompt strings (player-facing). ActionText | ObjectText.
-        actionText = "Tidur",
+        actionText = "Sleep",
         objectText = "Private Sanctuary",
         -- Hold duration on the prompt (seconds). Range: 0-2 | Default: 0.4
         holdSec = 0.4,
@@ -72,7 +72,7 @@ return {
     returnPortal = {
         -- Workspace part name the server creates / re-adopts (idempotent boot).
         name = "OverworldPortal",
-        actionText = "Pulang",
+        actionText = "Return",
         objectText = "Overworld",
         -- Hold duration (seconds). Range: 0-2 | Default: 0.4
         holdSec = 0.4,
@@ -86,7 +86,7 @@ return {
         padSize = Vector3.new(6, 1, 6),
         padColor = Color3.fromRGB(64, 156, 255),
         -- Overhead billboard text.
-        labelText = "🌍 Pulang ke Overworld",
+        labelText = "🌍 Return to the Overworld",
     },
 
     -- ── SAFETY ───────────────────────────────────────────────────────────────

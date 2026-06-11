@@ -45,8 +45,8 @@ return {
             -- Single-item price. LOCKED S4: effective catch price unchanged
             -- from the legacy coin debit. Range: 0-100000 | Default: 25
             price = 25,
-            -- Bundle: pre-commitment purchase ("beli 10 jaring dulu, baru
-            -- berburu"). Range: 2-100 | Default: 10
+            -- Bundle: pre-commitment purchase ("buy 10 nets first, then go
+            -- hunting"). Range: 2-100 | Default: 10
             bundleCount = 10,
             -- Bundle price (~10% discount vs 10 singles). LOCKED S4.
             -- Range: 0-1000000 | Default: 225

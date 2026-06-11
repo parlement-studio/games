@@ -47,7 +47,7 @@ local CLIENT_TO_SERVER = {
     "Undeploy",
     "Collect",
     "DeployToStand",
-    -- COMBAT (Tahap 2): SummonFighter(personality) — summon an OWNED Monster of
+    -- COMBAT (Phase 2): SummonFighter(personality) — summon an OWNED Monster of
     -- `personality` as a temporary field fighter that auto-battles the nearest
     -- wild. Server validates ownership + rate-limits; the bag is NOT consumed.
     "SummonFighter",
@@ -81,7 +81,7 @@ local SERVER_TO_CLIENT = {
     "InventoryUpdate",
     "CoinUpdate",
     "OpenPlaceMenu",
-    -- COMBAT (Tahap 2): BattleEvent({ kind = "win"|"ko", personality, coins? }) —
+    -- COMBAT (Phase 2): BattleEvent({ kind = "win"|"ko", personality, coins? }) —
     -- transient combat feedback. The client renders it via the SAME Moment banner
     -- (it builds a friendly text from the payload); a dedicated remote keeps the
     -- combat-feedback stream distinct from the welcome-back Moment.

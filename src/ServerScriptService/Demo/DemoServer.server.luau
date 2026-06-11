@@ -93,7 +93,7 @@ type InventoryItem = {
     evolveCost: number?, -- coins for the NEXT stage (x rarity); nil = MAX stage
     evolveMilestone: number?, -- level required for the NEXT stage; nil = MAX stage
     status: string, -- "bag" | "kandang" | "summon" — Monster-tab status icon; only "bag" is actionable
-    capturedAt: number, -- os.time() at capture (sort "Terbaru")
+    capturedAt: number, -- os.time() at capture (sort "Newest")
     level: number, -- current progression level of this Monster (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level (xpCurveBase * level)
@@ -120,7 +120,7 @@ type DeployedSlot = {
     nextMoveAt: number?,
 }
 
--- One ACTIVE summoned fighter (Tahap 2). Ephemeral field combatant — it is NOT a
+-- One ACTIVE summoned fighter (Phase 2). Ephemeral field combatant — it is NOT a
 -- bag item (summoning never consumes the bag), just a live model the combat loop
 -- drives. `model` is the rigged clone; `nextCombatAt`/`nextSeekAt` are os.clock()
 -- gates so we tick damage at combatTickSec and re-target at seekRetargetSec;
@@ -169,7 +169,7 @@ type PlayerState = {
     -- the per-second rate math never touches the profile. Authority stays in
     -- the persisted field.
     factoryLevel: number,
-    -- ── Combat (Tahap 2) ─────────────────────────────────────────────────
+    -- ── Combat (Phase 2) ─────────────────────────────────────────────────
     fighters: { FighterRecord }, -- active summoned fighters (capped at maxActiveFighters)
     -- ── Capture pity (catch-rate anti-frustration) ───────────────────────
     -- Consecutive FAILED catch attempts per personality (resets to 0 on a
@@ -193,7 +193,7 @@ local states: { [Player]: PlayerState } = {}
 -- resolves in O(1) and we only react to OUR prompts. Rebuilt on respawn.
 local promptToRecord: { [ProximityPrompt]: CreatureRecord } = {}
 
--- COMBAT (Tahap 2): reverse map Model -> CreatureRecord for the wild creatures, so
+-- COMBAT (Phase 2): reverse map Model -> CreatureRecord for the wild creatures, so
 -- the combat loop can faint+respawn a defeated wild by REUSING the existing catch
 -- path (respawnCreature needs the record). Kept in sync with the catch prompt: an
 -- entry exists exactly while the creature is present + catchable in the world.
@@ -350,7 +350,7 @@ local function addCatchPrompt(model: Instance, record: CreatureRecord): boolean
     prompt.Parent = anchor
     promptToRecord[prompt] = record
     if model:IsA("Model") then
-        modelToRecord[model] = record -- combat faint path reuses this (Tahap 2)
+        modelToRecord[model] = record -- combat faint path reuses this (Phase 2)
 
         -- ELEMENT (sandbox wiring): every wild (re)spawn ROLLS a fresh element
         -- server-side (uniform 20%, element doc E3) onto an attribute the combat
@@ -585,7 +585,7 @@ end
 -- "Hyper"). Deploy clones from this stable store, so catch/respawn never affects
 -- deploy. ServerStorage is server-only (never replicated) — safe for templates.
 local TEMPLATES_FOLDER_NAME = "MonsterTemplates"
--- COMBAT (Tahap 2): a SEPARATE template store that KEEPS the Humanoid rig (unlike
+-- COMBAT (Phase 2): a SEPARATE template store that KEEPS the Humanoid rig (unlike
 -- MonsterTemplates, which strips to a static prop). Fighters need the rig so the
 -- server can walk them (Humanoid:MoveTo) and use the built-in health bar.
 local FIGHTER_TEMPLATES_FOLDER_NAME = "FighterTemplates"
@@ -655,7 +655,7 @@ local function buildTemplates(): number
     return built
 end
 
--- ── Fighter templates (Tahap 2) ───────────────────────────────────────────
+-- ── Fighter templates (Phase 2) ───────────────────────────────────────────
 -- Find (or create) the ServerStorage folder that holds the RIGGED fighter
 -- templates (Humanoid kept, unlike the static MonsterTemplates).
 local function getFighterTemplatesFolder(): Folder
@@ -1129,8 +1129,8 @@ local function respawnCreature(record: CreatureRecord, model: Model)
             return -- already restored some other way; nothing to do
         end
         model:SetAttribute("DemoCaught", false)
-        model:SetAttribute("InCombat", nil) -- clear any stale combat flag (Tahap 2)
-        -- Restore full Health so a creature defeated in combat (Tahap 2) respawns
+        model:SetAttribute("InCombat", nil) -- clear any stale combat flag (Phase 2)
+        -- Restore full Health so a creature defeated in combat (Phase 2) respawns
         -- fresh, not at 0 HP. Harmless for the catch path (caught at full Health).
         local humanoid = model:FindFirstChildWhichIsA("Humanoid")
         if humanoid then
@@ -1292,7 +1292,7 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
                 return true
             end)
             pushBackpack(player)
-            return ("-1🕸️ (sisa %d)"):format(remaining)
+            return ("-1🕸️ (%d left)"):format(remaining)
         elseif usedFree then
             PlayerDataService.update(player, function(d)
                 d.freeCapturesRemaining = math.max(0, (d.freeCapturesRemaining or 0) - 1)
@@ -1382,7 +1382,7 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
 end
 
 -- ════════════════════════════════════════════════════════════════════════════
--- COMBAT (Tahap 2): SUMMON a fighter that auto-battles the nearest wild Monster
+-- COMBAT (Phase 2): SUMMON a fighter that auto-battles the nearest wild Monster
 -- ════════════════════════════════════════════════════════════════════════════
 local COMBAT = DemoConfig.combat
 
@@ -2157,7 +2157,7 @@ end
 -- ── KANDANG MENU (single F terminal at the paddock gate) ───────────────────
 -- One prompt replaces the per-plate Place prompts + per-monster Recall prompts.
 -- The menu is data-driven: the server snapshots the player's deployed slots +
--- free stands and the client renders taruh/ambil actions against it.
+-- free stands and the client renders place/collect actions against it.
 
 -- Build the OpenKandangMenu payload for `player` (deployed slots enriched with
 -- element/level from the authoritative roster, plus the free stand indices).
@@ -2255,7 +2255,7 @@ local function handleRequestKandang(player: Player)
     pushKandang(player)
 end
 
--- C->S: recall the monster on `standIndex` back into the bag (menu "ambil").
+-- C->S: recall the monster on `standIndex` back into the bag (menu "collect").
 local function handleRecallDeployed(player: Player, standIndex: unknown)
     local state = states[player]
     if not state then
@@ -2683,7 +2683,7 @@ local function onPlayerRemoving(player: Player)
 
     local state = states[player]
     if state then
-        -- COMBAT (Tahap 2): destroy this player's active fighters + clear any wild
+        -- COMBAT (Phase 2): destroy this player's active fighters + clear any wild
         -- they had engaged (so wander resumes for that wild). removeFighter both
         -- destroys the model and clears the engaged wild's InCombat flag.
         for i = #state.fighters, 1, -1 do
@@ -2805,7 +2805,7 @@ local function onHeartbeat(dt: number)
             flushCoins(player, false)
         end
     end
-    -- COMBAT (Tahap 2): drive active fighters at combatTickSec. The per-fighter
+    -- COMBAT (Phase 2): drive active fighters at combatTickSec. The per-fighter
     -- seek/combat gates are os.clock()-based, so this accumulator only bounds how
     -- often we sweep — actual damage cadence is owned by combatTickSec.
     combatAccum += dt
@@ -2827,7 +2827,7 @@ end
 -- Single dispatcher routes catch (wild) / recall (deployed) / place (empty) prompts.
 ProximityPromptService.PromptTriggered:Connect(onPromptTriggered)
 DemoRemotes.DeployToStand.OnServerEvent:Connect(handleDeployToStand)
--- COMBAT (Tahap 2): summon an owned Monster as a temporary auto-battling fighter.
+-- COMBAT (Phase 2): summon an owned Monster as a temporary auto-battling fighter.
 DemoRemotes.SummonFighter.OnServerEvent:Connect(handleSummon)
 -- KANDANG MENU: snapshot request + tap-to-recall + upgrade sink.
 DemoRemotes.RequestKandang.OnServerEvent:Connect(handleRequestKandang)
@@ -2869,7 +2869,7 @@ end
 local templateCount = buildTemplates()
 print("[Demo Deploy] templates ready — " .. templateCount .. " in ServerStorage." .. TEMPLATES_FOLDER_NAME)
 
--- COMBAT (Tahap 2): snapshot the RIGGED fighter templates (Humanoid kept) at boot
+-- COMBAT (Phase 2): snapshot the RIGGED fighter templates (Humanoid kept) at boot
 -- too — the wild creatures are present + rigged now, before any catch removes one.
 local fighterTemplateCount = buildFighterTemplates()
 print(

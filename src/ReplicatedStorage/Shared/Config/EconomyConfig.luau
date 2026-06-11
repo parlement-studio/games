@@ -139,9 +139,9 @@ EconomyConfig.minMutation = 1
 -- primary faucet.
 -- Each range: 0-100000 (min <= max).
 EconomyConfig.questRewards = {
-    capture_n = { min = 100, max = 200 }, -- "tangkap N Monster"
-    win_raids = { min = 150, max = 300 }, -- "menang M raid"
-    collect_x = { min = 100, max = 200 }, -- "kumpulkan X coins"
+    capture_n = { min = 100, max = 200 }, -- "catch N Monsters"
+    win_raids = { min = 150, max = 300 }, -- "win M raids"
+    collect_x = { min = 100, max = 200 }, -- "collect X coins"
     evolve_one = { min = 200, max = 350 }, -- "evolve 1 Monster" (rarer goal, higher pay)
 }
 

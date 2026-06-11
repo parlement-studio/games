@@ -101,7 +101,7 @@ cancelBtn.BackgroundColor3 = COLOR.cancel
 cancelBtn.Font = Enum.Font.GothamBold
 cancelBtn.TextSize = 18
 cancelBtn.TextColor3 = COLOR.text
-cancelBtn.Text = "Batal"
+cancelBtn.Text = "Cancel"
 cancelBtn.AutoButtonColor = true
 cancelBtn.Parent = panel
 corner(cancelBtn, 10)
@@ -115,7 +115,7 @@ confirmBtn.BackgroundColor3 = COLOR.confirm
 confirmBtn.Font = Enum.Font.GothamBold
 confirmBtn.TextSize = 18
 confirmBtn.TextColor3 = COLOR.textOnBright
-confirmBtn.Text = "Pergi"
+confirmBtn.Text = "Go"
 confirmBtn.AutoButtonColor = true
 confirmBtn.Parent = panel
 corner(confirmBtn, 10)
@@ -137,7 +137,7 @@ local function show(payload: any)
     end
     titleLabel.Text = tostring(payload.title or "Travel")
     bodyLabel.Text = tostring(payload.body or "")
-    confirmBtn.Text = tostring(payload.confirmText or "Pergi")
+    confirmBtn.Text = tostring(payload.confirmText or "Go")
     isOpen = true
     gui.Enabled = true
 end

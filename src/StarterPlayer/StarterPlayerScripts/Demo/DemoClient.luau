@@ -41,7 +41,7 @@ export type InventoryItem = {
     evolveCost: number?, -- server-computed coins for the NEXT stage; nil = MAX
     evolveMilestone: number?, -- level gate for the NEXT stage; nil = MAX
     status: string, -- "bag" | "kandang" | "summon" (list shows ALL monsters now)
-    capturedAt: number, -- capture timestamp (sort "Terbaru")
+    capturedAt: number, -- capture timestamp (sort "Newest")
     level: number, -- current progression level (>= 1)
     xp: number, -- XP banked toward the next level
     xpToNext: number, -- XP needed for the next level
@@ -60,7 +60,7 @@ export type CoinState = {
     rate: number,
 }
 
--- COMBAT (Tahap 2 + PROGRESSION): server -> client combat feedback. `kind` is
+-- COMBAT (Phase 2 + PROGRESSION): server -> client combat feedback. `kind` is
 -- "win" (the fighter defeated a wild, `coins` = coins awarded) or "ko" (the
 -- fighter fainted / timed out and returned to the bag). On a WIN, `leveledTo` is
 -- set IFF the fighter's Monster leveled up (show a "Level Up!" banner instead of
@@ -140,7 +140,7 @@ local SPEND_SNAP_HEADROOM_SEC = 1.5
 DemoClient.InventoryChanged = Signal.new()
 DemoClient.CoinsChanged = Signal.new()
 DemoClient.PlaceMenuRequested = Signal.new()
--- COMBAT (Tahap 2): fires with a banner-ready payload { kind, text, coins? } each
+-- COMBAT (Phase 2): fires with a banner-ready payload { kind, text, coins? } each
 -- time the server sends a BattleEvent (a fighter WON a fight or was KO'd). The UI
 -- shows it via the SAME transient Moment banner (no separate combat UI needed).
 DemoClient.BattleFeedback = Signal.new()
@@ -219,7 +219,7 @@ function DemoClient.init()
     end))
     print("[Shop][client] OpenShopMenu handler connected")
 
-    -- COMBAT (Tahap 2): translate a BattleEvent into a banner-ready payload and
+    -- COMBAT (Phase 2): translate a BattleEvent into a banner-ready payload and
     -- re-emit it on BattleFeedback (the UI shows it via the shared Moment banner).
     trove:Add(DemoRemotes.BattleEvent.OnClientEvent:Connect(function(payload: BattlePayload)
         if type(payload) ~= "table" or type(payload.kind) ~= "string" then
@@ -261,7 +261,7 @@ function DemoClient.requestKandang()
 end
 
 -- KANDANG MENU: recall the monster deployed on `standIndex` back into the bag
--- (menu "ambil"). Server validates ownership + rate-limits + owns the result.
+-- (menu "collect"). Server validates ownership + rate-limits + owns the result.
 function DemoClient.recallDeployed(standIndex: number)
     DemoRemotes.RecallDeployed:FireServer(standIndex)
 end
@@ -284,7 +284,7 @@ function DemoClient.buyCaptureItem(bundle: boolean)
     DemoRemotes.BuyCaptureItem:FireServer(bundle)
 end
 
--- COMBAT (Tahap 2 + PROGRESSION): summon a SPECIFIC owned Monster (by its roster
+-- COMBAT (Phase 2 + PROGRESSION): summon a SPECIFIC owned Monster (by its roster
 -- `monsterId`) as a temporary field fighter that auto-battles the nearest wild.
 -- Summoning by explicit id so XP/levels attach to the exact individual. The server
 -- validates ownership (in roster, not deployed, not already fighting) + rate-limits;

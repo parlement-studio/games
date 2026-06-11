@@ -185,7 +185,7 @@ end)
 -- Async teleport failures (after TeleportAsync returned) surface here.
 TeleportService.TeleportInitFailed:Connect(function(player: Player, _result, errorMessage: string)
     warn("[Travel] TeleportInitFailed for " .. player.Name .. ": " .. tostring(errorMessage))
-    DemoRemotes.Moment:FireClient(player, { kind = "info", text = "Teleport gagal — coba lagi sebentar." })
+    DemoRemotes.Moment:FireClient(player, { kind = "info", text = "Teleport failed — try again in a moment." })
 end)
 
 -- ── Boot (place-gated) ───────────────────────────────────────────────────────

@@ -11,7 +11,7 @@
 --
 -- SERVER-AUTHORITATIVE: NPC movement is owned entirely by the server (network
 -- owner = server, set at rig time). The client only sees the replicated motion.
--- This is the FOUNDATION for the summon-and-battle step (Tahap 2): once a
+-- This is the FOUNDATION for the summon-and-battle step (Phase 2): once a
 -- creature can walk to a point, it can walk to an opponent.
 --
 -- Isolated under Demo/. Reads DemoConfig only; independent of DemoServer (which
@@ -85,7 +85,7 @@ local function step()
         local model = workspace:FindFirstChild(creatureName)
         -- Skip a creature that is CAUGHT (unparented) OR currently ENGAGED in combat
         -- (InCombat == true). Combat owns the wild's movement while engaged; wander
-        -- resumes once the combat loop clears the InCombat attribute (Tahap 2).
+        -- resumes once the combat loop clears the InCombat attribute (Phase 2).
         if
             model
             and model:IsA("Model")
