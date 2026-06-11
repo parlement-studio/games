@@ -1751,6 +1751,15 @@ local function handleSummon(player: Player, monsterId: unknown)
     -- (pure MoveTo otherwise refuses slopes > ~45° and never jumps).
     humanoid.AutoJumpEnabled = COMBAT.autoJump
     humanoid.MaxSlopeAngle = COMBAT.maxSlopeAngle
+    -- COLLISION: a SOLID root + the shared "Monster" group so the fighter collides
+    -- with terrain/walls (no phasing through) but never shoves the player (the
+    -- Monster<->Players rule) or other monsters (Monster<->Monster=false).
+    root.CanCollide = true
+    for _, desc in fighter:GetDescendants() do
+        if desc:IsA("BasePart") then
+            desc.CollisionGroup = "Monster"
+        end
+    end
     humanoid.MaxHealth = maxHP
     humanoid.Health = maxHP
     -- GROUNDING phase 1: same rig family as the pack wilds — derive HipHeight

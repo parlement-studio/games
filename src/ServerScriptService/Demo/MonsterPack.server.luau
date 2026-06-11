@@ -406,8 +406,12 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
         -- wilds stand. (Humanoid:MoveTo also only walks when NOT
         -- PlatformStanding, so the wander AI needs this too.)
         humanoid.PlatformStand = false
-        -- MOVEMENT: climb island ramps/stairs + auto-hop small steps so wanderers
-        -- aren't trapped by terrain (pure MoveTo refuses slopes > ~45°).
+        -- MOVEMENT: a SOLID root so the rig COLLIDES with terrain/walls instead of
+        -- phasing through (Monster<->Default=true), plus climb ramps/stairs +
+        -- auto-hop small steps (pure MoveTo refuses slopes > ~45°). The
+        -- Monster<->Players collision rule keeps the solid root from shoving the
+        -- player; Monster<->Monster=false keeps blobs from jostling each other.
+        root.CanCollide = true
         humanoid.AutoJumpEnabled = DemoConfig.combat.autoJump
         humanoid.MaxSlopeAngle = DemoConfig.combat.maxSlopeAngle
         -- GROUNDING phase 1: spawn-time HipHeight from the (already scaled)
