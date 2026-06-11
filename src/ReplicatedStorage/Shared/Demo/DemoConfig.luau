@@ -538,9 +538,10 @@ return {
         -- How far (studs) IN FRONT of the summoning player the fighter spawns.
         -- Range: 2-12 | Default: 5
         summonOffsetStuds = 5,
-        -- WalkSpeed applied to a summoned fighter (a touch faster than the wild
-        -- walkSpeed=6 so it can close distance). Range: 1-24 | Default: 10
-        fighterWalkSpeed = 10,
+        -- Move speed (studs/s) of a summoned fighter — fed to GroundFollow as the
+        -- kinematic walk speed. Matched to the player (StarterPlayer.CharacterWalkSpeed
+        -- = 16) so the companion keeps pace instead of trailing. Range: 1-24 | Default: 16
+        fighterWalkSpeed = 16,
         -- Fighter Lv1 BASE Max HP (the level-1 baseline; the actual summoned HP is
         -- this scaled by progression.levelScale(level) — see PROGRESSION below).
         -- Matches the wild MaxHealth of 100 so a Lv1 fight reads cleanly on the
