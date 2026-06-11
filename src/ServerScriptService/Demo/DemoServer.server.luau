@@ -2105,6 +2105,33 @@ local combatAccum = 0
 local function stepCombat()
     local now = os.clock()
     for player, state in states do
+        -- WILD AGGRO (defense relevance): a DEFENSE-stance fighter never seeks, so a
+        -- wild that wanders within wildAggroRangeStuds "provokes" it — claim the
+        -- nearest such wild as the fighter's engaged target (the wild charges the
+        -- fighter) so acquireTarget returns it and the fighter RETALIATES. Attack-
+        -- stance fighters seek on their own, so this pass is skipped for them.
+        if state.stance == "defense" then
+            for _, record in state.fighters do
+                local fRoot = record.model and record.model.PrimaryPart
+                if fRoot then
+                    local engaged = record.engaged
+                    local stillEngaged = engaged ~= nil
+                        and engaged.Parent ~= nil
+                        and engaged:FindFirstChildWhichIsA("Humanoid") ~= nil
+                    if not stillEngaged then
+                        local wild, wildRoot = nearestWild(fRoot.Position, COMBAT.wildAggroRangeStuds)
+                        if wild and wildRoot then
+                            record.engaged = wild
+                            wild:SetAttribute("InCombat", true)
+                            local wildHumanoid = wild:FindFirstChildWhichIsA("Humanoid")
+                            if wildHumanoid then
+                                wildHumanoid:MoveTo(fRoot.Position) -- charge the fighter
+                            end
+                        end
+                    end
+                end
+            end
+        end
         local removedAny = false
         local i = #state.fighters
         while i >= 1 do

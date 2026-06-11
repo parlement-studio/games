@@ -647,6 +647,11 @@ return {
         -- retaliate against a wild that attacks them — see wild aggro). Toggled by
         -- the player via the HUD stance button. String | Default: "attack"
         defaultStance = "attack",
+        -- DEFENSE aggro range (studs): in defense stance a fighter only engages a
+        -- wild once it comes this close (the wild "provokes" + charges the fighter).
+        -- Smaller than detectionRangeStuds so a defensive fighter ignores distant
+        -- wilds and only fights ones right on top of it. Range: 6-30 | Default: 14
+        wildAggroRangeStuds = 14,
     },
 
     -- ── EVOLUTION (sink S2, decisions/2026-06-07-economy-sinks-fase0.md) ────
