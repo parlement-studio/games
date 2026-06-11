@@ -199,6 +199,45 @@ uiScale.Parent = screen
 local edgeScale = Instance.new("UIScale")
 edgeScale.Parent = edgeGui
 
+-- ── COMBAT STANCE TOGGLE (center-right HUD) ──────────────────────────────────
+-- One button cycles the player's summoned-fighter behavior between ATTACK (red,
+-- hunts wilds proactively) and DEFENSE (blue, only retaliates). Presentation +
+-- input only — the server (SetStance) owns the authoritative stance. Starts on
+-- "attack" to match DemoConfig.combat.defaultStance.
+local stanceState = "attack"
+local stanceBtn = Instance.new("TextButton")
+stanceBtn.Name = "StanceToggle"
+stanceBtn.AnchorPoint = Vector2.new(1, 0.5)
+stanceBtn.Position = UDim2.new(1, -12, 0.5, 0)
+stanceBtn.Size = UDim2.fromOffset(118, 48)
+stanceBtn.Font = Enum.Font.GothamBold
+stanceBtn.TextSize = 17
+stanceBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+stanceBtn.AutoButtonColor = true
+stanceBtn.Parent = screen
+local stanceCorner = Instance.new("UICorner")
+stanceCorner.CornerRadius = UDim.new(0, 12)
+stanceCorner.Parent = stanceBtn
+local stanceStroke = Instance.new("UIStroke")
+stanceStroke.Color = Color3.fromRGB(12, 13, 18)
+stanceStroke.Thickness = 2
+stanceStroke.Parent = stanceBtn
+local function renderStance()
+    if stanceState == "attack" then
+        stanceBtn.Text = "⚔️ ATTACK"
+        stanceBtn.BackgroundColor3 = Color3.fromRGB(240, 72, 72)
+    else
+        stanceBtn.Text = "🛡️ DEFENSE"
+        stanceBtn.BackgroundColor3 = Color3.fromRGB(64, 156, 255)
+    end
+end
+renderStance()
+rootTrove:Add(stanceBtn.Activated:Connect(function()
+    stanceState = if stanceState == "attack" then "defense" else "attack"
+    renderStance()
+    DemoRemotes.SetStance:FireServer(stanceState)
+end))
+
 local function updateScale()
     local cam = workspace.CurrentCamera
     if not cam then

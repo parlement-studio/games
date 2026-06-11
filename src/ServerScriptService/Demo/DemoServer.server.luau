@@ -175,6 +175,10 @@ type PlayerState = {
     factoryLevel: number,
     -- ── Combat (Phase 2) ─────────────────────────────────────────────────
     fighters: { FighterRecord }, -- active summoned fighters (capped at maxActiveFighters)
+    -- COMBAT STANCE: "attack" (fighters hunt wilds in range) or "defense" (fighters
+    -- only retaliate when a wild attacks). Ephemeral (per-session); defaults to
+    -- DemoConfig.combat.defaultStance, toggled via the SetStance remote.
+    stance: string,
     -- ── Capture pity (catch-rate anti-frustration) ───────────────────────
     -- Consecutive FAILED catch attempts per personality (resets to 0 on a
     -- successful catch of that personality). Session-only (not persisted) — its
@@ -1815,6 +1819,19 @@ local function handleSummon(player: Player, monsterId: unknown)
     print(("[Combat] %s summoned %s Lv%d (%d active)"):format(player.Name, personality, level, #state.fighters))
 end
 
+-- C->S: set the player's combat STANCE ("attack" | "defense"). Ephemeral
+-- (per-session). Validates the attacker-controlled arg; ignores anything else.
+local function handleSetStance(player: Player, stance: unknown)
+    local state = states[player]
+    if not state then
+        return
+    end
+    if stance ~= "attack" and stance ~= "defense" then
+        return
+    end
+    state.stance = stance
+end
+
 -- Remove a fighter record at index `i` from `state.fighters`: destroy its model,
 -- clear any wild it had engaged (so wander resumes), and swap-remove the record.
 local function removeFighter(state: PlayerState, i: number)
@@ -1833,6 +1850,25 @@ local function removeFighter(state: PlayerState, i: number)
     local n = #state.fighters
     state.fighters[i] = state.fighters[n]
     state.fighters[n] = nil
+end
+
+-- TARGET ACQUISITION (stance-aware). ATTACK: the nearest wild within the player's
+-- detection radius (proactive hunting). DEFENSE: ONLY the wild already attacking
+-- this fighter (record.engaged, set by wild aggro) — a defensive fighter never
+-- initiates, it only retaliates. Returns (wild, wildRoot) or (nil, nil).
+local function acquireTarget(state: PlayerState, record: FighterRecord, playerPos: Vector3): (Model?, BasePart?)
+    if state.stance ~= "defense" then
+        return nearestWild(playerPos, COMBAT.detectionRangeStuds)
+    end
+    local engaged = record.engaged
+    if engaged and engaged.Parent ~= nil then
+        local h = engaged:FindFirstChildWhichIsA("Humanoid")
+        local r = engaged.PrimaryPart
+        if h and h.Health > 0 and r and (r.Position - playerPos).Magnitude <= COMBAT.detectionRangeStuds then
+            return engaged, r
+        end
+    end
+    return nil, nil
 end
 
 -- One combat step for a single fighter. Returns true if the fighter should be
@@ -1919,7 +1955,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
     -- RANGE-LIMITED (only wilds within detectionRangeStuds of the player qualify).
     if now >= record.nextSeekAt then
         record.nextSeekAt = now + COMBAT.seekRetargetSec
-        local wild, wildRoot = nearestWild(playerPos, COMBAT.detectionRangeStuds)
+        local wild, wildRoot = acquireTarget(state, record, playerPos)
         if wild and wildRoot then
             local dist = (wildRoot.Position - root.Position).Magnitude
             if dist > COMBAT.attackRangeStuds then
@@ -1945,7 +1981,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
     -- walks away) yields no target here, so the fighter DISENGAGES + follows.
     if now >= record.nextCombatAt then
         record.nextCombatAt = now + COMBAT.combatTickSec
-        local wild, wildRoot = nearestWild(playerPos, COMBAT.detectionRangeStuds)
+        local wild, wildRoot = acquireTarget(state, record, playerPos)
         if not wild or not wildRoot then
             -- LEASH: nothing valid in range — disengage (clear InCombat) + follow.
             disengageAndFollow()
@@ -2623,6 +2659,7 @@ local function hydrate(player: Player, data: Types_PlayerData)
         slots = {},
         rateBuckets = {},
         fighters = {}, -- no active fighters on join (ephemeral, not persisted)
+        stance = COMBAT.defaultStance, -- combat stance (ephemeral, per-session)
         catchPity = {}, -- per-personality consecutive-fail streak (session-only)
         -- COINS-MADE: start the attribution window now so the first flush only
         -- credits production that happens AFTER hydrate (no offline double-count;
@@ -2857,6 +2894,7 @@ ProximityPromptService.PromptTriggered:Connect(onPromptTriggered)
 DemoRemotes.DeployToStand.OnServerEvent:Connect(handleDeployToStand)
 -- COMBAT (Phase 2): summon an owned Monster as a temporary auto-battling fighter.
 DemoRemotes.SummonFighter.OnServerEvent:Connect(handleSummon)
+DemoRemotes.SetStance.OnServerEvent:Connect(handleSetStance)
 -- KANDANG MENU: snapshot request + tap-to-recall + upgrade sink.
 DemoRemotes.RequestKandang.OnServerEvent:Connect(handleRequestKandang)
 DemoRemotes.RecallDeployed.OnServerEvent:Connect(handleRecallDeployed)

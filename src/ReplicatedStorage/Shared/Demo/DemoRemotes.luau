@@ -72,6 +72,11 @@ local CLIENT_TO_SERVER = {
     -- CaptureConfig.items.capture_net; server validates funds + rate-limits;
     -- persists profile.items.capture_net.
     "BuyCaptureItem",
+    -- COMBAT STANCE: SetStance(stance: "attack" | "defense") — set the player's
+    -- summoned-fighter behavior. "attack" hunts wilds proactively; "defense" only
+    -- retaliates when a wild attacks. Server validates the value; ephemeral
+    -- (per-session, not persisted).
+    "SetStance",
 }
 
 local SERVER_TO_CLIENT = {
@@ -137,6 +142,7 @@ export type DemoRemotes = {
     UpgradeKandang: RemoteEvent,
     EvolveMonster: RemoteEvent,
     BuyCaptureItem: RemoteEvent,
+    SetStance: RemoteEvent,
     StateUpdate: RemoteEvent,
     CrateOpened: RemoteEvent,
     Moment: RemoteEvent,

@@ -642,6 +642,11 @@ return {
         -- it off), ignoring the fighterLifetimeSec auto-despawn above.
         -- Boolean | Default: true
         fighterPersistent = true,
+        -- Default combat stance for a new session: "attack" (fighters proactively
+        -- hunt wilds within detectionRangeStuds) or "defense" (fighters only
+        -- retaliate against a wild that attacks them — see wild aggro). Toggled by
+        -- the player via the HUD stance button. String | Default: "attack"
+        defaultStance = "attack",
     },
 
     -- ── EVOLUTION (sink S2, decisions/2026-06-07-economy-sinks-fase0.md) ────
