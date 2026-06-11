@@ -82,7 +82,7 @@ local function setupBunkBedPrompt(): boolean
         local p = Instance.new("ProximityPrompt")
         p.ActionText = cfg.actionText
         p.ObjectText = cfg.objectText
-        p.KeyboardKeyCode = Enum.KeyCode.E
+        p.KeyboardKeyCode = Enum.KeyCode.F
         p.HoldDuration = cfg.holdSec
         p.MaxActivationDistance = cfg.distance
         p.RequiresLineOfSight = false
@@ -149,7 +149,7 @@ local function setupReturnPortal(): boolean
         local p = Instance.new("ProximityPrompt")
         p.ActionText = cfg.actionText
         p.ObjectText = cfg.objectText
-        p.KeyboardKeyCode = Enum.KeyCode.E
+        p.KeyboardKeyCode = Enum.KeyCode.F
         p.HoldDuration = cfg.holdSec
         p.MaxActivationDistance = cfg.distance
         p.RequiresLineOfSight = false

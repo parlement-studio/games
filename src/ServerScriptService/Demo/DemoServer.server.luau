@@ -948,7 +948,7 @@ local function addRecallPrompt(model: Model, player: Player, personality: string
     prompt.Name = "RecallPrompt"
     prompt.ActionText = DemoConfig.demo3d.recallActionText
     prompt.ObjectText = string.upper(personality)
-    prompt.KeyboardKeyCode = Enum.KeyCode.E
+    prompt.KeyboardKeyCode = Enum.KeyCode.F
     prompt.HoldDuration = DemoConfig.demo3d.recallHoldSec
     prompt.MaxActivationDistance = DemoConfig.demo3d.recallDistance
     prompt.RequiresLineOfSight = false
