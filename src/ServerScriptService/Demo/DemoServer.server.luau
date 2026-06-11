@@ -1725,6 +1725,10 @@ local function handleSummon(player: Player, monsterId: unknown)
     -- PROGRESSION: derive Max HP from level + rarity + evolution (F2/R3/S2).
     local maxHP = fighterMaxHP(level, rarity, evoStage)
     humanoid.WalkSpeed = COMBAT.fighterWalkSpeed
+    -- MOVEMENT: let the fighter climb island ramps/stairs + auto-hop small steps
+    -- (pure MoveTo otherwise refuses slopes > ~45° and never jumps).
+    humanoid.AutoJumpEnabled = COMBAT.autoJump
+    humanoid.MaxSlopeAngle = COMBAT.maxSlopeAngle
     humanoid.MaxHealth = maxHP
     humanoid.Health = maxHP
     -- GROUNDING phase 1: same rig family as the pack wilds — derive HipHeight

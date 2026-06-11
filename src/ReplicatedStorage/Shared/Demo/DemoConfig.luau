@@ -619,6 +619,16 @@ return {
         -- so a Hyper fighter hits ~1.3x and a Lazy one ~0.5x (reuses the existing
         -- production multiplier as a combat flavor knob). Boolean | Default: true
         personalityDamageScales = true,
+        -- ── MOVEMENT (stairs / island slopes) ───────────────────────────────
+        -- Summoned fighters AND wilds path with Humanoid:MoveTo (no navmesh). By
+        -- default a Humanoid refuses slopes steeper than ~45° and never hops a
+        -- ledge, so blobs get stuck at stairs / island ramps. These two knobs let
+        -- them climb + auto-hop small steps without a full PathfindingService pass.
+        -- Auto-hop small ledges/steps. Boolean | Default: true
+        autoJump = true,
+        -- Max walkable slope angle (degrees). 89 ≈ near-vertical; 75 climbs steep
+        -- island ramps + most stairs while still refusing walls. Range: 45-89 | Default: 75
+        maxSlopeAngle = 75,
     },
 
     -- ── EVOLUTION (sink S2, decisions/2026-06-07-economy-sinks-fase0.md) ────

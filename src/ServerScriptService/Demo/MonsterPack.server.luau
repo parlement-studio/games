@@ -406,6 +406,10 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
         -- wilds stand. (Humanoid:MoveTo also only walks when NOT
         -- PlatformStanding, so the wander AI needs this too.)
         humanoid.PlatformStand = false
+        -- MOVEMENT: climb island ramps/stairs + auto-hop small steps so wanderers
+        -- aren't trapped by terrain (pure MoveTo refuses slopes > ~45°).
+        humanoid.AutoJumpEnabled = DemoConfig.combat.autoJump
+        humanoid.MaxSlopeAngle = DemoConfig.combat.maxSlopeAngle
         -- GROUNDING phase 1: spawn-time HipHeight from the (already scaled)
         -- geometry so the blob lands near the floor instead of hovering
         -- ~0.75 studs (boss: ~1.5 after 2x scale) in the air. Phase 2
