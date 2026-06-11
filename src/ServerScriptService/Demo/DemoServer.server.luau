@@ -54,6 +54,7 @@ local EconomyConfig = require(Shared:WaitForChild("Config"):WaitForChild("Econom
 local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("RarityConfig"))
 local PlayerDataService = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("PlayerDataService"))
 local Schema = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("Schema"))
+local SafeZone = require(script.Parent:WaitForChild("SafeZone"))
 
 type Types_PlayerData = Types.PlayerData
 
@@ -148,6 +149,9 @@ type FighterRecord = {
     -- (os.clock() deadline in `jitterAt`) so idle following shuffles subtly.
     jitterOffset: Vector3,
     jitterAt: number,
+    -- RECALL: set true when the player re-summons this Monster (toggle off); the
+    -- combat loop despawns it on the next tick WITHOUT a KO banner.
+    recalled: boolean?,
 }
 
 type PlayerState = {
@@ -1652,6 +1656,16 @@ local function handleSummon(player: Player, monsterId: unknown)
     if type(monsterId) ~= "string" then
         return
     end
+    -- RECALL (toggle): if this Monster is ALREADY a live fighter, re-summoning it
+    -- pulls it back — flag it for removal on the next combat tick (despawn model +
+    -- free the Monster to the bag). Allowed ANYWHERE; exempt from the cap + safe
+    -- zone gates below, which only apply to a brand-new summon.
+    for _, record in state.fighters do
+        if record.monsterId == monsterId then
+            record.recalled = true
+            return
+        end
+    end
     -- Cap: bound active fighters per player.
     if #state.fighters >= COMBAT.maxActiveFighters then
         return
@@ -1674,13 +1688,6 @@ local function handleSummon(player: Player, monsterId: unknown)
             end
         end
     end
-    -- NOT ALREADY FIGHTING: the id must not be linked to a live fighter.
-    for _, record in state.fighters do
-        if record.monsterId == monsterId then
-            return -- already summoned; reject
-        end
-    end
-
     local personality = entry.personality
     local level = entry.level
     -- ELEMENT: snapshot from the authoritative entry (rolled at capture mint,
@@ -1695,6 +1702,17 @@ local function handleSummon(player: Player, monsterId: unknown)
     local character = player.Character
     local charRoot = character and character:FindFirstChild("HumanoidRootPart")
     if not charRoot or not charRoot:IsA("BasePart") then
+        return
+    end
+
+    -- SAFE ZONE: a NEW summon is only allowed inside a safe zone (the whole
+    -- Sanctuary is safe). Out of zone → refuse with a toast. Recall above is
+    -- exempt, so a fighter can always be pulled back in the field.
+    if COMBAT.summonRequiresSafeZone and not SafeZone.contains(charRoot.Position) then
+        DemoRemotes.Moment:FireClient(player, {
+            kind = "info",
+            text = "🛡️ You can only summon inside a Safe Zone (Hunter Camp).",
+        })
         return
     end
 
@@ -1821,8 +1839,14 @@ end
 -- REMOVED (KO'd, despawned, or its model vanished). Drives seek -> engage ->
 -- exchange-damage, and the win/respawn on a wild defeat.
 local function stepFighter(player: Player, state: PlayerState, record: FighterRecord, now: number): boolean
-    -- Lifetime auto-despawn (keeps the field clean).
-    if now >= record.despawnAt then
+    -- RECALL: the player re-summoned this Monster — pull it back silently (no KO
+    -- banner; the bag was never consumed). The loop removes it on this tick.
+    if record.recalled then
+        return true
+    end
+    -- Lifetime auto-despawn (keeps the field clean). SKIPPED when fighters are
+    -- PERSISTENT companions — they only leave on death or recall.
+    if not COMBAT.fighterPersistent and now >= record.despawnAt then
         DemoRemotes.BattleEvent:FireClient(player, { kind = "ko", personality = record.personality })
         return true
     end

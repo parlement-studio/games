@@ -629,6 +629,19 @@ return {
         -- Max walkable slope angle (degrees). 89 ≈ near-vertical; 75 climbs steep
         -- island ramps + most stairs while still refusing walls. Range: 45-89 | Default: 75
         maxSlopeAngle = 75,
+        -- ── SAFE ZONE / SUMMON GATING ───────────────────────────────────────
+        -- CollectionService tag marking a Workspace BasePart as a safe zone (the
+        -- Hunter Camp, merchant area, checkpoints). Monsters may only be SUMMONED
+        -- inside one; the whole Sanctuary place is implicitly safe. String.
+        safeZoneTag = "SafeZone",
+        -- When true, a NEW summon is refused outside a safe zone (recall is always
+        -- allowed, anywhere). Boolean | Default: true
+        summonRequiresSafeZone = true,
+        -- When true, a summoned fighter is a PERSISTENT companion: it follows the
+        -- player until it dies or is recalled (re-summoning the same Monster toggles
+        -- it off), ignoring the fighterLifetimeSec auto-despawn above.
+        -- Boolean | Default: true
+        fighterPersistent = true,
     },
 
     -- ── EVOLUTION (sink S2, decisions/2026-06-07-economy-sinks-fase0.md) ────
