@@ -62,6 +62,7 @@ local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("Elemen
 local CaptureConfig = require(Shared:WaitForChild("Config"):WaitForChild("CaptureConfig"))
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
 local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
+local GroundFollow = require(script.Parent:WaitForChild("GroundFollow"))
 local WorldConfig = require(Shared:WaitForChild("Config"):WaitForChild("WorldConfig"))
 
 -- MULTI-PLACE GATE: the same code runs in every place; wild packs belong ONLY in
@@ -406,14 +407,6 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
         -- wilds stand. (Humanoid:MoveTo also only walks when NOT
         -- PlatformStanding, so the wander AI needs this too.)
         humanoid.PlatformStand = false
-        -- MOVEMENT: a SOLID root so the rig COLLIDES with terrain/walls instead of
-        -- phasing through (Monster<->Default=true), plus climb ramps/stairs +
-        -- auto-hop small steps (pure MoveTo refuses slopes > ~45°). The
-        -- Monster<->Players collision rule keeps the solid root from shoving the
-        -- player; Monster<->Monster=false keeps blobs from jostling each other.
-        root.CanCollide = true
-        humanoid.AutoJumpEnabled = DemoConfig.combat.autoJump
-        humanoid.MaxSlopeAngle = DemoConfig.combat.maxSlopeAngle
         -- GROUNDING phase 1: spawn-time HipHeight from the (already scaled)
         -- geometry so the blob lands near the floor instead of hovering
         -- ~0.75 studs (boss: ~1.5 after 2x scale) in the air. Phase 2
@@ -460,10 +453,14 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
     end)
 
     clone.Parent = workspace
-    -- GROUNDING phase 2: after the drop settles, measure the real remaining
-    -- hover gap with a monster-transparent raycast and remove it.
+    -- KINEMATIC GROUND-FOLLOW: anchor + drive this rig by code so it rides up any
+    -- ramp/stairs by hugging the terrain (the minimal blob rig can't climb with the
+    -- physics Humanoid). Replaces Humanoid:MoveTo for wander + combat movement; the
+    -- per-frame ground raycast also makes the spawn-drop + grounding pass moot, but
+    -- they stay harmless (HipHeight no-ops on an anchored root).
     if humanoid then
-        RigGrounding.settleToGround(clone, humanoid)
+        local moveSpeed = PackConfig.walkSpeed * (if slot.isBoss then PackConfig.boss.walkSpeedMult else 1)
+        GroundFollow.attach(clone, root, moveSpeed)
     end
     slot.model = clone
     -- Wander is due on the next AI tick (no immediate move on spawn).
@@ -723,7 +720,7 @@ local function stepWander(now: number)
         local angle = math.random() * math.pi * 2
         local dist = math.sqrt(math.random()) * radius
         local target = slot.cframe.Position + Vector3.new(math.cos(angle) * dist, 0, math.sin(angle) * dist)
-        humanoid:MoveTo(target)
+        GroundFollow.setTarget(model, target)
         -- Re-arm the per-slot pause so this member does not move every tick.
         local pause = PackConfig.wanderPauseMinSec
             + math.random() * (PackConfig.wanderPauseMaxSec - PackConfig.wanderPauseMinSec)

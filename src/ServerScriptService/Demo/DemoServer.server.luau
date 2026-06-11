@@ -55,6 +55,7 @@ local RarityConfig = require(Shared:WaitForChild("Config"):WaitForChild("RarityC
 local PlayerDataService = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("PlayerDataService"))
 local Schema = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("Schema"))
 local SafeZone = require(script.Parent:WaitForChild("SafeZone"))
+local GroundFollow = require(script.Parent:WaitForChild("GroundFollow"))
 
 type Types_PlayerData = Types.PlayerData
 
@@ -1747,19 +1748,6 @@ local function handleSummon(player: Player, monsterId: unknown)
     -- PROGRESSION: derive Max HP from level + rarity + evolution (F2/R3/S2).
     local maxHP = fighterMaxHP(level, rarity, evoStage)
     humanoid.WalkSpeed = COMBAT.fighterWalkSpeed
-    -- MOVEMENT: let the fighter climb island ramps/stairs + auto-hop small steps
-    -- (pure MoveTo otherwise refuses slopes > ~45° and never jumps).
-    humanoid.AutoJumpEnabled = COMBAT.autoJump
-    humanoid.MaxSlopeAngle = COMBAT.maxSlopeAngle
-    -- COLLISION: a SOLID root + the shared "Monster" group so the fighter collides
-    -- with terrain/walls (no phasing through) but never shoves the player (the
-    -- Monster<->Players rule) or other monsters (Monster<->Monster=false).
-    root.CanCollide = true
-    for _, desc in fighter:GetDescendants() do
-        if desc:IsA("BasePart") then
-            desc.CollisionGroup = "Monster"
-        end
-    end
     humanoid.MaxHealth = maxHP
     humanoid.Health = maxHP
     -- GROUNDING phase 1: same rig family as the pack wilds — derive HipHeight
@@ -1795,13 +1783,12 @@ local function handleSummon(player: Player, monsterId: unknown)
         fighter:ScaleTo(fighter:GetScale() * EVOLUTION.stage3ScaleMult)
     end
     addEvoAura(fighter, element, evoStage)
-    -- GROUNDING phase 2: measure + remove the residual pose gap once settled.
-    RigGrounding.settleToGround(fighter, humanoid)
 
-    -- Server-authoritative motion: claim network ownership (root is unanchored).
-    pcall(function()
-        root:SetNetworkOwner(nil)
-    end)
+    -- KINEMATIC GROUND-FOLLOW: anchor + drive the fighter by code so it hugs the
+    -- terrain (rides up any ramp/stairs the player climbs). Replaces Humanoid:MoveTo
+    -- for follow/seek/combat; the per-frame ground raycast makes the old grounding
+    -- pass + network-owner handoff unnecessary.
+    GroundFollow.attach(fighter, root, COMBAT.fighterWalkSpeed)
 
     local now = os.clock()
     local record: FighterRecord = {
@@ -1957,7 +1944,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
         if (slotPos - root.Position).Magnitude <= COMBAT.followStopStuds then
             return -- already at its formation slot: idle (no new MoveTo)
         end
-        humanoid:MoveTo(slotPos)
+        GroundFollow.setTarget(model, slotPos)
     end
 
     -- SEEK: (re)find the nearest wild on the seek cadence — PLAYER-CENTERED +
@@ -1977,7 +1964,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                 end
                 record.engaged = nil
                 local slotPos = combatRingSlot(state, record, wildRoot.Position, root.Position.Y)
-                humanoid:MoveTo(slotPos)
+                GroundFollow.setTarget(model, slotPos)
             end
         else
             -- No valid wild in the player's radius: FOLLOW the player (leash).
@@ -2003,7 +1990,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                     -- it via InCombat) and is told to hold position.
                     wild:SetAttribute("InCombat", true)
                     record.engaged = wild
-                    wildHumanoid:MoveTo(wildRoot.Position)
+                    GroundFollow.setTarget(wild, wildRoot.Position)
 
                     -- RING SLOT: settle at this fighter's DISTINCT slot beside the
                     -- wild rather than stacking on its exact position. The deadzone
@@ -2013,7 +2000,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                     -- in range), independent of this movement.
                     local slotPos = combatRingSlot(state, record, wildRoot.Position, root.Position.Y)
                     if (slotPos - root.Position).Magnitude > COMBAT.followStopStuds then
-                        humanoid:MoveTo(slotPos)
+                        GroundFollow.setTarget(model, slotPos)
                     end
 
                     -- PACK WILDS carry a Personality attribute (their `Pack_<P>`
@@ -2134,7 +2121,7 @@ local function stepCombat()
                             wild:SetAttribute("InCombat", true)
                             local wildHumanoid = wild:FindFirstChildWhichIsA("Humanoid")
                             if wildHumanoid then
-                                wildHumanoid:MoveTo(fRoot.Position) -- charge the fighter
+                                GroundFollow.setTarget(wild, fRoot.Position) -- charge the fighter
                             end
                         end
                     end

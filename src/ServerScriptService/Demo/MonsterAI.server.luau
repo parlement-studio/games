@@ -25,6 +25,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local DemoFolder = Shared:WaitForChild("Demo")
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
 local WorldConfig = require(Shared:WaitForChild("Config"):WaitForChild("WorldConfig"))
+local GroundFollow = require(script.Parent:WaitForChild("GroundFollow"))
 
 -- MULTI-PLACE GATE: wild roaming AI belongs ONLY in the Overworld; skip in the
 -- private Sanctuary place (no wild creatures there).
@@ -95,8 +96,12 @@ local function step()
             local state = ensureState(model)
             if state then
                 local humanoid = model:FindFirstChildWhichIsA("Humanoid")
-                if humanoid and humanoid.Health > 0 and now >= state.nextAt then
-                    humanoid:MoveTo(randomTarget(state.home))
+                local root = model.PrimaryPart
+                if humanoid and root and humanoid.Health > 0 and now >= state.nextAt then
+                    -- Kinematic ground-follow: attach (idempotent; re-attaches after
+                    -- a catch/respawn prune) then hand it a fresh wander target.
+                    GroundFollow.attach(model, root, WILD.walkSpeed)
+                    GroundFollow.setTarget(model, randomTarget(state.home))
                     local pause = WILD.wanderPauseMinSec
                         + math.random() * (WILD.wanderPauseMaxSec - WILD.wanderPauseMinSec)
                     state.nextAt = now + pause
