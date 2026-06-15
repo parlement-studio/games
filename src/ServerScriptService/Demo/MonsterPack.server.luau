@@ -556,6 +556,10 @@ local function handlePackCatchFail(slot: Slot, player: Player, element: any)
         humanoid.WalkSpeed = 0
         humanoid.AutoRotate = false
     end
+    -- Movement is kinematic (GroundFollow), so WalkSpeed=0 alone does NOT hold the
+    -- wild — the Heartbeat driver keeps walking it toward its last target. Pin it in
+    -- place for the fail cinematic; the wander loop re-issues a target post-cooldown.
+    GroundFollow.stop(model)
 
     local cine = DemoConfig.catchCinematic
     if cine and cine.enabled then
@@ -656,6 +660,10 @@ local function handlePackCatch(prompt: ProximityPrompt, player: Player)
             humanoid.WalkSpeed = 0
             humanoid.AutoRotate = false
         end
+        -- Hand the model off to the client cinematic: detach from the kinematic
+        -- driver so the server stops rewriting root.CFrame every Heartbeat (which
+        -- would fight the suck-in/shrink) before we anchor the parts below.
+        GroundFollow.detach(caughtModel)
         for _, desc in caughtModel:GetDescendants() do
             if desc:IsA("ProximityPrompt") or desc:IsA("BillboardGui") then
                 desc:Destroy()
