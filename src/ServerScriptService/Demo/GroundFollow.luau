@@ -43,9 +43,13 @@ type Entry = {
 local entries: { [Model]: Entry } = {}
 
 -- ── Tuning ───────────────────────────────────────────────────────────────────
-local RAY_UP = 8 -- start the ground ray this far ABOVE the root
-local RAY_LEN = 64 -- how far down to search for ground
+local RAY_UP = 8 -- start the ground ray this far ABOVE the root (and the target)
+local RAY_LEN = 64 -- how far down to search for ground BELOW the rig's own feet
 local ARRIVE = 1.0 -- within this XZ distance the rig is "there" (stops moving)
+-- Max studs/s the rig rises when stepping onto higher ground (smooths the climb up
+-- a cliff face into the target's plateau instead of teleporting the whole height in
+-- one frame).
+local CLIMB_SPEED = 60
 
 -- ── Ground ray filter ────────────────────────────────────────────────────────
 -- Ignore player characters; creature parts are CanCollide=false (set on attach)
@@ -150,12 +154,28 @@ RunService.Heartbeat:Connect(function(dt: number)
                 e.facing = faceDir
             end
 
-            -- VERTICAL per locomotion. "ground": snap the feet onto the terrain.
+            -- VERTICAL per locomotion. "ground": snap the feet onto the terrain. The
+            -- search CEILING is raised to the TARGET's elevation (which carries the
+            -- player's Y on the follow path) so a rig can detect + climb onto ground
+            -- HIGHER than RAY_UP above its current feet — e.g. follow the player up a
+            -- tall boss plateau whose lip is a sheer cliff, not just gentle slopes
+            -- within RAY_UP. The down-ray is lengthened so it always reaches RAY_LEN
+            -- past the rig's OWN feet no matter how high the ceiling rose.
             local newY = pos.Y
-            local origin = Vector3.new(newX, pos.Y + RAY_UP, newZ)
-            local hit = Workspace:Raycast(origin, Vector3.new(0, -RAY_LEN, 0), rayParams)
+            local ceilingY = math.max(pos.Y, e.target.Y) + RAY_UP
+            local origin = Vector3.new(newX, ceilingY, newZ)
+            local hit = Workspace:Raycast(origin, Vector3.new(0, -((ceilingY - pos.Y) + RAY_LEN), 0), rayParams)
             if hit then
-                newY = hit.Position.Y + e.hipOffset
+                local groundY = hit.Position.Y + e.hipOffset
+                -- Clamp the per-frame CLIMB so the rig rises smoothly through the
+                -- cliff face into the plateau instead of popping the full height in
+                -- one frame; descents (dy < 0) settle immediately (gravity-like).
+                local dy = groundY - pos.Y
+                local maxUp = CLIMB_SPEED * dt
+                if dy > maxUp then
+                    dy = maxUp
+                end
+                newY = pos.Y + dy
             end
 
             local dest = Vector3.new(newX, newY, newZ)
