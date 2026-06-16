@@ -29,14 +29,29 @@ local RigGrounding = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChi
 
 local GroundFollow = {}
 
-export type Locomotion = "ground" -- future: "fly" | "mounted"
+-- LOCOMOTION modes (resolved from a monster's habitat — see MonsterTraits):
+--   "ground" snaps the feet onto the terrain (climbs any slope);
+--   "fly"    holds `flyHeight` above the terrain beneath (hover);
+--   "water"  rides at `surfaceY - waterDepth` (near the water surface).
+-- Only the VERTICAL rule differs per mode; the horizontal mover is shared.
+export type Locomotion = "ground" | "fly" | "water"
+
+export type AttachOpts = {
+    locomotion: Locomotion?,
+    flyHeight: number?,
+    waterDepth: number?,
+    surfaceY: number?,
+}
 
 type Entry = {
     root: BasePart,
     walkSpeed: number,
-    target: Vector3, -- desired destination (Y ignored in "ground" mode)
+    target: Vector3, -- desired destination (Y resolved per locomotion mode)
     hipOffset: number, -- root-center height above the rig's lowest point (feet)
     locomotion: Locomotion,
+    flyHeight: number, -- "fly": studs held above the ground beneath
+    waterDepth: number, -- "water": studs below the surface the body centers
+    surfaceY: number, -- "water": the water-surface Y (fallback until terrain query)
     facing: Vector3, -- last horizontal forward (kept while idle)
 }
 
@@ -83,10 +98,18 @@ rebuildIgnore()
 -- call with the same live root just updates the walk speed. Re-attaches if the
 -- model was pruned (e.g. a caught wild that respawned the same instance). Anchors
 -- the root and makes every part non-colliding (we drive position by raycast).
-function GroundFollow.attach(model: Model, root: BasePart, walkSpeed: number)
+function GroundFollow.attach(model: Model, root: BasePart, walkSpeed: number, opts: AttachOpts?)
+    local locomotion: Locomotion = (opts and opts.locomotion) or "ground"
     local existing = entries[model]
     if existing and existing.root == root and root.Parent ~= nil then
+        -- Idempotent refresh: update the live tunables without re-anchoring.
         existing.walkSpeed = walkSpeed
+        existing.locomotion = locomotion
+        if opts then
+            existing.flyHeight = opts.flyHeight or existing.flyHeight
+            existing.waterDepth = opts.waterDepth or existing.waterDepth
+            existing.surfaceY = opts.surfaceY or existing.surfaceY
+        end
         return
     end
     root.Anchored = true
@@ -102,7 +125,10 @@ function GroundFollow.attach(model: Model, root: BasePart, walkSpeed: number)
         walkSpeed = walkSpeed,
         target = root.Position,
         hipOffset = hipOffset,
-        locomotion = "ground",
+        locomotion = locomotion,
+        flyHeight = (opts and opts.flyHeight) or 16,
+        waterDepth = (opts and opts.waterDepth) or 2,
+        surfaceY = (opts and opts.surfaceY) or 0,
         facing = root.CFrame.LookVector * Vector3.new(1, 0, 1),
     }
 end
@@ -154,28 +180,46 @@ RunService.Heartbeat:Connect(function(dt: number)
                 e.facing = faceDir
             end
 
-            -- VERTICAL per locomotion. "ground": snap the feet onto the terrain. The
-            -- search CEILING is raised to the TARGET's elevation (which carries the
-            -- player's Y on the follow path) so a rig can detect + climb onto ground
-            -- HIGHER than RAY_UP above its current feet — e.g. follow the player up a
-            -- tall boss plateau whose lip is a sheer cliff, not just gentle slopes
-            -- within RAY_UP. The down-ray is lengthened so it always reaches RAY_LEN
-            -- past the rig's OWN feet no matter how high the ceiling rose.
+            -- VERTICAL resolution branches per locomotion mode (only the Y rule
+            -- differs; the XZ mover above is shared).
             local newY = pos.Y
-            local ceilingY = math.max(pos.Y, e.target.Y) + RAY_UP
-            local origin = Vector3.new(newX, ceilingY, newZ)
-            local hit = Workspace:Raycast(origin, Vector3.new(0, -((ceilingY - pos.Y) + RAY_LEN), 0), rayParams)
-            if hit then
-                local groundY = hit.Position.Y + e.hipOffset
-                -- Clamp the per-frame CLIMB so the rig rises smoothly through the
-                -- cliff face into the plateau instead of popping the full height in
-                -- one frame; descents (dy < 0) settle immediately (gravity-like).
-                local dy = groundY - pos.Y
-                local maxUp = CLIMB_SPEED * dt
-                if dy > maxUp then
-                    dy = maxUp
-                end
+            if e.locomotion == "fly" then
+                -- FLY: hover, holding flyHeight above the ground directly beneath.
+                -- Raycast down from above; hold current altitude over a void.
+                local origin = Vector3.new(newX, pos.Y + RAY_UP, newZ)
+                local reach = RAY_UP + RAY_LEN + e.flyHeight
+                local hit = Workspace:Raycast(origin, Vector3.new(0, -reach, 0), rayParams)
+                local desiredY = if hit then hit.Position.Y + e.hipOffset + e.flyHeight else pos.Y
+                local dy = math.clamp(desiredY - pos.Y, -CLIMB_SPEED * dt, CLIMB_SPEED * dt)
                 newY = pos.Y + dy
+            elseif e.locomotion == "water" then
+                -- WATER: ride near the water surface (constant fallback Y until a
+                -- Terrain water query is wired — the demo has no water yet).
+                local desiredY = e.surfaceY - e.waterDepth + e.hipOffset
+                local dy = math.clamp(desiredY - pos.Y, -CLIMB_SPEED * dt, CLIMB_SPEED * dt)
+                newY = pos.Y + dy
+            else
+                -- GROUND: snap the feet onto the terrain. The search CEILING is
+                -- raised to the TARGET's elevation (which carries the player's Y on
+                -- the follow path) so a rig can detect + climb onto ground HIGHER
+                -- than RAY_UP above its current feet — e.g. follow the player up a
+                -- tall boss plateau whose lip is a sheer cliff. The down-ray is
+                -- lengthened so it always reaches RAY_LEN past the rig's OWN feet.
+                local ceilingY = math.max(pos.Y, e.target.Y) + RAY_UP
+                local origin = Vector3.new(newX, ceilingY, newZ)
+                local hit = Workspace:Raycast(origin, Vector3.new(0, -((ceilingY - pos.Y) + RAY_LEN), 0), rayParams)
+                if hit then
+                    local groundY = hit.Position.Y + e.hipOffset
+                    -- Clamp the per-frame CLIMB so the rig rises smoothly through the
+                    -- cliff face into the plateau instead of popping the full height
+                    -- in one frame; descents (dy < 0) settle immediately.
+                    local dy = groundY - pos.Y
+                    local maxUp = CLIMB_SPEED * dt
+                    if dy > maxUp then
+                        dy = maxUp
+                    end
+                    newY = pos.Y + dy
+                end
             end
 
             local dest = Vector3.new(newX, newY, newZ)

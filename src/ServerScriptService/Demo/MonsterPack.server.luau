@@ -63,6 +63,7 @@ local CaptureConfig = require(Shared:WaitForChild("Config"):WaitForChild("Captur
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
 local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
 local GroundFollow = require(script.Parent:WaitForChild("GroundFollow"))
+local MonsterTraits = require(DemoFolder:WaitForChild("MonsterTraits"))
 local WorldConfig = require(Shared:WaitForChild("Config"):WaitForChild("WorldConfig"))
 
 -- MULTI-PLACE GATE: the same code runs in every place; wild packs belong ONLY in
@@ -460,7 +461,10 @@ local function spawnSlot(slot: Slot, templateFolder: Folder): Model?
     -- they stay harmless (HipHeight no-ops on an anchored root).
     if humanoid then
         local moveSpeed = PackConfig.walkSpeed * (if slot.isBoss then PackConfig.boss.walkSpeedMult else 1)
-        GroundFollow.attach(clone, root, moveSpeed)
+        -- TRAITS: a wild moves per its species' habitat (ground today; sky/water
+        -- ready). Resolved from the slot's personality (the species index source).
+        local habitat = MonsterTraits.forPersonality(slot.personality)
+        GroundFollow.attach(clone, root, moveSpeed, MonsterTraits.locomotionOpts(habitat))
     end
     slot.model = clone
     -- Wander is due on the next AI tick (no immediate move on spawn).

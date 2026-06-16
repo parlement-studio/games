@@ -32,6 +32,9 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local DemoFolder = Shared:WaitForChild("Demo")
 local DemoConfig = require(DemoFolder:WaitForChild("DemoConfig"))
 local DemoRemotes = require(DemoFolder:WaitForChild("DemoRemotes"))
+-- MONSTER TRAITS (future-proofing): resolves a species' habitat -> GroundFollow
+-- locomotion opts + attack style -> effective combat range. All ground/melee today.
+local MonsterTraits = require(DemoFolder:WaitForChild("MonsterTraits"))
 
 -- PERSISTENCE INTEGRATION: the demo now reads/writes through the AUDITED
 -- Persistence service so coins + caught creatures + which-stand survive a rejoin,
@@ -144,6 +147,7 @@ type FighterRecord = {
     rarity: string, -- rarity SNAPSHOT from the summoned entry (rarity doc R3; drives statMult)
     evoStage: number, -- evolution stage SNAPSHOT (S2; drives evoStatMult + aura)
     dexBonus: number, -- GLOBAL gallery set-completion combat mult SNAPSHOT at summon
+    attack: string, -- attack style SNAPSHOT ("melee" | "ranged"; drives engage range)
     model: Model,
     nextCombatAt: number,
     nextSeekAt: number,
@@ -1537,11 +1541,28 @@ end
 -- < attackRangeStuds, a fighter at its slot stays within attack range and keeps
 -- dealing damage. `targetPos` is the target wild's root position; `fighterY` is the
 -- fighter root's current Y.
+-- ATTACK STYLE (future-proofing): the effective engage range for this fighter.
+-- Melee uses combat.attackRangeStuds as-is; ranged stands further back (it stops
+-- approaching at rangeMult x and damages from there). All species are melee today.
+local function effectiveAttackRange(record: FighterRecord): number
+    return MonsterTraits.attackRange(record.attack, COMBAT.attackRangeStuds)
+end
+
+-- The ring radius the fighter settles at when attacking. Melee hugs the wild
+-- (combatRingRadiusStuds); ranged holds just inside its longer range so it fires
+-- from afar. Always < effectiveAttackRange so the fighter stays in damage range.
+local function ringRadiusFor(record: FighterRecord): number
+    if record.attack == "melee" then
+        return COMBAT.combatRingRadiusStuds
+    end
+    return math.max(COMBAT.combatRingRadiusStuds, effectiveAttackRange(record) - 1)
+end
+
 local function combatRingSlot(state: PlayerState, record: FighterRecord, targetPos: Vector3, fighterY: number): Vector3
     local orderIndex, count = formationOrder(state, record)
     local angle = (2 * math.pi / math.max(1, count)) * orderIndex
     local ringDir = Vector3.new(math.cos(angle), 0, math.sin(angle))
-    return Vector3.new(targetPos.X, fighterY, targetPos.Z) + ringDir * COMBAT.combatRingRadiusStuds
+    return Vector3.new(targetPos.X, fighterY, targetPos.Z) + ringDir * ringRadiusFor(record)
 end
 
 -- Resolve a fighter's Humanoid + root, or nil if the model is gone/unrigged.
@@ -1758,6 +1779,10 @@ local function handleSummon(player: Player, monsterId: unknown)
     local rarity = entry.rarity
     -- EVOLUTION: stage snapshot (S2) — drives evoStatMult + the spawn aura.
     local evoStage = entry.evoStage or 0
+    -- TRAITS (future-proofing): the species' habitat drives the GroundFollow
+    -- locomotion mode (ground/sky/water); the attack style drives the engage
+    -- range (melee/ranged). All ground/melee today — behavior unchanged.
+    local habitatMode, attackStyle = MonsterTraits.forSpecies(entry.species)
 
     -- Place in front of the player's character. Bail gracefully if no character.
     local character = player.Character
@@ -1849,7 +1874,7 @@ local function handleSummon(player: Player, monsterId: unknown)
     -- terrain (rides up any ramp/stairs the player climbs). Replaces Humanoid:MoveTo
     -- for follow/seek/combat; the per-frame ground raycast makes the old grounding
     -- pass + network-owner handoff unnecessary.
-    GroundFollow.attach(fighter, root, COMBAT.fighterWalkSpeed)
+    GroundFollow.attach(fighter, root, COMBAT.fighterWalkSpeed, MonsterTraits.locomotionOpts(habitatMode))
 
     local now = os.clock()
     local record: FighterRecord = {
@@ -1860,6 +1885,7 @@ local function handleSummon(player: Player, monsterId: unknown)
         rarity = rarity,
         evoStage = evoStage,
         dexBonus = dexBonus,
+        attack = attackStyle,
         model = fighter,
         nextCombatAt = 0,
         nextSeekAt = 0,
@@ -2047,7 +2073,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
         local wild, wildRoot = acquireTarget(state, record, playerPos)
         if wild and wildRoot then
             local dist = (wildRoot.Position - root.Position).Magnitude
-            if dist > COMBAT.attackRangeStuds then
+            if dist > effectiveAttackRange(record) then
                 -- Valid target but out of attack range: clear a stale engagement +
                 -- chase the target. Move toward this fighter's DISTINCT ring slot
                 -- AROUND the wild (not its exact center) so 2+ fighters approaching
@@ -2076,7 +2102,7 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
             disengageAndFollow()
         else
             local dist = (wildRoot.Position - root.Position).Magnitude
-            if dist <= COMBAT.attackRangeStuds then
+            if dist <= effectiveAttackRange(record) then
                 local wildHumanoid = wild:FindFirstChildWhichIsA("Humanoid")
                 if wildHumanoid and wildHumanoid.Health > 0 then
                     -- Engage: the wild yields its movement to combat (wander skips

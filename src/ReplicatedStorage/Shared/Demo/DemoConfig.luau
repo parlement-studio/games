@@ -197,36 +197,50 @@ return {
         skillissue_squid = 20,
     },
 
+    -- `habitat` + `attack` are the future-proofing traits (see `monsterTraits`).
+    -- ALL species are ground/melee today (one monster type); flip a species'
+    -- habitat to "sky"/"water" or attack to "ranged" later and the engine already
+    -- moves/fights it accordingly — no further code change.
     species = {
         sigma_sloth = {
             id = "sigma_sloth",
             name = "Sigma Sloth",
             color = { 120, 180, 90 }, -- mossy green
             emoji = "🦥",
+            habitat = "ground", -- "ground" | "sky" | "water"
+            attack = "melee", -- "melee" | "ranged"
         },
         gigachad_goose = {
             id = "gigachad_goose",
             name = "Gigachad Goose",
             color = { 240, 240, 230 }, -- marble white
             emoji = "🪿",
+            habitat = "ground",
+            attack = "melee",
         },
         boombox_bear = {
             id = "boombox_bear",
             name = "Boombox Bear",
             color = { 150, 90, 60 }, -- brown
             emoji = "🐻",
+            habitat = "ground",
+            attack = "melee",
         },
         rizz_raccoon = {
             id = "rizz_raccoon",
             name = "Rizz Raccoon",
             color = { 110, 120, 140 }, -- slate gray
             emoji = "🦝",
+            habitat = "ground",
+            attack = "melee",
         },
         skillissue_squid = {
             id = "skillissue_squid",
             name = "Skill-Issue Squid",
             color = { 230, 90, 200 }, -- hot pink
             emoji = "🦑",
+            habitat = "ground",
+            attack = "melee",
         },
     },
 
@@ -527,6 +541,65 @@ return {
         -- 0.10 = +10% per completed species, so a full 5/5 dex = +50% combat.
         -- Range: 0-0.5 | Default: 0.10
         setBonusPerSet = 0.10,
+    },
+
+    -- ── MONSTER TRAITS (future-proofing: habitat + attack style) ────────────
+    -- Two ORTHOGONAL axes every species carries (see `species[*].habitat/attack`):
+    --   HABITAT  → how it moves (maps to a GroundFollow locomotion mode)
+    --   ATTACK   → how it engages in combat (melee close / ranged from afar)
+    -- Today every species is ground/melee, so behavior is unchanged. Adding a
+    -- flying or aquatic or ranged monster later is a DATA change (set the species'
+    -- habitat/attack) — the engine already branches on these. MonsterTraits.luau
+    -- resolves a species' traits + the GroundFollow opts from this table.
+    monsterTraits = {
+        -- Fallbacks when a species omits a trait (or an unknown value is read).
+        defaultHabitat = "ground",
+        defaultAttack = "melee",
+        -- HABITATS: each maps to a GroundFollow `locomotion` mode + that mode's
+        -- vertical-rule params. "ground" snaps feet to terrain (climbs anything);
+        -- "fly" holds an altitude above the ground beneath; "water" rides near a
+        -- water surface (a fallback Y until real water terrain is queried).
+        habitats = {
+            ground = {
+                -- GroundFollow mode: hug the terrain surface (current behavior).
+                locomotion = "ground",
+            },
+            sky = {
+                -- GroundFollow mode: hover, holding `flyHeight` above the terrain.
+                locomotion = "fly",
+                -- Studs held above the ground directly beneath the flier.
+                -- Range: 4-80 | Default: 16
+                flyHeight = 16,
+            },
+            water = {
+                -- GroundFollow mode: ride at/just under the water surface.
+                locomotion = "water",
+                -- Studs BELOW the surface the body centers (sits IN the water).
+                -- Range: 0-12 | Default: 2
+                waterDepth = 2,
+                -- Surface Y used until a Terrain water query is wired (no water in
+                -- the demo yet). Range: -100..500 | Default: 0
+                fallbackSurfaceY = 0,
+            },
+        },
+        -- ATTACK STYLES: scale the fighter's effective engage range off
+        -- combat.attackRangeStuds. Melee closes in (1x); ranged fights from afar
+        -- (it stops approaching at rangeMult x and damages from there).
+        attacks = {
+            melee = {
+                -- Engage-range multiplier on combat.attackRangeStuds.
+                -- Range: 0.5-2 | Default: 1
+                rangeMult = 1,
+            },
+            ranged = {
+                -- Engage from this multiple of the melee range (stands back).
+                -- Range: 1.5-6 | Default: 3
+                rangeMult = 3,
+                -- (FUTURE) projectile speed studs/s for the visual bolt; 0 = no
+                -- VFX yet (damage still applies at range). Range: 0-300 | Default: 0
+                projectileSpeed = 0,
+            },
+        },
     },
 
     -- ── CATCH CINEMATIC (client presentation on a successful catch) ─────────
