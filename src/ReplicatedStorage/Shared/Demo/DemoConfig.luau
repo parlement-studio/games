@@ -446,6 +446,67 @@ return {
         sanctuaryLevelTarget = 5,
     },
 
+    -- ── DAILY LOOP (reset infra + 3 daily quests) ───────────────────────────
+    -- first-hour-daily-loop-gdd §2.2/§8. The SERVER owns everything: it rolls 3
+    -- quests at each daily reset (server clock), tracks progress via the same
+    -- catch/boss-kill/coin-flush hooks the game already fires, and pays the
+    -- reward on an idempotent CLAIM. Quests are an ORDERED list so the persisted
+    -- schema (id/kind/param/target/progress/claimed) carries forward to the
+    -- production Daily Quests system (#17) unchanged. Faucet here is TINY vs idle
+    -- (~1.3K/day total) — quests STEER activity, they are not a wealth source.
+    daily = {
+        -- Hour of the server-clock day (UTC, os.time()) at which the day rolls
+        -- over. 0 = 00:00 UTC. Range: 0-23 | Default: 0
+        resetHourUTC = 0,
+        -- Small login ritual granted the first time a player is seen each day
+        -- (auto-credited on the day's first hydrate/reset — NOT a claim button).
+        -- A ritual, not a faucet. Range: 0-10000 | Default: 100
+        loginRewardCoins = 100,
+        -- The 3 quests rolled each reset (exactly this many, in display order).
+        --   id     : stable key the client/claim path references
+        --   kind   : the progress hook — "catch_element" | "boss_kills" | "earn_coins"
+        --   icon   : player-facing emoji
+        --   label  : printf template; %d <- target, %s <- param (e.g. element)
+        --   target : goal count
+        --   rewardCoins : payout on claim
+        --   randomElement : true = roll a random Element into `param` at reset
+        -- catchElement reward ≥ 3×25×4 buffer so a F2P player can always afford
+        -- the catches the quest demands (GDD edge case 5).
+        quests = {
+            {
+                id = "catch_element",
+                kind = "catch_element",
+                icon = "🎯",
+                label = "Catch %d %s monsters",
+                target = 3,
+                rewardCoins = 300,
+                randomElement = true,
+            },
+            {
+                id = "boss_kills",
+                kind = "boss_kills",
+                icon = "👑",
+                label = "Defeat %d Bosses",
+                target = 3,
+                rewardCoins = 400,
+            },
+            {
+                id = "earn_coins",
+                kind = "earn_coins",
+                icon = "🪙",
+                label = "Earn %d coins from your Sanctuary",
+                target = 2000,
+                rewardCoins = 500,
+            },
+        },
+        -- ANTI-FARM boss reward decay (first-hour-daily-loop-gdd §2.3). Provisioned
+        -- here for Build Order #4; the daily `bossFirstKill` map is already reset
+        -- with the quests so #4 can read it without new schema. Kill #2+ of the
+        -- same boss type/day pays winCoins×this (first-kill stays ×10).
+        bossRepeatCoinsMult = 3,
+        bossRepeatXpMult = 2,
+    },
+
     -- ── CATCH CINEMATIC (client presentation on a successful catch) ─────────
     -- The server freezes the caught wild for `holdSec` and fires
     -- CatchCinematic at the catcher; the client plays: camera dolly-in →

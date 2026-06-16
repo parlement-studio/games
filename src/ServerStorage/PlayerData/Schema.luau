@@ -137,6 +137,17 @@ function Schema.default(): PlayerData
         -- profiles without this read as false (FtueService defaults defensively).
         ftue = { wonDuel = false, killedBoss = false },
 
+        -- Daily loop state (first-hour-daily-loop-gdd §3). Additive; old profiles
+        -- read nil and DailyService backfills + rolls the first day on load.
+        -- lastResetAt = 0 forces that first reset; quests are rolled there (not
+        -- here) so the roll always uses the live config.
+        daily = {
+            lastResetAt = 0,
+            loginClaimed = false,
+            quests = {},
+            bossFirstKill = {},
+        },
+
         nextSeq = 1,
         -- txLog is a MAP idempotencyKey -> small storedResult (ADR-001 C2); the
         -- parallel txLogOrder array preserves insertion order for ring-trim.

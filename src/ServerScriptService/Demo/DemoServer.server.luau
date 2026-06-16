@@ -57,6 +57,7 @@ local Schema = require(ServerStorage:WaitForChild("PlayerData"):WaitForChild("Sc
 local SafeZone = require(script.Parent:WaitForChild("SafeZone"))
 local GroundFollow = require(script.Parent:WaitForChild("GroundFollow"))
 local FtueService = require(script.Parent:WaitForChild("FtueService"))
+local DailyService = require(script.Parent:WaitForChild("DailyService"))
 
 type Types_PlayerData = Types.PlayerData
 
@@ -544,6 +545,18 @@ local function flushCoins(player: Player, clearOffline: boolean)
         end
         return data.coins
     end)
+
+    -- DAILY QUEST (earn_coins): the production accrued THIS window (sum of the
+    -- per-slot deltas) advances the "earn coins from your Sanctuary" quest. Only
+    -- idle production counts (combat winCoins never enters `deltas`), matching the
+    -- GDD intent. noteCoins self-gates (no active quest = no work / no push).
+    local totalProd = 0
+    for _, d in deltas do
+        totalProd += d
+    end
+    if totalProd > 0 then
+        DailyService.noteCoins(player, totalProd)
+    end
 end
 
 -- ── Showroom ───────────────────────────────────────────────────────────────
@@ -1382,6 +1395,7 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
     pushCoins(player)
     pushInventory(player)
     FtueService.push(player) -- refresh onboarding goals (catch3)
+    DailyService.noteCatch(player, entry.element) -- daily quest (catch_element)
     print(
         ("[Catch] %s caught pack %s (%s %s) — %s"):format(
             player.Name,
@@ -1588,7 +1602,14 @@ local function defeatWild(player: Player, state: PlayerState, wild: Model)
 
     -- FTUE: a defeated wild = a battle win (and a boss kill if it's a 👑 boss).
     -- Placed BEFORE the PackWild early-return below so boss kills still count.
-    FtueService.noteWin(player, wild:GetAttribute("IsBoss") == true)
+    local isBoss = wild:GetAttribute("IsBoss") == true
+    FtueService.noteWin(player, isBoss)
+    -- DAILY QUEST (boss_kills) + first-kill map for Build #4. Personality may be
+    -- absent on the model — noteBossKill still counts the kill, just skips the map.
+    if isBoss then
+        local bossPersonality = wild:GetAttribute("Personality")
+        DailyService.noteBossKill(player, if type(bossPersonality) == "string" then bossPersonality else nil)
+    end
 
     -- PACK WILD (incl. boss): the MonsterPack prototype owns its lifecycle —
     -- its respawn sweep sees the 0-HP corpse, arms the per-slot timer (5s
@@ -1834,6 +1855,37 @@ local function handleSetStance(player: Player, stance: unknown)
         return
     end
     state.stance = stance
+end
+
+-- DAILY QUEST claim: validate the questId, rate-limit, flip the persisted
+-- `claimed` flag atomically (DailyService.tryClaim is race-safe), then credit the
+-- reward through the live coin float (same path as every other faucet). A
+-- rejected claim (unknown id / not complete / already claimed) is a silent no-op.
+local function handleClaimDailyQuest(player: Player, questId: unknown)
+    local state = states[player]
+    if not state then
+        return
+    end
+    if type(questId) ~= "string" then
+        return
+    end
+    if not allowAction(state, "claim_daily", DemoConfig.rateLimits.deploy) then
+        return
+    end
+    local ok, reward = DailyService.tryClaim(player, questId)
+    if not ok then
+        return
+    end
+    if reward > 0 then
+        state.coins += reward
+        pushCoins(player)
+        flushCoins(player, false)
+    end
+    DemoRemotes.Moment:FireClient(player, {
+        kind = "info",
+        text = ("✅ Quest complete! +%d coins"):format(reward),
+    })
+    DailyService.push(player) -- refresh the panel (claimed flag now set)
 end
 
 -- Remove a fighter record at index `i` from `state.fighters`: destroy its model,
@@ -2757,6 +2809,21 @@ local function hydrate(player: Player, data: Types_PlayerData)
     pushBackpack(player) -- menu Item tab initial state
     FtueService.push(player) -- initial onboarding goal checklist
 
+    -- DAILY LOOP: apply the daily reset (rolls quests on a new day / first ever)
+    -- and grant the small login ritual the first time we see this player today.
+    -- The reward routes through the SAME live coin float as every other faucet.
+    local dailyReset = DailyService.ensureReset(player)
+    if dailyReset.loginReward > 0 then
+        state.coins += dailyReset.loginReward
+        pushCoins(player)
+        flushCoins(player, false)
+        DemoRemotes.Moment:FireClient(player, {
+            kind = "info",
+            text = ("🎁 Daily login reward: +%d coins!"):format(dailyReset.loginReward),
+        })
+    end
+    DailyService.push(player) -- initial daily quest panel
+
     -- Welcome-back Moment (only when something accrued). PAYLOAD SHAPE: there was
     -- no pre-existing client Moment handler, so we define a minimal, explicit one:
     --   { kind = "welcome_back", text = string, coins = number }
@@ -2928,6 +2995,8 @@ DemoRemotes.DeployToStand.OnServerEvent:Connect(handleDeployToStand)
 -- COMBAT (Phase 2): summon an owned Monster as a temporary auto-battling fighter.
 DemoRemotes.SummonFighter.OnServerEvent:Connect(handleSummon)
 DemoRemotes.SetStance.OnServerEvent:Connect(handleSetStance)
+-- DAILY QUEST: claim a completed quest's reward (idempotent, server-validated).
+DemoRemotes.ClaimDailyQuest.OnServerEvent:Connect(handleClaimDailyQuest)
 -- KANDANG MENU: snapshot request + tap-to-recall + upgrade sink.
 DemoRemotes.RequestKandang.OnServerEvent:Connect(handleRequestKandang)
 DemoRemotes.RecallDeployed.OnServerEvent:Connect(handleRecallDeployed)
@@ -2962,6 +3031,28 @@ for _, player in Players:GetPlayers() do
         end
     end
 end
+
+-- DAILY RESET TIMER: hydrate only applies the reset on JOIN, so a server alive
+-- across the reset boundary must roll its already-online players. Re-checked once
+-- a minute; ensureReset is a cheap no-op for anyone already in today's window.
+-- The per-minute push also keeps each client's "resets in" countdown fresh.
+task.spawn(function()
+    while true do
+        task.wait(60)
+        for _, player in Players:GetPlayers() do
+            local state = states[player]
+            if state then
+                local r = DailyService.ensureReset(player)
+                if r.loginReward > 0 then
+                    state.coins += r.loginReward
+                    pushCoins(player)
+                    flushCoins(player, false)
+                end
+                DailyService.push(player)
+            end
+        end
+    end
+end)
 
 -- Snapshot stable display templates BEFORE any catch can remove a wild creature
 -- (BUG 1). Deploy clones from these, never from the live Workspace creatures.

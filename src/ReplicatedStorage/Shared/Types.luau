@@ -115,6 +115,27 @@ export type PlayerData = {
     -- rosterCount / deployment / factoryLevel.
     ftue: { wonDuel: boolean, killedBoss: boolean }?,
 
+    -- DAILY LOOP state (first-hour-daily-loop-gdd §3). Optional/additive: old
+    -- profiles carry nil and DailyService backfills + applies the first reset on
+    -- load. `lastResetAt` is the os.time() of the reset currently applied (0 =
+    -- never → forces a reset). `quests` is exactly 3, rolled at each reset.
+    -- `bossFirstKill` maps a boss personality -> already-killed-today (Build #4).
+    daily: {
+        lastResetAt: number,
+        loginClaimed: boolean,
+        quests: {
+            {
+                id: string,
+                kind: string, -- "catch_element" | "boss_kills" | "earn_coins"
+                param: string?, -- e.g. the target Element for catch_element
+                target: number,
+                progress: number,
+                claimed: boolean,
+            }
+        },
+        bossFirstKill: { [string]: boolean },
+    }?,
+
     nextSeq: number, -- monotonic mutation counter; ++ per committed mutation
     txLog: { [string]: any }, -- map idempotencyKey -> small JSON-safe storedResult; bounded to txLogMaxEntries (ADR-001 C2)
     txLogOrder: { string }, -- insertion-order list of txLog keys; drives the ring-trim eviction (oldest first)

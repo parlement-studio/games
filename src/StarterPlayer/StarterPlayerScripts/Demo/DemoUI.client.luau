@@ -328,6 +328,220 @@ end
 
 rootTrove:Add(DemoRemotes.GoalUpdate.OnClientEvent:Connect(renderGoals))
 
+-- ── DAILY QUEST PANEL (toggled by the 📜 Mission top button) ─────────────────
+-- Server pushes via DailyUpdate; the client renders 3 quest rows (icon/label,
+-- progress bar, CLAIM button) + a reset countdown. Presentation only — the server
+-- owns progress + the claim. Hidden until the Mission button toggles it.
+local dailyPanel = Instance.new("Frame")
+dailyPanel.Name = "DailyPanel"
+dailyPanel.AnchorPoint = Vector2.new(0.5, 0.5)
+dailyPanel.Position = UDim2.fromScale(0.5, 0.5)
+dailyPanel.Size = UDim2.fromOffset(388, 0)
+dailyPanel.AutomaticSize = Enum.AutomaticSize.Y
+dailyPanel.BackgroundColor3 = Color3.fromRGB(30, 33, 46)
+dailyPanel.BackgroundTransparency = 0.05
+dailyPanel.Visible = false
+dailyPanel.ZIndex = 30
+dailyPanel.Parent = screen
+do
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 14)
+    c.Parent = dailyPanel
+    local s = Instance.new("UIStroke")
+    s.Color = Color3.fromRGB(12, 13, 18)
+    s.Thickness = 2
+    s.Parent = dailyPanel
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 12)
+    pad.PaddingBottom = UDim.new(0, 12)
+    pad.PaddingLeft = UDim.new(0, 14)
+    pad.PaddingRight = UDim.new(0, 14)
+    pad.Parent = dailyPanel
+    local list = Instance.new("UIListLayout")
+    list.FillDirection = Enum.FillDirection.Vertical
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Padding = UDim.new(0, 8)
+    list.Parent = dailyPanel
+end
+
+local dailyTitle = Instance.new("TextLabel")
+dailyTitle.LayoutOrder = 0
+dailyTitle.Size = UDim2.new(1, 0, 0, 24)
+dailyTitle.BackgroundTransparency = 1
+dailyTitle.Font = Enum.Font.GothamBold
+dailyTitle.TextSize = 18
+dailyTitle.TextColor3 = Color3.fromRGB(255, 206, 64)
+dailyTitle.TextXAlignment = Enum.TextXAlignment.Left
+dailyTitle.Text = "📜 Daily Quests"
+dailyTitle.ZIndex = 31
+dailyTitle.Parent = dailyPanel
+do
+    -- close button rides on the title (not a list child, so it does not take a row)
+    local close = Instance.new("TextButton")
+    close.AnchorPoint = Vector2.new(1, 0.5)
+    close.Position = UDim2.fromScale(1, 0.5)
+    close.Size = UDim2.fromOffset(26, 26)
+    close.BackgroundColor3 = Color3.fromRGB(60, 66, 82)
+    close.Font = Enum.Font.GothamBold
+    close.TextSize = 14
+    close.TextColor3 = Color3.fromRGB(230, 234, 244)
+    close.Text = "✕"
+    close.ZIndex = 32
+    close.Parent = dailyTitle
+    local cc = Instance.new("UICorner")
+    cc.CornerRadius = UDim.new(0, 8)
+    cc.Parent = close
+    rootTrove:Add(close.MouseButton1Click:Connect(function()
+        dailyPanel.Visible = false
+    end))
+end
+
+local dailyResetLabel = Instance.new("TextLabel")
+dailyResetLabel.LayoutOrder = 1
+dailyResetLabel.Size = UDim2.new(1, 0, 0, 16)
+dailyResetLabel.BackgroundTransparency = 1
+dailyResetLabel.Font = Enum.Font.Gotham
+dailyResetLabel.TextSize = 12
+dailyResetLabel.TextColor3 = Color3.fromRGB(168, 176, 196)
+dailyResetLabel.TextXAlignment = Enum.TextXAlignment.Left
+dailyResetLabel.Text = "Resets in --:--"
+dailyResetLabel.ZIndex = 31
+dailyResetLabel.Parent = dailyPanel
+
+type DailyRow = { frame: Frame, title: TextLabel, count: TextLabel, fill: Frame, claim: TextButton }
+local dailyRows: { DailyRow } = {}
+
+local function makeDailyRow(): DailyRow
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 66)
+    frame.BackgroundColor3 = Color3.fromRGB(40, 44, 60)
+    frame.BackgroundTransparency = 0.2
+    frame.BorderSizePixel = 0
+    frame.ZIndex = 31
+    frame.Parent = dailyPanel
+    local fc = Instance.new("UICorner")
+    fc.CornerRadius = UDim.new(0, 10)
+    fc.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.fromOffset(12, 8)
+    title.Size = UDim2.new(1, -130, 0, 20)
+    title.Font = Enum.Font.GothamMedium
+    title.TextSize = 14
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextTruncate = Enum.TextTruncate.AtEnd
+    title.ZIndex = 32
+    title.Parent = frame
+
+    local count = Instance.new("TextLabel")
+    count.BackgroundTransparency = 1
+    count.Position = UDim2.fromOffset(12, 32)
+    count.Size = UDim2.new(1, -130, 0, 16)
+    count.Font = Enum.Font.Gotham
+    count.TextSize = 12
+    count.TextXAlignment = Enum.TextXAlignment.Left
+    count.TextColor3 = Color3.fromRGB(168, 176, 196)
+    count.ZIndex = 32
+    count.Parent = frame
+
+    local barBG = Instance.new("Frame")
+    barBG.Position = UDim2.fromOffset(12, 52)
+    barBG.Size = UDim2.new(1, -130, 0, 7)
+    barBG.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
+    barBG.BorderSizePixel = 0
+    barBG.ZIndex = 32
+    barBG.Parent = frame
+    local bbc = Instance.new("UICorner")
+    bbc.CornerRadius = UDim.new(1, 0)
+    bbc.Parent = barBG
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.fromScale(0, 1)
+    fill.BackgroundColor3 = Color3.fromRGB(64, 180, 96)
+    fill.BorderSizePixel = 0
+    fill.ZIndex = 33
+    fill.Parent = barBG
+    local flc = Instance.new("UICorner")
+    flc.CornerRadius = UDim.new(1, 0)
+    flc.Parent = fill
+
+    local claim = Instance.new("TextButton")
+    claim.AnchorPoint = Vector2.new(1, 0.5)
+    claim.Position = UDim2.new(1, -10, 0.5, 0)
+    claim.Size = UDim2.fromOffset(100, 42)
+    claim.Font = Enum.Font.GothamBold
+    claim.TextSize = 13
+    claim.AutoButtonColor = false
+    claim.BorderSizePixel = 0
+    claim.Text = "In progress"
+    claim.ZIndex = 32
+    claim.Parent = frame
+    local clc = Instance.new("UICorner")
+    clc.CornerRadius = UDim.new(0, 8)
+    clc.Parent = claim
+    rootTrove:Add(claim.MouseButton1Click:Connect(function()
+        if claim:GetAttribute("claimable") ~= true then
+            return -- only a CLAIMable quest sends the intent (server re-validates)
+        end
+        local id = claim:GetAttribute("questId")
+        if type(id) == "string" then
+            DemoRemotes.ClaimDailyQuest:FireServer(id)
+        end
+    end))
+
+    return { frame = frame, title = title, count = count, fill = fill, claim = claim }
+end
+
+local function fmtReset(sec: number): string
+    local s = math.max(0, math.floor(sec))
+    return ("Resets in %02d:%02d"):format(math.floor(s / 3600), math.floor((s % 3600) / 60))
+end
+
+local function renderDaily(payload: any)
+    if typeof(payload) ~= "table" or typeof(payload.quests) ~= "table" then
+        return
+    end
+    dailyResetLabel.Text = fmtReset(tonumber(payload.resetInSec) or 0)
+    for i, q in ipairs(payload.quests) do
+        local row = dailyRows[i]
+        if not row then
+            row = makeDailyRow()
+            dailyRows[i] = row
+        end
+        row.frame.Visible = true
+        row.frame.LayoutOrder = i + 1 -- after title (0) + reset (1)
+        row.title.Text = ("%s %s"):format(tostring(q.icon or ""), tostring(q.label or ""))
+        local target = math.max(1, tonumber(q.target) or 1)
+        local prog = math.clamp(tonumber(q.progress) or 0, 0, target)
+        row.count.Text = ("%d / %d"):format(prog, target)
+        row.fill.Size = UDim2.fromScale(prog / target, 1)
+        row.claim:SetAttribute("questId", tostring(q.id))
+        row.claim:SetAttribute("claimable", q.claimable == true)
+        if q.claimed == true then
+            row.claim.Text = "✓ Claimed"
+            row.claim.AutoButtonColor = false
+            row.claim.BackgroundColor3 = Color3.fromRGB(56, 62, 78)
+            row.claim.TextColor3 = Color3.fromRGB(150, 160, 180)
+        elseif q.claimable == true then
+            row.claim.Text = "CLAIM"
+            row.claim.AutoButtonColor = true
+            row.claim.BackgroundColor3 = Color3.fromRGB(64, 180, 96)
+            row.claim.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            row.claim.Text = "In progress"
+            row.claim.AutoButtonColor = false
+            row.claim.BackgroundColor3 = Color3.fromRGB(48, 52, 66)
+            row.claim.TextColor3 = Color3.fromRGB(150, 160, 180)
+        end
+    end
+    for i = #payload.quests + 1, #dailyRows do
+        dailyRows[i].frame.Visible = false
+    end
+end
+
+rootTrove:Add(DemoRemotes.DailyUpdate.OnClientEvent:Connect(renderDaily))
+
 local function updateScale()
     local cam = workspace.CurrentCamera
     if not cam then
@@ -426,7 +640,10 @@ local topInventory = makeTopButton(1, "🎒 Inventory", true)
 local topMonster = makeTopButton(2, "🐾 Monster", true) -- static label (no count, owner feedback)
 local topSkill = makeTopButton(3, "🌟 Skill", true)
 makeTopButton(4, "🖼️ Galery", false) -- placeholder (inert)
-makeTopButton(5, "📜 Mission", false) -- placeholder (inert)
+local topMission = makeTopButton(5, "📜 Mission", true) -- toggles the Daily Quest panel
+rootTrove:Add(topMission.MouseButton1Click:Connect(function()
+    dailyPanel.Visible = not dailyPanel.Visible
+end))
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- COIN HUD (MIDDLE LEFT) — AUTO-COLLECT: climbing 🪙 total + "+N/s" rate line

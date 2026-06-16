@@ -77,6 +77,10 @@ local CLIENT_TO_SERVER = {
     -- retaliates when a wild attacks. Server validates the value; ephemeral
     -- (per-session, not persisted).
     "SetStance",
+    -- DAILY QUEST: ClaimDailyQuest(questId: string) — claim the reward for a
+    -- completed daily quest. Server validates progress >= target, idempotent via
+    -- the persisted `claimed` flag; rate-limited. (first-hour-daily-loop-gdd §5)
+    "ClaimDailyQuest",
 }
 
 local SERVER_TO_CLIENT = {
@@ -124,6 +128,10 @@ local SERVER_TO_CLIENT = {
     -- onboarding goal checklist (first-hour-daily-loop-gdd) on join + whenever a
     -- goal completes. Client renders the panel and hides it once allDone.
     "GoalUpdate",
+    -- DAILY QUEST: DailyUpdate({ quests = { {id,icon,label,progress,target,claimed,claimable} },
+    -- loginReward?, resetInSec }) — pushes the daily quest panel on join, on
+    -- reset, and whenever progress/claim changes. (first-hour-daily-loop-gdd §5)
+    "DailyUpdate",
 }
 
 local ALL_NAMES = {}
@@ -147,6 +155,7 @@ export type DemoRemotes = {
     EvolveMonster: RemoteEvent,
     BuyCaptureItem: RemoteEvent,
     SetStance: RemoteEvent,
+    ClaimDailyQuest: RemoteEvent,
     StateUpdate: RemoteEvent,
     CrateOpened: RemoteEvent,
     Moment: RemoteEvent,
@@ -159,6 +168,7 @@ export type DemoRemotes = {
     OpenShopMenu: RemoteEvent,
     CatchCinematic: RemoteEvent,
     GoalUpdate: RemoteEvent,
+    DailyUpdate: RemoteEvent,
 }
 
 -- The module script instance is the parent for the RemoteEvents.
