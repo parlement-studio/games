@@ -543,22 +543,24 @@ end
 rootTrove:Add(DemoRemotes.DailyUpdate.OnClientEvent:Connect(renderDaily))
 
 -- ── MONSTER GALLERY PANEL (toggled by the 🖼️ Galery top button) ──────────────
--- A 5×5 dex grid: rows = species (speciesOrder), columns = element. The server
--- ships only the unlocked species|element key set (GalleryUpdate); the client
--- builds the full grid from the replicated catalog and lights up caught cells.
+-- DRILL-DOWN dex: the top row shows the 5 SPECIES, each a clickable cell with a
+-- bottom→top progress fill = how many of its elements are caught. Tapping a
+-- species opens its element detail row. Completing a species' full element set
+-- adds a GLOBAL combat bonus (server-applied); the header shows the running %.
+-- The server ships only the unlocked species|element key set (GalleryUpdate).
 -- Consolidated onto ONE table local (the chunk is near Luau's register cap).
-local Gallery = { caught = {} :: { [string]: boolean } }
+local Gallery = { caught = {} :: { [string]: boolean }, selected = nil :: number? }
 do
     local SPECIES = DemoConfig.speciesOrder
     local ELEMENTS = ElementConfig.order
-    local CELL = 58
-    local GAP = 6
+    local SW = 64 -- species/element cell width
+    local GAP = 8
 
     local panel = Instance.new("Frame")
     panel.Name = "GalleryPanel"
     panel.AnchorPoint = Vector2.new(0.5, 0.5)
     panel.Position = UDim2.fromScale(0.5, 0.5)
-    panel.Size = UDim2.fromOffset(CELL * #ELEMENTS + GAP * (#ELEMENTS - 1) + 28, 0)
+    panel.Size = UDim2.fromOffset(SW * #SPECIES + GAP * (#SPECIES - 1) + 28, 0)
     panel.AutomaticSize = Enum.AutomaticSize.Y
     panel.BackgroundColor3 = Color3.fromRGB(30, 33, 46)
     panel.BackgroundTransparency = 0.05
@@ -618,96 +620,217 @@ do
         end))
     end
 
-    local countLabel = Instance.new("TextLabel")
-    countLabel.LayoutOrder = 1
-    countLabel.Size = UDim2.new(1, 0, 0, 16)
-    countLabel.BackgroundTransparency = 1
-    countLabel.Font = Enum.Font.Gotham
-    countLabel.TextSize = 12
-    countLabel.TextColor3 = Color3.fromRGB(168, 176, 196)
-    countLabel.TextXAlignment = Enum.TextXAlignment.Left
-    countLabel.Text = "Caught 0 / " .. tostring(#SPECIES * #ELEMENTS)
-    countLabel.ZIndex = 31
-    countLabel.Parent = panel
-    Gallery.countLabel = countLabel
+    local bonusLabel = Instance.new("TextLabel")
+    bonusLabel.LayoutOrder = 1
+    bonusLabel.Size = UDim2.new(1, 0, 0, 16)
+    bonusLabel.BackgroundTransparency = 1
+    bonusLabel.Font = Enum.Font.GothamMedium
+    bonusLabel.TextSize = 12
+    bonusLabel.TextColor3 = Color3.fromRGB(255, 206, 64)
+    bonusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    bonusLabel.Text = "⭐ Set Bonus +0% combat · 0/" .. tostring(#SPECIES) .. " complete"
+    bonusLabel.ZIndex = 31
+    bonusLabel.Parent = panel
+    Gallery.bonusLabel = bonusLabel
 
-    -- Column headers: the element emoji over each column.
-    local header = Instance.new("Frame")
-    header.LayoutOrder = 2
-    header.Size = UDim2.new(1, 0, 0, 22)
-    header.BackgroundTransparency = 1
-    header.ZIndex = 31
-    header.Parent = panel
+    -- SPECIES ROW: one clickable cell per species with a bottom→top progress fill.
+    local srow = Instance.new("Frame")
+    srow.LayoutOrder = 2
+    srow.Size = UDim2.new(1, 0, 0, 84)
+    srow.BackgroundTransparency = 1
+    srow.ZIndex = 31
+    srow.Parent = panel
     do
-        local hl = Instance.new("UIListLayout")
-        hl.FillDirection = Enum.FillDirection.Horizontal
-        hl.SortOrder = Enum.SortOrder.LayoutOrder
-        hl.Padding = UDim.new(0, GAP)
-        hl.Parent = header
-        for ei, element in ipairs(ELEMENTS) do
-            local h = Instance.new("TextLabel")
-            h.LayoutOrder = ei
-            h.Size = UDim2.fromOffset(CELL, 22)
-            h.BackgroundTransparency = 1
-            h.Font = Enum.Font.GothamBold
-            h.TextSize = 16
-            h.Text = elementEmoji(element)
-            h.ZIndex = 32
-            h.Parent = header
-        end
+        local sl = Instance.new("UIListLayout")
+        sl.FillDirection = Enum.FillDirection.Horizontal
+        sl.SortOrder = Enum.SortOrder.LayoutOrder
+        sl.Padding = UDim.new(0, GAP)
+        sl.Parent = srow
     end
 
-    -- The 5×5 grid. Build each cell ONCE; render() only re-tints by caught state.
-    local grid = Instance.new("Frame")
-    grid.LayoutOrder = 3
-    grid.Size = UDim2.fromScale(1, 0)
-    grid.AutomaticSize = Enum.AutomaticSize.Y
-    grid.BackgroundTransparency = 1
-    grid.ZIndex = 31
-    grid.Parent = panel
-    do
-        local gl = Instance.new("UIGridLayout")
-        gl.CellSize = UDim2.fromOffset(CELL, CELL)
-        gl.CellPadding = UDim2.fromOffset(GAP, GAP)
-        gl.SortOrder = Enum.SortOrder.LayoutOrder
-        gl.Parent = grid
-    end
-
-    Gallery.cells = {} :: { [string]: any }
+    Gallery.species = {} :: { any }
     for si, speciesId in ipairs(SPECIES) do
         local sdef = DemoConfig.species[speciesId]
-        local speciesEmoji = if sdef then sdef.emoji else "❓"
-        for ei, element in ipairs(ELEMENTS) do
-            local edisplay = ElementConfig.display[element]
-            local elementColor = if edisplay then Color3.fromHex(edisplay.color) else Color3.fromRGB(120, 120, 120)
-            local key = tostring(si) .. "|" .. element
+        local emoji = if sdef then sdef.emoji else "❓"
 
-            local cell = Instance.new("Frame")
-            cell.Name = "Cell_" .. key
-            cell.LayoutOrder = (si - 1) * #ELEMENTS + ei
-            cell.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
-            cell.BorderSizePixel = 0
-            cell.ZIndex = 32
-            cell.Parent = grid
-            local cc = Instance.new("UICorner")
-            cc.CornerRadius = UDim.new(0, 8)
-            cc.Parent = cell
-            local glyph = Instance.new("TextLabel")
-            glyph.Size = UDim2.fromScale(1, 1)
-            glyph.BackgroundTransparency = 1
-            glyph.Font = Enum.Font.GothamBold
-            glyph.TextSize = 26
-            glyph.Text = "?"
-            glyph.TextColor3 = Color3.fromRGB(90, 96, 112)
-            glyph.ZIndex = 33
-            glyph.Parent = cell
+        local cell = Instance.new("TextButton")
+        cell.Name = "Species_" .. tostring(si)
+        cell.LayoutOrder = si
+        cell.Size = UDim2.fromOffset(SW, 84)
+        cell.AutoButtonColor = true
+        cell.Text = ""
+        cell.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
+        cell.BorderSizePixel = 0
+        cell.ClipsDescendants = true
+        cell.ZIndex = 32
+        cell.Parent = srow
+        local cc = Instance.new("UICorner")
+        cc.CornerRadius = UDim.new(0, 10)
+        cc.Parent = cell
+        -- bottom→top progress fill (height = caught/total)
+        local fill = Instance.new("Frame")
+        fill.AnchorPoint = Vector2.new(0.5, 1)
+        fill.Position = UDim2.fromScale(0.5, 1)
+        fill.Size = UDim2.fromScale(1, 0)
+        fill.BackgroundColor3 = Color3.fromRGB(64, 180, 96)
+        fill.BackgroundTransparency = 0.45
+        fill.BorderSizePixel = 0
+        fill.ZIndex = 32
+        fill.Parent = cell
+        local glyph = Instance.new("TextLabel")
+        glyph.Size = UDim2.new(1, 0, 0, 48)
+        glyph.Position = UDim2.fromOffset(0, 6)
+        glyph.BackgroundTransparency = 1
+        glyph.Font = Enum.Font.GothamBold
+        glyph.TextSize = 30
+        glyph.Text = emoji
+        glyph.TextColor3 = Color3.fromRGB(120, 126, 142)
+        glyph.ZIndex = 33
+        glyph.Parent = cell
+        local cnt = Instance.new("TextLabel")
+        cnt.AnchorPoint = Vector2.new(0.5, 1)
+        cnt.Position = UDim2.fromScale(0.5, 1)
+        cnt.Size = UDim2.new(1, 0, 0, 18)
+        cnt.BackgroundTransparency = 1
+        cnt.Font = Enum.Font.GothamBold
+        cnt.TextSize = 12
+        cnt.Text = "0/" .. tostring(#ELEMENTS)
+        cnt.TextColor3 = Color3.fromRGB(230, 234, 244)
+        cnt.ZIndex = 33
+        cnt.Parent = cell
+        local star = Instance.new("TextLabel")
+        star.AnchorPoint = Vector2.new(1, 0)
+        star.Position = UDim2.fromScale(1, 0)
+        star.Size = UDim2.fromOffset(18, 18)
+        star.BackgroundTransparency = 1
+        star.Font = Enum.Font.GothamBold
+        star.TextSize = 14
+        star.Text = "⭐"
+        star.Visible = false
+        star.ZIndex = 34
+        star.Parent = cell
 
-            Gallery.cells[key] = {
-                cell = cell,
-                glyph = glyph,
-                emoji = speciesEmoji,
-                color = elementColor,
-            }
+        rootTrove:Add(cell.MouseButton1Click:Connect(function()
+            Gallery.selectSpecies(si)
+        end))
+        Gallery.species[si] = { cell = cell, fill = fill, glyph = glyph, cnt = cnt, star = star, emoji = emoji }
+    end
+
+    -- DETAIL: the selected species' element row (hidden until a species is tapped).
+    local detail = Instance.new("Frame")
+    detail.LayoutOrder = 3
+    detail.Size = UDim2.fromScale(1, 0)
+    detail.AutomaticSize = Enum.AutomaticSize.Y
+    detail.BackgroundTransparency = 1
+    detail.Visible = false
+    detail.ZIndex = 31
+    detail.Parent = panel
+    Gallery.detail = detail
+    do
+        local dlist = Instance.new("UIListLayout")
+        dlist.FillDirection = Enum.FillDirection.Vertical
+        dlist.SortOrder = Enum.SortOrder.LayoutOrder
+        dlist.Padding = UDim.new(0, 6)
+        dlist.Parent = detail
+    end
+    local dtitle = Instance.new("TextLabel")
+    dtitle.LayoutOrder = 0
+    dtitle.Size = UDim2.new(1, 0, 0, 18)
+    dtitle.BackgroundTransparency = 1
+    dtitle.Font = Enum.Font.GothamBold
+    dtitle.TextSize = 14
+    dtitle.TextColor3 = Color3.fromRGB(230, 234, 244)
+    dtitle.TextXAlignment = Enum.TextXAlignment.Left
+    dtitle.Text = ""
+    dtitle.ZIndex = 32
+    dtitle.Parent = detail
+    Gallery.detailTitle = dtitle
+
+    local erow = Instance.new("Frame")
+    erow.LayoutOrder = 1
+    erow.Size = UDim2.new(1, 0, 0, 60)
+    erow.BackgroundTransparency = 1
+    erow.ZIndex = 32
+    erow.Parent = detail
+    do
+        local el = Instance.new("UIListLayout")
+        el.FillDirection = Enum.FillDirection.Horizontal
+        el.SortOrder = Enum.SortOrder.LayoutOrder
+        el.Padding = UDim.new(0, GAP)
+        el.Parent = erow
+    end
+    Gallery.detailCells = {} :: { any }
+    for ei, element in ipairs(ELEMENTS) do
+        local edisplay = ElementConfig.display[element]
+        local elementColor = if edisplay then Color3.fromHex(edisplay.color) else Color3.fromRGB(120, 120, 120)
+        local cell = Instance.new("Frame")
+        cell.LayoutOrder = ei
+        cell.Size = UDim2.fromOffset(SW, 60)
+        cell.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
+        cell.BorderSizePixel = 0
+        cell.ZIndex = 33
+        cell.Parent = erow
+        local cc = Instance.new("UICorner")
+        cc.CornerRadius = UDim.new(0, 8)
+        cc.Parent = cell
+        local eglyph = Instance.new("TextLabel")
+        eglyph.Size = UDim2.new(1, 0, 0, 30)
+        eglyph.Position = UDim2.fromOffset(0, 6)
+        eglyph.BackgroundTransparency = 1
+        eglyph.Font = Enum.Font.GothamBold
+        eglyph.TextSize = 22
+        eglyph.Text = elementEmoji(element)
+        eglyph.ZIndex = 34
+        eglyph.Parent = cell
+        local status = Instance.new("TextLabel")
+        status.AnchorPoint = Vector2.new(0.5, 1)
+        status.Position = UDim2.fromScale(0.5, 1)
+        status.Size = UDim2.new(1, 0, 0, 18)
+        status.BackgroundTransparency = 1
+        status.Font = Enum.Font.GothamBold
+        status.TextSize = 12
+        status.Text = "🔒"
+        status.TextColor3 = Color3.fromRGB(230, 234, 244)
+        status.ZIndex = 34
+        status.Parent = cell
+        Gallery.detailCells[ei] = { cell = cell, status = status, color = elementColor, element = element }
+    end
+end
+
+-- Elements caught for species index `si` (0..#ELEMENTS).
+local function gallerySpeciesCount(si: number): number
+    local n = 0
+    for _, element in ipairs(ElementConfig.order) do
+        if Gallery.caught[tostring(si) .. "|" .. element] == true then
+            n += 1
+        end
+    end
+    return n
+end
+
+-- Open a species' element detail row.
+function Gallery.selectSpecies(si: number)
+    Gallery.selected = si
+    Gallery.detail.Visible = true
+    local sdef = DemoConfig.species[DemoConfig.speciesOrder[si]]
+    local total = #ElementConfig.order
+    Gallery.detailTitle.Text = ("%s %s — %d/%d elements"):format(
+        if sdef then sdef.emoji else "❓",
+        if sdef then sdef.name else "???",
+        gallerySpeciesCount(si),
+        total
+    )
+    for ei, element in ipairs(ElementConfig.order) do
+        local dc = Gallery.detailCells[ei]
+        local caught = Gallery.caught[tostring(si) .. "|" .. element] == true
+        if caught then
+            dc.cell.BackgroundColor3 = dc.color
+            dc.cell.BackgroundTransparency = 0.15
+            dc.status.Text = "✓"
+        else
+            dc.cell.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
+            dc.cell.BackgroundTransparency = 0
+            dc.status.Text = "🔒"
         end
     end
 end
@@ -717,23 +840,29 @@ function Gallery.render(payload: any)
         return
     end
     Gallery.caught = (typeof(payload.caught) == "table" and payload.caught) or {}
-    local total, got = 0, 0
-    for key, c in Gallery.cells do
-        total += 1
-        if Gallery.caught[key] == true then
-            got += 1
-            c.glyph.Text = c.emoji
-            c.glyph.TextColor3 = Color3.fromRGB(255, 255, 255)
-            c.cell.BackgroundColor3 = c.color
-            c.cell.BackgroundTransparency = 0.15
-        else
-            c.glyph.Text = "?"
-            c.glyph.TextColor3 = Color3.fromRGB(90, 96, 112)
-            c.cell.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
-            c.cell.BackgroundTransparency = 0
+    local total = #ElementConfig.order
+    local completed = 0
+    for si = 1, #DemoConfig.speciesOrder do
+        local n = gallerySpeciesCount(si)
+        local sp = Gallery.species[si]
+        sp.fill.Size = UDim2.fromScale(1, n / total)
+        sp.cnt.Text = ("%d/%d"):format(n, total)
+        local complete = n >= total
+        if complete then
+            completed += 1
         end
+        sp.star.Visible = complete
+        sp.glyph.TextColor3 = if n > 0 then Color3.fromRGB(255, 255, 255) else Color3.fromRGB(120, 126, 142)
     end
-    Gallery.countLabel.Text = ("Caught %d / %d"):format(got, total)
+    local pct = math.floor(completed * DemoConfig.gallery.setBonusPerSet * 100 + 0.5)
+    Gallery.bonusLabel.Text = ("⭐ Set Bonus +%d%% combat · %d/%d complete"):format(
+        pct,
+        completed,
+        #DemoConfig.speciesOrder
+    )
+    if Gallery.selected then
+        Gallery.selectSpecies(Gallery.selected)
+    end
 end
 
 rootTrove:Add(DemoRemotes.GalleryUpdate.OnClientEvent:Connect(Gallery.render))

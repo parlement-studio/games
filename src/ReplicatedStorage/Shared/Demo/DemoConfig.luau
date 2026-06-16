@@ -520,6 +520,13 @@ return {
         -- A small "keep exploring" nudge (the catch itself spent a net). 0 = no
         -- item reward, discovery still registers. Range: 0-10 | Default: 1
         discoveryNetReward = 1,
+        -- SET-COMPLETION BONUS: each species whose FULL element row is collected
+        -- (all of ElementConfig.order) adds this fraction to a GLOBAL combat
+        -- multiplier applied to ALL of the player's fighters (HP + damage):
+        --   combatMult = 1 + completedSets * setBonusPerSet
+        -- 0.10 = +10% per completed species, so a full 5/5 dex = +50% combat.
+        -- Range: 0-0.5 | Default: 0.10
+        setBonusPerSet = 0.10,
     },
 
     -- ── CATCH CINEMATIC (client presentation on a successful catch) ─────────

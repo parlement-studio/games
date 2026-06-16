@@ -16,6 +16,7 @@ local PlayerDataService = require(ServerStorage:WaitForChild("PlayerData"):WaitF
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local DemoConfig = require(Shared:WaitForChild("Demo"):WaitForChild("DemoConfig"))
 local DemoRemotes = require(Shared:WaitForChild("Demo"):WaitForChild("DemoRemotes"))
+local ElementConfig = require(Shared:WaitForChild("Config"):WaitForChild("ElementConfig"))
 
 local GalleryService = {}
 
@@ -50,6 +51,37 @@ function GalleryService.ensureDex(player: Player)
         profile.dex = dex
         return true
     end)
+end
+
+-- Count the species whose FULL element row is present in `dex` (a "completed
+-- set"). Species are the 1-based indices 1..#speciesOrder (matching the persisted
+-- entry.species), each complete when every element of ElementConfig.order is
+-- caught for it. Pure: reads only the passed dex set.
+function GalleryService.completedSetCount(dex: { [string]: boolean }?): number
+    if dex == nil then
+        return 0
+    end
+    local count = 0
+    for si = 1, #DemoConfig.speciesOrder do
+        local full = true
+        for _, element in ipairs(ElementConfig.order) do
+            if dex[dexKey(si, element)] ~= true then
+                full = false
+                break
+            end
+        end
+        if full then
+            count += 1
+        end
+    end
+    return count
+end
+
+-- The GLOBAL combat multiplier this dex grants: 1 + completedSets *
+-- setBonusPerSet (e.g. 3 completed sets at 0.10 = x1.30). Applied to a player's
+-- fighter HP + per-tick damage. Pure (takes the dex set).
+function GalleryService.combatBonusMult(dex: { [string]: boolean }?): number
+    return 1 + GalleryService.completedSetCount(dex) * CFG.setBonusPerSet
 end
 
 -- Push the unlocked dex set to the client (no-op if disabled / no profile yet).

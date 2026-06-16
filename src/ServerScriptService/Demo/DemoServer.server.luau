@@ -143,6 +143,7 @@ type FighterRecord = {
     element: string, -- element SNAPSHOT from the summoned entry (element doc E3; drives elementMod)
     rarity: string, -- rarity SNAPSHOT from the summoned entry (rarity doc R3; drives statMult)
     evoStage: number, -- evolution stage SNAPSHOT (S2; drives evoStatMult + aura)
+    dexBonus: number, -- GLOBAL gallery set-completion combat mult SNAPSHOT at summon
     model: Model,
     nextCombatAt: number,
     nextSeekAt: number,
@@ -425,6 +426,9 @@ local function pushInventory(player: Player)
     end
 
     local combat = DemoConfig.combat
+    -- GALLERY SET BONUS: the same global combat multiplier applied at summon, so
+    -- the stat sheet shows the buffed HP/power the fighter will actually have.
+    local dexBonus = GalleryService.combatBonusMult(data.dex)
     local payload: { InventoryItem } = {}
     for id, entry in data.roster do
         do
@@ -441,8 +445,9 @@ local function pushInventory(player: Player)
             local stage = entry.evoStage or 0
             local evo = DemoConfig.evolution
             local evoMult = if stage >= 1 and stage <= evo.maxStage then evo.statMult[stage] else 1
-            local hp = math.round(combat.fighterBaseHP * scale * rarityMult * evoMult)
-            local power = math.round(combat.fighterBaseDamagePerTick * scale * powerMult * rarityMult * evoMult)
+            local hp = math.round(combat.fighterBaseHP * scale * rarityMult * evoMult * dexBonus)
+            local power =
+                math.round(combat.fighterBaseDamagePerTick * scale * powerMult * rarityMult * evoMult * dexBonus)
             local wins = (entry.history and entry.history.rwon) or 0
             local coinsMade = math.floor((entry.history and entry.history.coins) or 0)
             -- EVOLVE button data (server-computed; nil cost/milestone = MAX).
@@ -1796,8 +1801,13 @@ local function handleSummon(player: Player, monsterId: unknown)
         fighter:Destroy()
         return
     end
-    -- PROGRESSION: derive Max HP from level + rarity + evolution (F2/R3/S2).
-    local maxHP = fighterMaxHP(level, rarity, evoStage)
+    -- GALLERY SET BONUS: a GLOBAL combat multiplier from completed species sets
+    -- (all elements of a species caught). Snapshot here so it is stable for this
+    -- fighter's lifetime (completing a set mid-fight applies on the next summon).
+    local dexBonus = GalleryService.combatBonusMult(data.dex)
+    -- PROGRESSION: derive Max HP from level + rarity + evolution (F2/R3/S2), then
+    -- scale by the gallery set bonus.
+    local maxHP = math.round(fighterMaxHP(level, rarity, evoStage) * dexBonus)
     humanoid.WalkSpeed = COMBAT.fighterWalkSpeed
     humanoid.MaxHealth = maxHP
     humanoid.Health = maxHP
@@ -1849,6 +1859,7 @@ local function handleSummon(player: Player, monsterId: unknown)
         element = element,
         rarity = rarity,
         evoStage = evoStage,
+        dexBonus = dexBonus,
         model = fighter,
         nextCombatAt = 0,
         nextSeekAt = 0,
@@ -2110,7 +2121,9 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                     -- Wild takes the fighter's LEVEL+personality+rarity+evo-
                     -- scaled damage (F2 + R3 + S2) times elementMod.
                     wildHumanoid:TakeDamage(
-                        fighterDamage(record.level, record.personality, record.rarity, record.evoStage) * fighterVsWild
+                        fighterDamage(record.level, record.personality, record.rarity, record.evoStage)
+                            * fighterVsWild
+                            * record.dexBonus
                     )
                     -- Fighter takes the wild's (personality-only) damage back times
                     -- its DamageMult (boss) times the REVERSE elementMod; the wild
