@@ -542,6 +542,202 @@ end
 
 rootTrove:Add(DemoRemotes.DailyUpdate.OnClientEvent:Connect(renderDaily))
 
+-- ── MONSTER GALLERY PANEL (toggled by the 🖼️ Galery top button) ──────────────
+-- A 5×5 dex grid: rows = species (speciesOrder), columns = element. The server
+-- ships only the unlocked species|element key set (GalleryUpdate); the client
+-- builds the full grid from the replicated catalog and lights up caught cells.
+-- Consolidated onto ONE table local (the chunk is near Luau's register cap).
+local Gallery = { caught = {} :: { [string]: boolean } }
+do
+    local SPECIES = DemoConfig.speciesOrder
+    local ELEMENTS = ElementConfig.order
+    local CELL = 58
+    local GAP = 6
+
+    local panel = Instance.new("Frame")
+    panel.Name = "GalleryPanel"
+    panel.AnchorPoint = Vector2.new(0.5, 0.5)
+    panel.Position = UDim2.fromScale(0.5, 0.5)
+    panel.Size = UDim2.fromOffset(CELL * #ELEMENTS + GAP * (#ELEMENTS - 1) + 28, 0)
+    panel.AutomaticSize = Enum.AutomaticSize.Y
+    panel.BackgroundColor3 = Color3.fromRGB(30, 33, 46)
+    panel.BackgroundTransparency = 0.05
+    panel.Visible = false
+    panel.ZIndex = 30
+    panel.Parent = screen
+    Gallery.panel = panel
+    do
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 14)
+        c.Parent = panel
+        local s = Instance.new("UIStroke")
+        s.Color = Color3.fromRGB(12, 13, 18)
+        s.Thickness = 2
+        s.Parent = panel
+        local pad = Instance.new("UIPadding")
+        pad.PaddingTop = UDim.new(0, 12)
+        pad.PaddingBottom = UDim.new(0, 12)
+        pad.PaddingLeft = UDim.new(0, 14)
+        pad.PaddingRight = UDim.new(0, 14)
+        pad.Parent = panel
+        local list = Instance.new("UIListLayout")
+        list.FillDirection = Enum.FillDirection.Vertical
+        list.SortOrder = Enum.SortOrder.LayoutOrder
+        list.Padding = UDim.new(0, 10)
+        list.Parent = panel
+    end
+
+    local title = Instance.new("TextLabel")
+    title.LayoutOrder = 0
+    title.Size = UDim2.new(1, 0, 0, 24)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 18
+    title.TextColor3 = Color3.fromRGB(255, 206, 64)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Text = "🖼️ Monster Gallery"
+    title.ZIndex = 31
+    title.Parent = panel
+    do
+        local close = Instance.new("TextButton")
+        close.AnchorPoint = Vector2.new(1, 0.5)
+        close.Position = UDim2.fromScale(1, 0.5)
+        close.Size = UDim2.fromOffset(26, 26)
+        close.BackgroundColor3 = Color3.fromRGB(60, 66, 82)
+        close.Font = Enum.Font.GothamBold
+        close.TextSize = 14
+        close.TextColor3 = Color3.fromRGB(230, 234, 244)
+        close.Text = "✕"
+        close.ZIndex = 32
+        close.Parent = title
+        local cc = Instance.new("UICorner")
+        cc.CornerRadius = UDim.new(0, 8)
+        cc.Parent = close
+        rootTrove:Add(close.MouseButton1Click:Connect(function()
+            panel.Visible = false
+        end))
+    end
+
+    local countLabel = Instance.new("TextLabel")
+    countLabel.LayoutOrder = 1
+    countLabel.Size = UDim2.new(1, 0, 0, 16)
+    countLabel.BackgroundTransparency = 1
+    countLabel.Font = Enum.Font.Gotham
+    countLabel.TextSize = 12
+    countLabel.TextColor3 = Color3.fromRGB(168, 176, 196)
+    countLabel.TextXAlignment = Enum.TextXAlignment.Left
+    countLabel.Text = "Caught 0 / " .. tostring(#SPECIES * #ELEMENTS)
+    countLabel.ZIndex = 31
+    countLabel.Parent = panel
+    Gallery.countLabel = countLabel
+
+    -- Column headers: the element emoji over each column.
+    local header = Instance.new("Frame")
+    header.LayoutOrder = 2
+    header.Size = UDim2.new(1, 0, 0, 22)
+    header.BackgroundTransparency = 1
+    header.ZIndex = 31
+    header.Parent = panel
+    do
+        local hl = Instance.new("UIListLayout")
+        hl.FillDirection = Enum.FillDirection.Horizontal
+        hl.SortOrder = Enum.SortOrder.LayoutOrder
+        hl.Padding = UDim.new(0, GAP)
+        hl.Parent = header
+        for ei, element in ipairs(ELEMENTS) do
+            local h = Instance.new("TextLabel")
+            h.LayoutOrder = ei
+            h.Size = UDim2.fromOffset(CELL, 22)
+            h.BackgroundTransparency = 1
+            h.Font = Enum.Font.GothamBold
+            h.TextSize = 16
+            h.Text = elementEmoji(element)
+            h.ZIndex = 32
+            h.Parent = header
+        end
+    end
+
+    -- The 5×5 grid. Build each cell ONCE; render() only re-tints by caught state.
+    local grid = Instance.new("Frame")
+    grid.LayoutOrder = 3
+    grid.Size = UDim2.fromScale(1, 0)
+    grid.AutomaticSize = Enum.AutomaticSize.Y
+    grid.BackgroundTransparency = 1
+    grid.ZIndex = 31
+    grid.Parent = panel
+    do
+        local gl = Instance.new("UIGridLayout")
+        gl.CellSize = UDim2.fromOffset(CELL, CELL)
+        gl.CellPadding = UDim2.fromOffset(GAP, GAP)
+        gl.SortOrder = Enum.SortOrder.LayoutOrder
+        gl.Parent = grid
+    end
+
+    Gallery.cells = {} :: { [string]: any }
+    for si, speciesId in ipairs(SPECIES) do
+        local sdef = DemoConfig.species[speciesId]
+        local speciesEmoji = if sdef then sdef.emoji else "❓"
+        for ei, element in ipairs(ELEMENTS) do
+            local edisplay = ElementConfig.display[element]
+            local elementColor = if edisplay then Color3.fromHex(edisplay.color) else Color3.fromRGB(120, 120, 120)
+            local key = tostring(si) .. "|" .. element
+
+            local cell = Instance.new("Frame")
+            cell.Name = "Cell_" .. key
+            cell.LayoutOrder = (si - 1) * #ELEMENTS + ei
+            cell.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
+            cell.BorderSizePixel = 0
+            cell.ZIndex = 32
+            cell.Parent = grid
+            local cc = Instance.new("UICorner")
+            cc.CornerRadius = UDim.new(0, 8)
+            cc.Parent = cell
+            local glyph = Instance.new("TextLabel")
+            glyph.Size = UDim2.fromScale(1, 1)
+            glyph.BackgroundTransparency = 1
+            glyph.Font = Enum.Font.GothamBold
+            glyph.TextSize = 26
+            glyph.Text = "?"
+            glyph.TextColor3 = Color3.fromRGB(90, 96, 112)
+            glyph.ZIndex = 33
+            glyph.Parent = cell
+
+            Gallery.cells[key] = {
+                cell = cell,
+                glyph = glyph,
+                emoji = speciesEmoji,
+                color = elementColor,
+            }
+        end
+    end
+end
+
+function Gallery.render(payload: any)
+    if typeof(payload) ~= "table" then
+        return
+    end
+    Gallery.caught = (typeof(payload.caught) == "table" and payload.caught) or {}
+    local total, got = 0, 0
+    for key, c in Gallery.cells do
+        total += 1
+        if Gallery.caught[key] == true then
+            got += 1
+            c.glyph.Text = c.emoji
+            c.glyph.TextColor3 = Color3.fromRGB(255, 255, 255)
+            c.cell.BackgroundColor3 = c.color
+            c.cell.BackgroundTransparency = 0.15
+        else
+            c.glyph.Text = "?"
+            c.glyph.TextColor3 = Color3.fromRGB(90, 96, 112)
+            c.cell.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
+            c.cell.BackgroundTransparency = 0
+        end
+    end
+    Gallery.countLabel.Text = ("Caught %d / %d"):format(got, total)
+end
+
+rootTrove:Add(DemoRemotes.GalleryUpdate.OnClientEvent:Connect(Gallery.render))
+
 local function updateScale()
     local cam = workspace.CurrentCamera
     if not cam then
@@ -639,7 +835,10 @@ end
 local topInventory = makeTopButton(1, "🎒 Inventory", true)
 local topMonster = makeTopButton(2, "🐾 Monster", true) -- static label (no count, owner feedback)
 local topSkill = makeTopButton(3, "🌟 Skill", true)
-makeTopButton(4, "🖼️ Galery", false) -- placeholder (inert)
+local topGalery = makeTopButton(4, "🖼️ Galery", true) -- toggles the Monster Gallery
+rootTrove:Add(topGalery.MouseButton1Click:Connect(function()
+    Gallery.panel.Visible = not Gallery.panel.Visible
+end))
 local topMission = makeTopButton(5, "📜 Mission", true) -- toggles the Daily Quest panel
 rootTrove:Add(topMission.MouseButton1Click:Connect(function()
     dailyPanel.Visible = not dailyPanel.Visible

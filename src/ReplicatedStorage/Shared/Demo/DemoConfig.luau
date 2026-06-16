@@ -507,6 +507,21 @@ return {
         bossRepeatXpMult = 2,
     },
 
+    -- ── MONSTER GALLERY (dex / discovery) ───────────────────────────────────
+    -- The collectible grid of every species×element combo (speciesOrder ×
+    -- ElementConfig.order = 5×5 = 25 cells). The FIRST time a player catches a
+    -- combo it registers permanently in `dex` (survives release) and grants a
+    -- discovery reward. The grid is rendered client-side from the species catalog
+    -- above + the element list, so the server only ships the caught-key set.
+    gallery = {
+        -- Master switch (false = no discovery reward + no panel pushes).
+        enabled = true,
+        -- Capture Nets granted the first time a NEW species×element is caught.
+        -- A small "keep exploring" nudge (the catch itself spent a net). 0 = no
+        -- item reward, discovery still registers. Range: 0-10 | Default: 1
+        discoveryNetReward = 1,
+    },
+
     -- ── CATCH CINEMATIC (client presentation on a successful catch) ─────────
     -- The server freezes the caught wild for `holdSec` and fires
     -- CatchCinematic at the catcher; the client plays: camera dolly-in →

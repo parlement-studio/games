@@ -132,6 +132,11 @@ local SERVER_TO_CLIENT = {
     -- loginReward?, resetInSec }) — pushes the daily quest panel on join, on
     -- reset, and whenever progress/claim changes. (first-hour-daily-loop-gdd §5)
     "DailyUpdate",
+    -- MONSTER GALLERY: GalleryUpdate({ caught = { [\"species|element\"] = true } }) —
+    -- the permanent dex set. Pushed on join and whenever a new combo is discovered.
+    -- The client renders the full 5x5 grid from config; this only flags which cells
+    -- are unlocked.
+    "GalleryUpdate",
 }
 
 local ALL_NAMES = {}
@@ -169,6 +174,7 @@ export type DemoRemotes = {
     CatchCinematic: RemoteEvent,
     GoalUpdate: RemoteEvent,
     DailyUpdate: RemoteEvent,
+    GalleryUpdate: RemoteEvent,
 }
 
 -- The module script instance is the parent for the RemoteEvents.

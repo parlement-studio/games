@@ -148,6 +148,10 @@ function Schema.default(): PlayerData
             bossFirstKill = {},
         },
 
+        -- Monster Gallery / dex (permanent species×element discovery set). Empty
+        -- for a fresh profile; GalleryService backfills old profiles from roster.
+        dex = {},
+
         nextSeq = 1,
         -- txLog is a MAP idempotencyKey -> small storedResult (ADR-001 C2); the
         -- parallel txLogOrder array preserves insertion order for ring-trim.

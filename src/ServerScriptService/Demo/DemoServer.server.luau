@@ -58,6 +58,7 @@ local SafeZone = require(script.Parent:WaitForChild("SafeZone"))
 local GroundFollow = require(script.Parent:WaitForChild("GroundFollow"))
 local FtueService = require(script.Parent:WaitForChild("FtueService"))
 local DailyService = require(script.Parent:WaitForChild("DailyService"))
+local GalleryService = require(script.Parent:WaitForChild("GalleryService"))
 
 type Types_PlayerData = Types.PlayerData
 
@@ -501,6 +502,24 @@ local function pushBackpack(player: Player)
         return
     end
     DemoRemotes.BackpackUpdate:FireClient(player, { items = data.items or {} })
+end
+
+-- CATCH SIDE-EFFECTS shared by both catch paths (legacy single-wild + pack):
+-- advance the catch_element daily quest and register the species×element in the
+-- Monster Gallery. A NEW gallery discovery grants a free net (credited inside
+-- GalleryService, atomic with the dex write) + a banner; we re-push the backpack
+-- so the net count updates immediately.
+local function onMonsterCaught(player: Player, entry: any)
+    DailyService.noteCatch(player, entry.element)
+    local discovered = GalleryService.noteCatch(player, entry.species, entry.element)
+    if discovered then
+        pushBackpack(player)
+        local reward = DemoConfig.gallery.discoveryNetReward
+        local text = if reward > 0
+            then ("🆕 New monster discovered! Added to your Gallery (+%d net)"):format(reward)
+            else "🆕 New monster discovered! Added to your Gallery"
+        DemoRemotes.Moment:FireClient(player, { kind = "info", text = text })
+    end
 end
 
 -- Flush the live float coin total into the PERSISTED profile (floored to whole
@@ -1217,6 +1236,7 @@ local function handleCatch(prompt: ProximityPrompt, player: Player)
     -- DERIVED fresh from the roster, so a re-push now includes the new catch.
     pushInventory(player)
     FtueService.push(player) -- refresh onboarding goals (catch3)
+    onMonsterCaught(player, entry) -- daily quest (catch_element) + gallery discovery
 
     -- Remove the shared creature from the world, then schedule its respawn.
     model.Parent = nil
@@ -1395,7 +1415,7 @@ packCatchMint.OnInvoke = function(player: Player, personality: unknown, element:
     pushCoins(player)
     pushInventory(player)
     FtueService.push(player) -- refresh onboarding goals (catch3)
-    DailyService.noteCatch(player, entry.element) -- daily quest (catch_element)
+    onMonsterCaught(player, entry) -- daily quest (catch_element) + gallery discovery
     print(
         ("[Catch] %s caught pack %s (%s %s) — %s"):format(
             player.Name,
@@ -2844,6 +2864,11 @@ local function hydrate(player: Player, data: Types_PlayerData)
         })
     end
     DailyService.push(player) -- initial daily quest panel
+
+    -- MONSTER GALLERY: backfill the dex from the roster on first load (old
+    -- profiles), then push the unlocked set for the grid.
+    GalleryService.ensureDex(player)
+    GalleryService.push(player)
 
     -- Welcome-back Moment (only when something accrued). PAYLOAD SHAPE: there was
     -- no pre-existing client Moment handler, so we define a minimal, explicit one:

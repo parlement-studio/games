@@ -136,6 +136,13 @@ export type PlayerData = {
         bossFirstKill: { [string]: boolean },
     }?,
 
+    -- MONSTER GALLERY / dex (Monster Dex). The PERMANENT set of distinct
+    -- species×element combos this player has EVER caught (key = `species|element`),
+    -- so it survives releasing the monster. First-ever entry of a key registers it
+    -- + grants a discovery reward. Optional/additive: old profiles carry nil and
+    -- GalleryService backfills it from the current roster on load.
+    dex: { [string]: boolean }?,
+
     nextSeq: number, -- monotonic mutation counter; ++ per committed mutation
     txLog: { [string]: any }, -- map idempotencyKey -> small JSON-safe storedResult; bounded to txLogMaxEntries (ADR-001 C2)
     txLogOrder: { string }, -- insertion-order list of txLog keys; drives the ring-trim eviction (oldest first)
