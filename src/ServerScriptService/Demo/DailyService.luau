@@ -236,6 +236,22 @@ function DailyService.noteBossKill(player: Player, personality: string?)
     DailyService.push(player)
 end
 
+-- Read-only: true iff defeating this boss personality RIGHT NOW would be the
+-- first kill of the day (the daily map does not yet record it). The reward path
+-- reads this BEFORE noteBossKill flips the map, to pick full vs decayed boss
+-- reward (Build #4 / §2.3). Defaults to true (full reward) when daily state or
+-- personality is missing, so a degraded path never silently under-pays.
+function DailyService.isBossFirstKillToday(player: Player, personality: string?): boolean
+    if personality == nil then
+        return true
+    end
+    local data = PlayerDataService.getData(player)
+    if data == nil or data.daily == nil then
+        return true
+    end
+    return data.daily.bossFirstKill[personality] ~= true
+end
+
 -- Idle production earned (the per-flush production delta) advances earn_coins.
 -- `amount` is a float; progress floors only at display time.
 function DailyService.noteCoins(player: Player, amount: number)

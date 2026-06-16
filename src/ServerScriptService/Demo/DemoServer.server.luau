@@ -1586,11 +1586,13 @@ end
 -- coin float + the existing persist path), clear its InCombat flag, then faint +
 -- respawn it by REUSING the catch/respawn path (set DemoCaught, unparent its
 -- prompt + model, schedule respawnCreature at its original CFrame with full HP).
-local function defeatWild(player: Player, state: PlayerState, wild: Model)
+local function defeatWild(player: Player, state: PlayerState, wild: Model, coinsMultOverride: number?)
     -- Award + persist coins (same path as production: live float -> flushCoins).
     -- BOSS REWARD: a pack 👑 boss stamps WinCoinsMult (e.g. 10x) on its model;
-    -- regular wilds carry no attribute and default to 1.
-    local coinsMult = wild:GetAttribute("WinCoinsMult")
+    -- regular wilds carry no attribute and default to 1. `coinsMultOverride` lets
+    -- the caller supply the first-kill-DECAYED mult (§2.3) it already computed
+    -- (so the daily map read happens before noteBossKill below flips it).
+    local coinsMult = coinsMultOverride or wild:GetAttribute("WinCoinsMult")
     if type(coinsMult) ~= "number" or coinsMult <= 0 then
         coinsMult = 1
     end
@@ -2098,21 +2100,40 @@ local function stepFighter(player: Player, state: PlayerState, record: FighterRe
                     )
 
                     if wildHumanoid.Health <= 0 then
-                        -- WIN: faint + respawn the wild + award coins (defeatWild
-                        -- reads the boss WinCoinsMult attribute itself; mirror the
-                        -- same mult here so the client banner shows the real award).
-                        local xpMult = wild:GetAttribute("XpMult")
+                        -- WIN: faint + respawn the wild + award coins/XP. ANTI-FARM
+                        -- (§2.3): a boss pays the FULL stamped mult only on the first
+                        -- kill of its type today; repeat kills decay to the config
+                        -- repeat mults. The first-kill state is read HERE, before
+                        -- defeatWild -> noteBossKill flips the daily map, and the same
+                        -- decision drives coins, XP, and the banner.
+                        local isBossWild = wild:GetAttribute("IsBoss") == true
+                        local bossPers = wild:GetAttribute("Personality")
+                        local firstKill = true
+                        if isBossWild and type(bossPers) == "string" then
+                            firstKill = DailyService.isBossFirstKillToday(player, bossPers)
+                        end
+                        local xpMultAttr = wild:GetAttribute("XpMult")
                         local coinsMult = wild:GetAttribute("WinCoinsMult")
                         if type(coinsMult) ~= "number" or coinsMult <= 0 then
                             coinsMult = 1
                         end
-                        defeatWild(player, state, wild)
+                        local xpMult: number? = if type(xpMultAttr) == "number" then xpMultAttr else nil
+                        if isBossWild and not firstKill then
+                            coinsMult = DemoConfig.daily.bossRepeatCoinsMult
+                            xpMult = DemoConfig.daily.bossRepeatXpMult
+                        end
+                        defeatWild(player, state, wild, coinsMult)
                         record.engaged = nil
                         -- PROGRESSION: award XP to the WINNING Monster (atomic +
-                        -- persisted). May level it up one or more times. Boss
-                        -- kills pass the XpMult attribute (e.g. 4x).
-                        local leveledTo, currentLevel =
-                            awardWinXp(player, record.monsterId, if type(xpMult) == "number" then xpMult else nil)
+                        -- persisted). May level it up one or more times. Boss kills
+                        -- pass the (possibly decayed) Xp mult.
+                        local leveledTo, currentLevel = awardWinXp(player, record.monsterId, xpMult)
+                        if isBossWild and firstKill then
+                            DemoRemotes.Moment:FireClient(player, {
+                                kind = "info",
+                                text = "👑 First kill of the day — bonus reward!",
+                            })
+                        end
                         -- Re-derive the bag so the new level shows immediately (the
                         -- active fighter stays excluded; recall/KO returns it later).
                         pushInventory(player)
